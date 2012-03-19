@@ -1,0 +1,9 @@
+1.01
+
+ * Fix bug caused by file.exists (and possibly other functions)
+   not handling directory names with a trailing backslash or slash on
+   Windows.
+ 
+ * Fix bug using per-instance parameters (Leslie Perez).
+
+ * Fix bug when reading initial candidates from a file.

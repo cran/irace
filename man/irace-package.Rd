@@ -12,8 +12,8 @@ Iterated racing for Automatic Algorithm Configuration
 \tabular{ll}{
 Package: \tab irace\cr
 Type: \tab Package\cr
-Version: \tab 1.0 \cr
-Date: \tab 2012-02-08 \cr
+Version: \tab 1.01 \cr
+Date: \tab 2012-03-19 \cr
 License: \tab GPL (>= 2)\cr
 LazyLoad: \tab yes\cr
 }
@@ -26,7 +26,23 @@ Maintainer: Manuel López-Ibáñez and Jérémie Dubois-Lacoste
 Author: Manuel López-Ibáñez, Jérémie Dubois-Lacoste,
 Thomas Stützle, Mauro Birattari, Eric Yuan and Prasanna Balaprakash
 }
+\references{
+
+  Manuel López-Ibáñez, Jérémie Dubois-Lacoste, Thomas Stützle, and Mauro
+  Birattari. \emph{The irace package, Iterated Race for Automatic
+  Algorithm Configuration}. Technical Report TR/IRIDIA/2011-004, IRIDIA,
+  Université Libre de Bruxelles, Belgium, 2011.
+  
+  Manuel López-Ibáñez and Thomas Stützle. The Automatic Design of
+  Multi-Objective Ant Colony Optimization Algorithms. IEEE Transactions
+  on Evolutionary Computation, 2012.
+
+}
 \keyword{package}
+\keyword{optimize}
+\keyword{tuning}
+\keyword{automatic configuration}
+
 \examples{
 #######################################################################
 # This example illustrates how to tune the parameters of the simulated
@@ -36,9 +52,9 @@ Thomas Stützle, Mauro Birattari, Eric Yuan and Prasanna Balaprakash
 # f(x) = lambda * f_rastrigin(x) + (1 - lambda) * f_rosenbrock(x)
 # where lambda follows a normal distribution whose mean is 0.9 and
 # standard deviation is 0.02. f_rastrigin and f_rosenbrock are the
-# well-known Rastrigin and Rosenbrock benchmark functions. In this
-# scenario, different instances are given by different values of
-# lambda.
+# well-known Rastrigin and Rosenbrock benchmark functions (taken from
+# the cmaes package). In this scenario, different instances are given
+# by different values of lambda.
 #######################################################################
 ## First we provide an implementation of the functions to be optimized:
 f_rosenbrock <- function (x) {
@@ -68,7 +84,7 @@ temp "" r (0, 100)
 parameters <- readParameters(text=parameters.table)
 
 ## Next, we define the function that will evaluate each candidate
-## configuration on a single in stance. For simplicity, we restrict to
+## configuration on a single instance. For simplicity, we restrict to
 ## three-dimensional functions and we set the maximum number of
 ## iterations of SANN to 5000.
 hook.run <- function(instance, candidate, extra.params = NULL, config = list())
