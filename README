@@ -61,7 +61,7 @@ The last command tells you the installation directory of `irace`. Save
 that path to a variable, and add it to your `.bash_profile`, `.bashrc`
 or `.profile`:
 
-    export IRACE_HOME=~/R/irace/
+    export IRACE_HOME=~/R/irace/ # Path given by system.file(package="irace")
     export PATH=${IRACE_HOME}/bin/:$PATH
     # export R_LIBS=~/R:${R_LIBS} # Only if local installation was forced
 
@@ -85,7 +85,15 @@ Usage
    
 2. Copy the template and example files to the tuning directory
 
-        $ cp $IRACE_HOMDE/templates/*.tmpl .
+        $ cp $IRACE_HOME/templates/*.tmpl .
+   
+   where `$IRACE_HOME` is the path to the installation directory of
+   `irace`. It can be obtained by doing:
+   
+        $ R
+        > library(irace)
+        > system.file(package="irace")
+   
 
 3. For each template in your tuning directory, remove the `.tmpl`
    suffix, and modify them following the instructions in each file. In
@@ -105,10 +113,10 @@ Usage
 4. Put the instances in `~/tuning/Instances/`. In addition, you can
    create a file that specifies which instances from that directory
    should be run and which instance-specific parameters to use. See
-   tune-conf.tmpl and instances-list.tmpl for examples. The command
+   `tune-conf.tmpl` and `instances-list.tmpl` for examples. The command
    irace will not attempt to create the execution directory (execDir),
-   so it must exist before calling irace. The default execDir is
-   `~/tuning/TUNE/`.
+   so it must exist before calling irace. The default execDir is the
+   current directory.
 
 5. Calling the command:
 
@@ -117,6 +125,7 @@ Usage
    performs one run of Iterated Race. See the output of `irace --help`
    for additional configuration parameters. Command-line parameters
    override the configuration specified in the tune-conf file.
+
 
 Many tunings in parallel
 ------------------------

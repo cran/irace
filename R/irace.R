@@ -1,10 +1,3 @@
-#' Package description
-#' 
-#' package full description
-#' @name essai
-#' @docType package
-NA
-
 candidates.equal <- function(x, y, parameters, threshold)
 {
   d <- 0.0
@@ -21,16 +14,16 @@ candidates.equal <- function(x, y, parameters, threshold)
       next
     } else if (xor(is.na (X), is.na(Y))) {
       # Distance is 1.0, so not equal
-      return (FALSE)
+      return(FALSE)
     } else if (type == "i" || type == "r") {
       lower <- oneParamLowerBound(param, parameters)
       upper <- oneParamUpperBound(param, parameters)
       d <- max(d, abs((as.numeric(X) - as.numeric(Y)) / (upper - lower)))
-      if (d > threshold) return (FALSE)
+      if (d > threshold) return(FALSE)
     } else {
-      stopifnot(type == "c" || type == "o")
+      irace.assert(type == "c" || type == "o")
       # Distance is 1.0, so definitely not equal.
-      if (X != Y) return (FALSE)
+      if (X != Y) return(FALSE)
     }
   }
   ## cat ("X:\n")
@@ -38,15 +31,15 @@ candidates.equal <- function(x, y, parameters, threshold)
   ## cat ("Y:\n")
   ## print (y)
   ## cat ("D = ", d, "\n")
-  return (TRUE)
+  return(TRUE)
 }
 
-similarCandidates <- function(candidates, parameters)
+similarCandidates.old <- function(candidates, parameters)
 {
   similar <- c()
   num.candidates <- nrow(candidates)
   #cat("# ", format(Sys.time(), usetz=TRUE), " similarCandidates()\n")
-  cat ("# Computing similarity of candidates ")
+  #cat ("# Computing similarity of candidates ")
   for (i in seq_len(num.candidates - 1)) {
     for (j in ((i+1):num.candidates)) {
       if (i == j) next
@@ -56,11 +49,149 @@ similarCandidates <- function(candidates, parameters)
         similar <- c(similar, candidates[i,".ID."], candidates[j,".ID."])
       }
     }
-    cat(".")
+    #cat(".")
   }
-  cat(" DONE\n")
+  #cat(" DONE\n")
   #cat("# ", format(Sys.time(), usetz=TRUE), " similarCandidates() DONE\n")
-  return (unique(similar))
+  return(unique(similar))
+}
+
+##
+## Numerical candidates similarity function
+##
+numeric.candidates.equal <- function(x, candidates, parameters, threshold, param.names)
+{
+  d <- rep(0.0, nrow(candidates))
+  bmat <- matrix(TRUE, nrow=nrow(candidates),ncol=length(param.names))
+  selected <- 1:nrow(candidates)
+  for (i in seq_along(param.names)) {
+    param <- param.names[i]
+    lower <- oneParamLowerBound(param, parameters)
+    upper <- oneParamUpperBound(param, parameters)
+ 
+    X <- x[[param]]
+    y <- candidates[,param]
+    for (j in seq_len(nrow(bmat))) { # Candidates loop
+      Y <- y[selected[j]]
+      if (is.na (X) && is.na(Y)) { # Both NA, just ignore this param
+        next
+      } else if (xor(is.na (X), is.na(Y))) { # Distance is 1.0, so not equal
+        bmat[j,i] <- FALSE 
+      } else {
+        d[j] <- max(d[j], abs((as.numeric(X) - as.numeric(Y)) / (upper - lower)))
+        if (d[j] > threshold) bmat[j,i] <- FALSE
+      }
+    }
+    index <- which(apply(bmat,1,all))
+    bmat <- bmat[index, , drop=FALSE]
+    d <- d[index]
+    selected  <- selected[index]
+    if (nrow(bmat) == 0) break
+  }
+  
+  similar <- c()
+  if (length(selected) != 0)
+    similar <- c(x[[".ID."]], candidates[selected,".ID."])
+  
+  return(similar)
+}
+
+##
+## New similar candidates function categorical+numerical
+##
+similarCandidates.new <- function(candidates, parameters)
+{
+  debug.level <- getOption(".irace.debug.level")
+  
+  if (debug.level >= 1) cat ("# Computing similarity of candidates .")
+
+  listCater <- c()
+  listNumer <- c()
+
+  # Create vectors of categorical and numerical
+  # Change the name to vectorCater, vectorNumer!
+  for (p in parameters$names) {
+    if (parameters$isFixed[[p]]) next
+    if (parameters$types[[p]] %in% c("c","o")) {
+      listCater <- c(listCater, p)
+    } else {
+      listNumer <- c(listNumer, p)
+    }
+  }
+  
+  nbCater <- length(listCater)
+  nbNumer <- length(listNumer)
+  
+  ### CATEGORICAL/ORDINAL FILTERING ####
+  if (nbCater > 0) {
+    ## Build an array with the categorical append together in a string
+    strings <- c()
+    for (i in 1:nrow(candidates)) {
+      strings[i] <- paste(candidates[i, listCater], collapse=" ; ")
+    }
+    if (nbNumer != 0) candidates <- candidates[, c(".ID.", listNumer)]
+    ord.strings <- order(strings)
+    candidates <- candidates[ord.strings, ]
+    strings <- strings[ord.strings]
+
+    ## keep similar (index i == true means is the same as i + 1)
+    similarIdx <- strings[-length(strings)] == strings[-1]
+    
+    ## Now let's get just a FALSE if we remove it, TRUE otherwise:
+    keepIdx <- c(similarIdx[1],
+                 (similarIdx[-1] | similarIdx[-length(similarIdx)]),
+                 similarIdx[length(similarIdx)])
+    
+    ## filtering them out:
+    candidates <- candidates [keepIdx, , drop=FALSE]
+
+    ## if everything is already filtered out, return
+    if (nrow(candidates) == 0) {
+      if (debug.level >= 1) cat(" DONE\n")
+      return(NULL)
+    }
+  }
+
+  ### NUMERICAL PARAMETERS ###
+  if (nbNumer > 0) {
+    similar <- c()
+    num.candidates <- nrow(candidates)
+
+    ## Compare numerical candidates
+    for (i in seq_len(num.candidates - 1)) {
+      similar <- c(similar,
+                   numeric.candidates.equal(candidates[i, ], candidates[(i+1):nrow(candidates),],
+                                            parameters, threshold = 0.00000001, param.names = listNumer))
+      if (debug.level >= 1) cat(".")
+    }
+    similar <- unique(similar)
+    candidates <- candidates[candidates[, ".ID."] %in% similar,]
+  }
+
+  if (debug.level >= 1) cat(" DONE\n")
+  if (nrow(candidates) == 0) {
+    return (NULL)
+  } else {
+    return(candidates[,".ID."])
+  }
+}
+
+
+similarCandidates <- function(candidates, parameters)
+{
+  similarIds.new <- similarCandidates.new (candidates,parameters)
+
+  if (getOption(".irace.debug.level") >= 1) {
+    similarIds.old <- similarCandidates.old (candidates,parameters)
+    
+    if (!setequal(similarIds.old, similarIds.new)) {
+      tunerError("\nSimilar Candidates Error:\n",
+                 "Old: ", paste(similarIds.old), "\nNew: ", paste(similarIds.new),
+                 "\nIntersect:", paste(intersect(similarIds.old, similarIds.new)),
+                 "\nLength: ", length(intersect(similarIds.old,similarIds.new)), "\n")
+    }
+  }
+  return(similarIds.new)
 }
 
 ## Number of iterations.
@@ -118,11 +249,9 @@ oneIterationRace <-
   expResults <- as.data.frame(matrix(ncol = 2, nrow = nrow(result$results)))
   colnames(expResults) <- c("instance", "iteration")
   # Fill instances (Iter will be outside this function)
-  expResults$instance <- result$race.data$instances[1:result$no.tasks]
-  # cbind matrix and two new columns
+  expResults$instance <- result$race.data$race.instances[1:result$no.tasks]
+  # Add two new columns to the matrix of results
   expResults <- cbind(expResults, result$results)
-  
-  # Assign the flag alive or not.
   candidates$.ALIVE. <- as.logical(result$alive)
   # Assign the proper ranks in the candidates data.frame
   candidates$.RANK. <- Inf
@@ -131,9 +260,9 @@ oneIterationRace <-
   candidates <- candidates[order(as.numeric(candidates[, ".RANK."])), ]
 
   # Consistency check
-  stopifnot (all(as.logical(candidates[1:(result$no.alive), ".ALIVE."])))
+  irace.assert (all(as.logical(candidates[1:(result$no.alive), ".ALIVE."])))
   if (result$no.alive < nrow(candidates))
-    stopifnot(!any(as.logical(candidates[(result$no.alive + 1):nrow(candidates) , ".ALIVE."])))
+    irace.assert(!any(as.logical(candidates[(result$no.alive + 1):nrow(candidates) , ".ALIVE."])))
 
   return (list (nbAlive = result$no.alive,
                 experimentsUsed = result$no.experiments,
@@ -165,13 +294,17 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
   }
   set.seed(tunerConfig$seed)
   debugLevel <- tunerConfig$debugLevel
-
-  # Data.frame of all candidates ever generated.
+  # Set options controlling debug level.
+  # FIXME: This should be the other way around, the options set the debugLevel.
+  options(.race.debug.level = debugLevel)
+  options(.irace.debug.level = debugLevel)
+  
+  # Create a data frame of all candidates ever generated.
   namesParameters <- names(parameters$constraints)
   if (!is.null(tunerConfig$candidatesFile)
       && tunerConfig$candidatesFile != "") {
     allCandidates <- readCandidatesFile(tunerConfig$candidatesFile,
-                                                parameters, debugLevel)
+                                        parameters, debugLevel)
     allCandidates <- cbind(.ID. = 1:nrow(allCandidates),
                            allCandidates,
                            .PARENT. = NA)
@@ -219,7 +352,7 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
       "# nbIterations: ", nbIterations, "\n",
       "# minSurvival: ", minSurvival, "\n",
       "# nbParameters: ", parameters$nbVariable, "\n",
-      "# Seed: ", tunerConfig$seed, "\n",
+      "# seed: ", tunerConfig$seed, "\n",
       sep = "")
 
   while (TRUE) {
@@ -331,6 +464,8 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
         allCandidates <- rbind(allCandidates, newCandidates)
         rownames(allCandidates) <- allCandidates$.ID.
       }
+      # FIXME: We should probably also truncate allCandidates like this:
+      # testCandidates <- allCandidates <- allCandidates[1:nbCandidates,]
       testCandidates <- allCandidates[1:nbCandidates,]
     } else {
       # How many new candidates should be sampled?
@@ -451,9 +586,11 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
 
     ## Save to the log file
     tunerResults$allCandidates <- allCandidates
-    cwd <- setwd(tunerConfig$execDir)
-    save (tunerResults, file = tunerConfig$logFile)
-    setwd(cwd)
+    if (!is.null.or.empty(tunerConfig$logFile)) {
+      cwd <- setwd(tunerConfig$execDir)
+      save (tunerResults, file = tunerConfig$logFile)
+      setwd(cwd)
+    }
 
     indexIteration <- indexIteration + 1
   }

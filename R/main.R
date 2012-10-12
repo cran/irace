@@ -2,7 +2,7 @@
 # irace: An implementation in R of Iterated Race.
 # -------------------------------------------------------------------------
 #
-#  Copyright (C) 2010
+#  Copyright (C) 2010-2012
 #  Manuel López-Ibáñez     <manuel.lopez-ibanez@ulb.ac.be> 
 #  Jérémie Dubois-Lacoste  <jeremie.dubois-lacoste@ulb.ac.be>
 #
@@ -24,19 +24,23 @@
 #  or by writing to the  Free Software Foundation, Inc., 59 Temple Place,
 #                  Suite 330, Boston, MA 02111-1307 USA
 # -------------------------------------------------------------------------
-# $Revision: 590 $
+# $Revision: 678 $
 # =========================================================================
 
 irace.license <-
-'irace: An implementation in R of Iterated Race
-Copyright (C) 2010, 2011
-Manuel Lopez-Ibanez     <manuel.lopez-ibanez@ulb.ac.be>
-Jeremie Dubois-Lacoste  <jeremie.dubois-lacoste@ulb.ac.be>
-
-This is free software, and you are welcome to redistribute it under certain
-conditions.  See the GNU General Public License for details. There is NO   
-warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-
+'********************************************************************************
+* irace: An implementation in R of Iterated Race                               *
+* Copyright (C) 2010-2012                                                      *
+* Manuel Lopez-Ibanez     <manuel.lopez-ibanez@ulb.ac.be>                      *
+* Jeremie Dubois-Lacoste  <jeremie.dubois-lacoste@ulb.ac.be>                   *
+*                                                                              *
+* This is free software, and you are welcome to redistribute it under certain  *
+* conditions.  See the GNU General Public License for details. There is NO     *
+* warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  *
+*                                                                              *
+* irace builds upon previous code from the race package                        *
+* Copyright (C) 2003 Mauro Birattari                                           *
+********************************************************************************
 '
 
 # Function to read command-line arguments.
@@ -85,18 +89,16 @@ name               short  long             default            description
 configurationFile  "-c"   "--config-file"  "./tune-conf"      "File that contains the configuration for irace." 
 parameterFile      "-p"   "--param-file"   "./parameters.txt" "File that contains the description of the parameters to be tuned. See the template." 
 execDir            ""     "--exec-dir"     "./"           "Directory where the programs will be run." 
-"logFile"  "-l"  "--log-file"  "./irace.Rdata"  "File (if relative path  relative to execDir to save tuning results as an R dataset." 
+"logFile"  "-l"  "--log-file"  "./irace.Rdata"  "File to save tuning results as an R dataset, either absolute path or relative to execDir." 
 "instances"  "" "" "" ""
 "instances.extra.params"  "" "" "" ""
-"instanceDir" "" "--instance-dir"  "./Instances"  "Folder where tuning instances are located  either absolute or relative to execDir." 
-"instanceFile"  ""  "--instance-file"  ""   "A file containing a list of instances and (optionally additional parameters for them." 
+"instanceDir" "" "--instance-dir"  "./Instances"  "Folder where tuning instances are located  either absolute or relative to working directory." 
+"instanceFile"  ""  "--instance-file"  ""   "A file containing a list of instances and optionally additional parameters for them." 
 "candidatesFile"  ""  "--candidates-file"  ""   "A file containing a list of initial candidates. If empty or NULL  do not use a file." 
 "hookRun"  ""  "--hook-run"  "./hook-run" "The script called for each candidate that launches the program to be tuned. See templates/." 
 hookEvaluate  ""  --hook-evaluate  "" "Optional script that provides a numeric value for each candidate. See templates/hook-evaluate.tmpl" 
-"expName"  ""  "--exp-name"  "Experiment Name"  "Experiment name for output report." 
-"expDescription"  ""  "--exp-description"  "Experiment Description" "Longer experiment description for output report." 
-"maxExperiments"  ""  "--max-experiments"  1000 "The maximum number of runs (invocations of hookRun that will performed. It determines the (maximum budget of experiments for the tuning  unless timeBudget is positive."
-"timeBudget"  ""  "--time-budget"  0 "The maximum computation time that should be used for tuning. This only works when tuning for time. 0 means no time limit (use maxExperiments."
+"maxExperiments"  ""  "--max-experiments"  1000 "The maximum number of runs (invocations of hookRun) that will be performed. It determines the maximum budget of experiments for the tuning unless timeBudget is positive."
+"timeBudget"  ""  "--time-budget"  0 "The maximum computation time that should be used for tuning. This only works when tuning for time. 0 means no time limit (then it uses maxExperiments)."
 "timeEstimate"  ""  "--time-estimate"  0  "An estimation of the average time required for one experiment. Only required if timeBudget is positive."
 "digits"  ""  "--digits"  4 "Indicates the number of decimal places to be considered for the real parameters." 
 "debugLevel"  ""  "--debug-level"  0 "A value of 0 silences all debug messages. Higher values provide more verbose debug messages." 
@@ -109,13 +111,14 @@ hookEvaluate  ""  --hook-evaluate  "" "Optional script that provides a numeric v
 "minNbSurvival"  ""  "--min-survival"  0   "The minimum number of candidates that should survive to continue one iteration." 
 "nbCandidates"  ""  "--num-candidates"  0   "The number of candidates that should be sampled and evaluated at each iteration." 
 "mu"  ""  "--mu"  5   "This value is used to determine the number of candidates to be sampled and evaluated at each iteration." 
-"seed"  ""  "--seed"  NA    "Seed of the random number generator (must be a positive integer  NA means use a random seed." 
+"seed"  ""  "--seed"  NA    "Seed of the random number generator (must be a positive integer NA means use a random seed)." 
 "parallel"  ""  "--parallel"  0    "Number of calls to hookRun to execute in parallel. 0 or 1 mean disabled." 
-"sgeCluster"  ""  "--sge-cluster"  0    "Enable/disable SGE cluster mode. Use qstat to wait for cluster jobs to finish (hookRun must invoke qsub." 
-"mpi"  ""  "--mpi"  0    "Enable/disable mpi. Use MPI to execute hookRun in parallel (parameter parallel is the number of slaves." 
+"sgeCluster"  ""  "--sge-cluster"  0    "Enable/disable SGE cluster mode. Use qstat to wait for cluster jobs to finish (hookRun must invoke qsub)." 
+"mpi"  ""  "--mpi"  0    "Enable/disable mpi. Use MPI to execute hookRun in parallel (parameter parallel is the number of slaves)." 
 "softRestart"  ""  "--soft-restart"  1    "Enable/disable the soft restart strategy that avoids premature convergence of the probabilistic model." 
 ')
 rownames (.irace.params.def) <- .irace.params.def[,"name"]
+.irace.params.names <- rownames(.irace.params.def)[rownames(.irace.params.def) != ""]
   
 ## read commandline parameters
 readCmdLineParameter <- function (args, params.def, paramName, default)
@@ -123,14 +126,15 @@ readCmdLineParameter <- function (args, params.def, paramName, default)
   return (readArgOrDefault (args = args,
                             short = params.def[paramName, "short"],
                             long   = params.def[paramName,"long"],
-                            default = ifelse(is.na(default),
-                              params.def[paramName,"default"],
-                              default)))
+                            default = if (is.null(default))
+                            params.def[paramName, "default"] else default))
 }
 
 irace.usage <- function ()
 {
-  cat ("irace\tversion ", irace.version, "\n\n")
+  # FIXME: It would be nice to put the version number in the license
+  # message to avoid having this extra line.
+  cat ("irace\tversion ", irace.version, "\n")
   cat (irace.license)
   # FIXME: The output would be nicer if we used cat(sprintf()) to
   # print short and long within a fixed width field. The description
@@ -148,12 +152,13 @@ irace.main <- function(tunerConfig = defaultConfiguration(), output.width = 9999
 {
   op <- options(width = output.width) # Do not wrap the output.
   tunerConfig <- checkConfiguration (tunerConfig)
-  printConfiguration (tunerConfig)
+  debug.level <- tunerConfig$debugLevel
+  if (debug.level >= 1) printConfiguration (tunerConfig)
   
   # Read parameters definition
   parameters <- readParameters (file = tunerConfig$parameterFile,
                                 digits = tunerConfig$digits,
-                                debugLevel = tunerConfig$debugLevel)
+                                debugLevel = debug.level)
   if (tunerConfig$debugLevel >= 2) { cat("Parameters have been read\n") }
   
   eliteCandidates <- irace (tunerConfig = tunerConfig,
@@ -172,13 +177,14 @@ irace.main <- function(tunerConfig = defaultConfiguration(), output.width = 9999
 
 irace.cmdline <- function(args = commandArgs (trailingOnly = TRUE))
 {
-  if (!is.null(readArgOrDefault (args,
-                                 short = "-h", long="--help", default = NULL))) {
+  if (!is.null(readArgOrDefault (args, short = "-h", long="--help"))) {
     irace.usage()
-    q()
+    return(invisible(NULL))
   }
-  
-  cat ("irace\tversion", irace.version, "\n\n")
+
+  # FIXME: It would be nice to put the version number in the license
+  # message to avoid having this extra line.
+  cat ("irace\tversion", irace.version, "\n")
   cat(irace.license)
   
   # Read the configuration file and the command line
@@ -188,7 +194,7 @@ irace.cmdline <- function(args = commandArgs (trailingOnly = TRUE))
                      long  = .irace.params.def["configurationFile","long"],
                      default = "")
   tunerConfig <- readConfiguration(configurationFile)
-  for (param in names(tunerConfig)) {
+  for (param in .irace.params.names) {
     tunerConfig[[param]] <-
       readCmdLineParameter (args = args,
                             params.def = .irace.params.def,

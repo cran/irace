@@ -1,5 +1,10 @@
 #!/bin/sh
 
+if [ $# == 0 ]; then
+    echo "Usage: ./tune-main-cluster <BINDIR> <EXECDIR> additional_args_to_irace"
+    exit 1
+fi
+
 BINDIR=$1
 EXECDIR=$2
 shift 2
@@ -7,27 +12,29 @@ shift 2
 #MACHINE=opteron244
 #MACHINE=opteron2216
 #MACHINE=xeon5410
-MACHINE=opteron6128
+MACHINE=opteron6272
 
 
-exec qsub <<EOF
+exec qsub -v PATH <<EOF
 #!/bin/bash
 #$ -N irace-$$
 #$ -l $MACHINE
 #$ -l long
 #$ -S /bin/bash
-#$ -m ase
+#$ -m as
 #      b     Mail is sent at the beginning of the job.
 #      e     Mail is sent at the end of the job.
 #      a     Mail is sent when the job is aborted or rescheduled.
 #      s     Mail is sent when the job is suspended.
-#$ -o $EXECDIR/irace-$$.stdout
+#$ -o /dev/null
 #$ -e $EXECDIR/irace-$$.stderr
 #$ -cwd
 
 # Working on /tmp should be faster
-TMP=\$(mktemp -d)
-$BINDIR/irace --exec-dir=\$TMP $* 
+TMP=\$(mktemp -d -t \${HOSTNAME}-XXXXXXXXXX)
+exec 1> \$TMP/irace-$$.stdout
+echo \$TMP/irace-$$.stdout >&2
+$BINDIR/irace --exec-dir=\$TMP $*
 RET=\$?
 cp -R \$TMP/./ $EXECDIR/
 rm -rf \$TMP

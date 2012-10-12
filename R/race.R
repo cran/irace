@@ -48,7 +48,6 @@ race<-function(maxExp=0,
                first.test=5,
                each.test=1,
                interactive=TRUE,
-               log.file="",
                stop.min.cand=1,
                ...){
 
@@ -99,12 +98,6 @@ race<-function(maxExp=0,
       (!is.logical(interactive) || length(interactive)!=1))
     stop("interactive must be a logical")
 
-  # Check argument: log.file
-  if (.Platform$OS.type=="unix")
-    if (!missing(log.file) && (log.file!="") && 
-        (system(paste("touch",log.file),ignore.stderr=TRUE)!=0))
-      stop(paste("I cannot create file ",log.file,sep=""))
-  
   # Run init function
   if (exists(.slave.init.function,inherits=TRUE,mode="function")){
     race.data<-do.call(.slave.init.function,list(...))
@@ -202,9 +195,13 @@ race<-function(maxExp=0,
   }
 
 
+  # Do not print precis. All information are redundant with
+  # the ones provided from irace.
+  interactive <- FALSE
   # Print out precis if interactive
   if (interactive) 
     cat(paste(precis,"\n\n"))
+  interactive <- TRUE
 
   if (maxExp && no.candidates > maxExp)
     stop("Max number of experiments is smaller than number of candidates")
@@ -241,6 +238,7 @@ race<-function(maxExp=0,
   no.subtasks.sofar<-0
   
   # Define some functions...
+  # FIXME: Keep only what we need!
   log.list<-function(end=FALSE){
     timestamp.current<-date()
     log<-list(precis=precis,
@@ -270,13 +268,6 @@ race<-function(maxExp=0,
     return(log)
   }
   
-  logger<-function(){
-    if (log.file!=""){
-      log<-log.list()
-      save(log,file=log.file)
-    }
-  }
-   
   aux2.friedman<-function(y,I=1:ncol(y),n=nrow(y),conf.level=0.95){
     k<-length(I)
     r<-t(apply(y[1:n,I], 1, rank))
@@ -324,21 +315,21 @@ race<-function(maxExp=0,
         if (median(V1-V2)<0){
           best<<-which.alive[1]
           alive[which.alive[2]]<<-FALSE
-          race.ranks<<-c(1)
+          race.ranks <<- c(1,2)
         }else{
           best<<-which.alive[2]
           alive[which.alive[1]]<<-FALSE
-          race.ranks<<-c(1)
+          race.ranks <<- c(2,1)
         }
       }else{
         if (interactive)
           cat("|=|")
         if (median(V1-V2)<0){
           best<<-which.alive[1]
-          race.ranks<<-c(1,2)
+          race.ranks <<- c(1,2)
         }else{
           best<<-which.alive[2]
-          race.ranks<<-c(2,1)
+          race.ranks <<- c(2,1)
         }
       }
     }else{
@@ -455,19 +446,23 @@ race<-function(maxExp=0,
         best <- order(race.ranks)[1]
       } else  {
         tmpResults <- Results[1:no.subtasks.sofar, which.alive]
-        stopifnot(!any(is.na(tmpResults)))
+        irace.assert(!any(is.na(tmpResults)))
         if (stat.test == "friedman") {
-          race.ranks <- apply(t(apply(tmpResults, 1, rank)), 2, mean)
+          race.ranks <- colSums(t(apply(tmpResults, 1, rank)))
         } else {
-          race.ranks <- apply(tmpResults, 2, mean)
+          race.ranks <- colMeans(tmpResults)
         }
         best <- which.alive[order(race.ranks)[1]]
       }
     }
-    stopifnot (best == which.alive[order(race.ranks)][1])
-    race.ranks <- race.ranks[which(which.alive %in% which(alive))]
-
-    mean.best<-mean(Results[1:(no.subtasks.sofar),best])
+    irace.assert(best == which.alive[order(race.ranks)][1])
+    irace.assert(length(race.ranks) == length(which.alive))
+    # Remove the ranks of those that are not alive anymore
+    race.ranks <- race.ranks[which.alive %in% which(alive)]
+    irace.assert(length(race.ranks) == sum(alive))
+    # FIXME: This is the mean of the best, but perhaps it should be
+    # the sum of ranks in the case of test == friedman?
+    mean.best <- mean(Results[1:no.subtasks.sofar, best])
 
     if (interactive) 
       cat(paste(formatC(no.tasks.sofar,width=11),"|",
@@ -483,7 +478,6 @@ race<-function(maxExp=0,
     	if(length(which.alive) <= stop.min.cand)
     	break	
    }
-    logger()
   }
 
   if (exists(.slave.describe.function,inherits=TRUE,mode="function"))

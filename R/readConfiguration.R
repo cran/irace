@@ -110,39 +110,48 @@ readCandidatesFile <-
   return (candidateTable)
 }
 
+# reads configuration from filename and returns it as a list. Anything
+# not mentioned in the file is not present in the list (that is, it is
+# NULL).
+# FIXME: Does passing an initial configuration actually work? It seems
+# it gets completely overriden by the loop below.
 readConfiguration <- function(filename = "", configuration = list())
 {
-  parameters <- rownames(.irace.params.def)[rownames(.irace.params.def) != ""]
-
   # First find out which file...
   if (filename == ""
       && file.exists(.irace.params.def["configurationFile","default"])) {
     filename <- .irace.params.def["configurationFile","default"]
-    cat("Warning: A default configuration file '", 
-        filename, "' has been found and will be read\n")
+    cat("Warning: A default configuration file", shQuote(filename),
+        "has been found and will be read\n")
   }
 
   if (filename != "") {
     if (file.exists (filename)) {
-      # FIXME: subordinate on debuglevel
-      cat ("Note: Reading configuration file '", filename, "'.......")
+      debug.level <- getOption(".irace.debug.level", default = 0)
+      if (debug.level >= 1)
+        cat ("# Reading configuration file", shQuote(filename), ".......")
       source(filename, local = TRUE)
-      # FIXME: subordinate on debuglevel
-      cat (" done!\n")
+      if (debug.level >= 1) cat (" done!\n")
     } else {
-      stop ("The configuration file ", filename, " does not exist.")
+      stop ("The configuration file ", shQuote(filename), " does not exist.")
     }
   }
   ## read configuration file variables
-  for (param in parameters) {
-    configuration[[param]] <- ifelse (exists (param, inherits = FALSE),
-                                      get(param, inherits = FALSE), NA)
+  for (param in .irace.params.names) {
+    configuration[[param]] <- if (exists (param, inherits = FALSE))
+      get(param, inherits = FALSE) else NULL
   }
   return (configuration)
 }
 
-checkConfiguration <- function(configuration)
+## FIXME: This function should only do checks and return
+## TRUE/FALSE. There should be other function that does the various
+## transformations.
+checkConfiguration <- function(configuration = defaultConfiguration())
 {
+  # Fill possible unset (NULL) with default settings.
+  configuration <- defaultConfiguration (configuration)
+  
   ## Check that everything is fine with external parameters
   # Check that the files exists and are readable.
   configuration$parameterFile <- path.rel2abs(configuration$parameterFile)
@@ -152,6 +161,17 @@ checkConfiguration <- function(configuration)
   configuration$execDir <- path.rel2abs(configuration$execDir)
   file.check (configuration$execDir, isdir = TRUE, text = "execution directory")
 
+  if (!is.null.or.empty(configuration$logFile)) {
+    cwd <- setwd(configuration$execDir)
+    configuration$logFile <- path.rel2abs(configuration$logFile)
+    tunerResults <- list()
+    tunerResults$tunerConfig <- configuration
+    # Try to save here and to give an earlier error if not possible.
+    # FIXME: Give a nicer error!
+    save (tunerResults, file = configuration$logFile)
+    setwd(cwd)
+  }
+  
   if (is.function.name(configuration$hookRun)) {
     .irace$hook.run <- configuration$hookRun
   } else if (is.character(configuration$hookRun)) {
@@ -237,7 +257,9 @@ checkConfiguration <- function(configuration)
   }
 
   if (configuration$mu < configuration$firstTest) {
-    warning("Assuming 'mu <- firstTest' because 'mu' cannot be lower than 'firstTest'")
+    if (configuration$debugLevel >= 1) {
+      cat("Warning: Assuming 'mu <- firstTest' because 'mu' cannot be lower than 'firstTest'\n")
+    }
     configuration$mu <- configuration$firstTtest
   }
   
@@ -297,32 +319,44 @@ checkConfiguration <- function(configuration)
   return (configuration)
 }
 
-printConfiguration <- function(tunerConfig)
+printConfiguration <- function(configuration)
 {
-  cat("###   CONFIGURATION STATE TO BE USED\n")
-  for (param in names(tunerConfig)) {
-    value <- ifelse(is.character(tunerConfig[[param]]),
-                    paste("\"", tunerConfig[[param]], "\"", sep=""),
-                    tunerConfig[[param]])
-    # FIXME: This does not handle multiple values (vectors, lists)
-    # like tunerConfig$instances.
-    cat(param, "<-", value, "\n")
-  }
-  cat("### end of configuration\n")
-}
-
-defaultConfiguration <- function(config = list())
-{
-  config.names <- rownames(.irace.params.def)[rownames(.irace.params.def) != ""]
-  if (!is.null(names(config)) && !all(names(config) %in% config.names)) {
-    stop("Unknown configuration parameters: ",
-         paste(names(config)[which(!names(config) %in% config.names)], sep=", "))
-  }
-
-  for (k in config.names) {
-    if (is.null.or.na(config[[k]])) {
-      config[[k]] <- .irace.params.def[k, "default"]
+  cat("## irace configuration:\n")
+  for (param in .irace.params.names) {
+    # Special case for instances.extra.params
+    if (param == "instances.extra.params") {
+      if (is.null.or.empty(paste(configuration$instances.extra.params, collapse=""))) {
+        cat (param, "<- NULL\n")
+      } else {
+        cat (param, "<-\n")
+        cat(paste(names(configuration$instances.extra.params), configuration$instances.extra.params, sep=" : "), sep="\n")
+      }
+    } else if (param == "instances") {# Special case for instances
+      cat (param, "<- \"")
+      cat (configuration$instances, sep=", ")
+      cat ("\"\n")
+    } else {# All other parameters (no vector, but can be functions)
+      # FIXME: Perhaps deparse() is not the right way to do this?
+      cat(param, "<-", deparse(configuration[[param]]), "\n")
     }
   }
-  return (config)
+  cat("## end of irace configuration\n")
+}
+
+defaultConfiguration <- function(configuration = list())
+{
+  if (!is.null(names(configuration))
+      && !all(names(configuration) %in% .irace.params.names)) {
+    stop("Unknown configuration parameters: ",
+         paste(names(configuration)[which(!names(configuration)
+                                          %in% .irace.params.names)],
+               sep=", "))
+  }
+
+  for (k in .irace.params.names) {
+    if (is.null.or.na(configuration[[k]])) {
+      configuration[[k]] <- .irace.params.def[k, "default"]
+    }
+  }
+  return (configuration)
 }

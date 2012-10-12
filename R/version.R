@@ -1,1 +1,1 @@
-irace.version <- "1.01.602"
+irace.version <- "1.02.684"

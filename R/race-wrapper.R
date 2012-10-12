@@ -16,7 +16,7 @@ buildCommandLine <- function(values, switches) {
 }
 
 
-## ??? This function needs a description
+## FIXME: function needs a description
 race.init <- function(candidates, parameters, config)
 {
   # FIXME: Ideally, we wouldn't do this here but dynamically as we
@@ -41,19 +41,21 @@ race.init <- function(candidates, parameters, config)
                 ))
 }
 
-## ??? This function needs a description
+## FIXME: function needs a description
 race.info <- function(data)
-  return(list(race.name = data$config$expName, 
+  return(list(race.name = "irace",
               no.candidates = data$no.candidates, 
-              no.tasks = data$no.tasks, 
-              extra = data$config$expDescription))
+              no.tasks = data$no.tasks))
 
 check.output <- function(output, command = "", config = stop("config needed"))
 {
   # We check the output here to provide better error messages.
   err.msg <- NULL
-  if (length(output) < 1 || length(output) > 2 || any (is.na (output)))
+  if (length(output) < 1 || length(output) > 2 || any (is.na (output))) {
     err.msg <- paste("The output of `", command, "' is not numeric!\n", sep = "")
+  } else if (any(is.infinite(output))) {
+    err.msg <- paste("The output of `", command, "' is not finite!\n", sep = "")
+  }
 
   if (config$timeBudget > 0 && length(output) < 2)
     err.msg <- paste("When timeBudget > 0, the output of `",
@@ -83,8 +85,11 @@ parse.output <- function(outputRaw, command, config, hook.run.command = NULL)
   
   # We check the output here to provide better error messages.
   err.msg <- NULL
-  if (length(output) < 1 || length(output) > 2 || any (is.na (output)))
-    err.msg <- paste("The output of `", command, "' is not numeric!\n", sep = "")
+  if (length(output) < 1 || length(output) > 2 || any (is.na (output))) {
+    err.msg <- paste("The output of ", shQuote(command), " is not numeric!\n", sep = "")
+  } else if (any(is.infinite(output))) {
+    err.msg <- paste("The output of ", shQuote(command), " is not finite!\n", sep = "")
+  }
   
   if (config$timeBudget > 0 && length(output) < 2)
     err.msg <- paste("When timeBudget > 0, the output of `", command,
@@ -172,7 +177,7 @@ hook.run.default <- function(instance, candidate, extra.params, config)
 # from the first stage to the second.
 .irace <- new.env()
 
-## ??? This function needs a description, what is candidate, task and data?
+## FIXME: This function needs a description, what is candidate, task and data?
 race.wrapper <- function(candidate, task, which.alive, data)
 {
   debugLevel <- data$config$debugLevel
@@ -191,7 +196,7 @@ race.wrapper <- function(candidate, task, which.alive, data)
   stopifnot (data$parameters$nbParameters > 0)
   stopifnot (length(data$parameters$names) == data$parameters$nbParameters)
   
-  instance.idx <- data$race.instances[task];
+  instance.idx <- data$race.instances[task]
   instance <- data$config$instances[[instance.idx]]
   extra.params <- NULL
   if (!is.null (data$config$instances.extra.params)
@@ -201,7 +206,7 @@ race.wrapper <- function(candidate, task, which.alive, data)
   ## FIXME: This is testing if this is the first candidate. If so, run
   ## and evaluate all candidates. Otherwise, just print the output for
   ## the corresponding candidate.  This is an awful historical
-  ## artifact because of the way the first ifrace was developed on top
+  ## artifact because of the way the first irace was developed on top
   ## of race.
   if (candidate == which.alive[1]) {
     candidates <- vector("list", length(which.alive))
@@ -211,13 +216,6 @@ race.wrapper <- function(candidate, task, which.alive, data)
       cnd <- data$candidates[candi, , drop = FALSE]
       for (i in seq_len (data$parameters$nbParameters)) {
         name <- data$parameters$names[[i]]
-        value <- cnd[[name]]
-        type <- data$parameters$types[[name]]
-        # FIXME: This should not be necessary if data$candidates
-        # always has correctly rounded values.
-        if (!is.na(value) && type == "r") {
-          value <- round(value, digits)
-        }
         values[[name]] <- cnd[[name]]
       }
       candidates[[k]] <- list(index = candi, values = values,
@@ -230,17 +228,17 @@ race.wrapper <- function(candidate, task, which.alive, data)
     cwd <- setwd (execDir)
     if (parallel > 1) {
       if (mpi) {
-        mpiInit(parallel)
+        mpiInit(parallel, data$config$debugLevel)
         .irace$hook.output <-
           Rmpi::mpi.applyLB(candidates, .irace$hook.run,
                             instance = instance, extra.params = extra.params,
                             config = data$config)
       } else {
-        library(multicore, quietly = TRUE)
+        library("multicore", quietly = TRUE)
         .irace$hook.output <-
-          mclapply(candidates, .irace$hook.run, mc.cores = parallel,
-                   instance = instance, extra.params = extra.params,
-                   config = data$config)
+          multicore::mclapply(candidates, .irace$hook.run, mc.cores = parallel,
+                              instance = instance, extra.params = extra.params,
+                              config = data$config)
       }
     } else if (sgeCluster) {
       .irace$hook.output <-
@@ -277,7 +275,7 @@ race.wrapper <- function(candidate, task, which.alive, data)
   return(output)
 }
 
-race.describe <- function(candidate, data)
+race.describe <- function(candidates, data)
 {
-  return (data$candidates[candidate, ])
+  return (data$candidates[candidates, , drop = FALSE])
 }

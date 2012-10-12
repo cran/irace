@@ -1,4 +1,15 @@
-## Functions to print error messages and\or exit
+
+
+# An internal function to reload irace and set options for debugging
+# errors. It may also be used to reload other packages.
+# FIXME: Reload dynamic libraries? See ?dyn.load
+irace.reload.debug <- function(package = "irace")
+{
+  pkg <- paste("package:", package, sep ="")
+  try(detach(pkg, character.only = TRUE, unload = TRUE))
+  library(package, character.only = TRUE)
+  options(error=recover)
+}
 
 .irace.bug.report <-
   paste("An unexpected condition ocurred.",
@@ -12,13 +23,24 @@ tunerError <- function(...)
   stop (..., call. = FALSE)
 }
 
+irace.assert <- function(exp)
+{
+  if (exp) return(invisible())
+  mc <- match.call()[[2]]
+  msg <- paste(deparse(mc), " is not TRUE\n", .irace.bug.report, sep = "")
+  stop (msg)
+  invisible()
+}
+
 file.check <- function (file, executable = FALSE, readable = executable,
-                        isdir = FALSE, notempty = FALSE,
-                        text = NULL)
+                        isdir = FALSE, notempty = FALSE, text = NULL)
 {
   EXEC <- 1 # See documentation of the function file.access()
   READ <- 4
 
+  if (!is.character(file) || is.null.or.empty(file)) {
+    stop (text, " ", shQuote(file), " is not a vaild filename")
+  }
   ## Remove trailing slash if present for windows OS compatibility
   if (substring(file, nchar(file), nchar(file)) %in% c("/", "\\"))
     file <- substring(file, 1, nchar(file) - 1)
@@ -52,8 +74,8 @@ file.check <- function (file, executable = FALSE, readable = executable,
   return (TRUE)
 }
 
-is.wholenumber <-
-  function(x, tol = .Machine$double.eps^0.5)  abs(x - round(x)) < tol
+is.wholenumber <- function(x, tol = .Machine$double.eps^0.5)
+  { abs(x - round(x)) < tol }
 
 is.null.or.na <- function(x)
 {
@@ -79,10 +101,12 @@ path.rel2abs <- function (path)
 
 is.function.name <- function(FUN)
 {
+  # FIXME: Is there a simpler way to do this check?
   is.function(FUN) ||
   (!is.null(FUN) && !is.na(FUN) && as.character(FUN) != "" &&
    !is.null(mget(as.character(FUN), envir = as.environment(-1),
-                 mode="function", ifnotfound=list(NULL), inherits=TRUE)[[1]]))
+                 mode = "function", ifnotfound = list(NULL),
+                 inherits = TRUE)[[1]]))
 }
 
 # FIXME: Isn't a R function to do this? More portable?
@@ -138,7 +162,7 @@ nbParam <- function (parameters)
 extractElites <- function(candidates, nbElites)
 {
   if (nbElites < 1) {
-    ## ??? Should this be an error or should we handle it in some other way?
+    ## FIXME: Should this be an error or should we handle it in some other way?
     stop("nbElites is lower or equal to zero.") 
   }
   # Sort by rank.
@@ -168,9 +192,9 @@ candidates.print <- function(cand, metadata = FALSE)
 
 candidates.print.command <- function(cand, parameters)
 {
+  if (nrow(cand) <= 0) return(invisible())
   rownames(cand) <- cand$.ID.
   cand <- removeCandidatesMetaData(cand)
-  if (nrow(cand) <= 0) return(invisible())
   print(data.frame(command =
                    apply(cand[,unlist(parameters$names), drop = FALSE],
                          1, buildCommandLine, switches = parameters$switches),
@@ -181,12 +205,12 @@ candidates.print.command <- function(cand, parameters)
 # FIXME: This may not work when working interactively. For example,
 # one cannot change the number of slaves. Using .Last is dangerous
 # because other package or the user may override it.
-mpiInit <- function(nslaves)
+mpiInit <- function(nslaves, debugLevel = 0)
 {
   # Load the R MPI package if it is not already loaded. 
   if (!is.loaded("mpi_initialize")) {
     if (! require("Rmpi", quietly = TRUE))
-      stop("the `Rmpi' package is required for using MPI.")
+      stop("The `Rmpi' package is required for using MPI.")
 
     # When R exits, finalize MPI.
     # FIXME: This is equivalent to .Last <<- function()
@@ -202,6 +226,6 @@ mpiInit <- function(nslaves)
       }
     }, .GlobalEnv)
     # Create slaves
-    Rmpi::mpi.spawn.Rslaves(nslaves = nslaves)
+    Rmpi::mpi.spawn.Rslaves(nslaves = nslaves, quiet = (debugLevel == 0))
   }
 }

@@ -32,19 +32,20 @@ JOBNAME=irace-$$
 #MACHINE=opteron244
 #MACHINE=opteron2216
 #MACHINE=xeon5410
-MACHINE=opteron6128
+MACHINE=opteron6272
 
 MPIRUN=/opt/openmpi/bin/mpirun
-PARALLEL_ENV=mpich_fu
+#PARALLEL_ENV=mpich_fu
+PARALLEL_ENV=mpich_rr
 let NB_PARALLEL_PROCESS=NB_SLAVES+1
 
-exec qsub <<EOF
+exec qsub -v PATH <<EOF
 #!/bin/sh
 #$ -N $JOBNAME
 #$ -l $MACHINE 
 #$ -l $QUEUE
 #$ -pe $PARALLEL_ENV $NB_PARALLEL_PROCESS 
-#$ -m ase 
+#$ -m ase
 #      b     Mail is sent at the beginning of the job.
 #      e     Mail is sent at the end of the job.
 #      a     Mail is sent when the job is aborted or rescheduled.

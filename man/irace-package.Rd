@@ -12,8 +12,8 @@ Iterated racing for Automatic Algorithm Configuration
 \tabular{ll}{
 Package: \tab irace\cr
 Type: \tab Package\cr
-Version: \tab 1.01 \cr
-Date: \tab 2012-03-19 \cr
+Version: \tab 1.02 \cr
+Date: \tab 2012-10-12 \cr
 License: \tab GPL (>= 2)\cr
 LazyLoad: \tab yes\cr
 }
@@ -103,15 +103,17 @@ hook.run <- function(instance, candidate, extra.params = NULL, config = list())
     return(res$value)
   }
 
+\dontrun{
 ## We are now ready to launch irace. We do it by means of the irace
 ## function by setting hookRun to the function define above, instances to
 ## the first 100 random weights, and a maximum budget of 1000 calls to
 ## hookRun. The function irace will print information about its
-## progress.
+## progress. This may require a few minutes, so it is not run by default.
 result <- irace(tunerConfig = list(
                   hookRun = hook.run,
                   instances = weights[1:100],
-                  maxExperiments = 1000),
+                  maxExperiments = 1000,
+                  logFile = ""),
                 parameters = parameters)
 
 ## We can print the best configurations found by irace as follows:
@@ -123,10 +125,10 @@ candidates.print(result)
 ## To do so, first we apply the default configuration of the SANN
 ## algorithm to these instances:
 default <- sapply(weights[101:200], hook.run,
-                  
+                  candidate=list(values=list(tmax=10,temp=10)))
+
 ## We extract and apply the winning configuration found by irace
 ## to these instances:
-candidate=list(values=list(tmax=10,temp=10)))
 result.list <- as.list(removeCandidatesMetaData(result[1,]))
 tuned <- sapply(weights[101:200], hook.run, candidate=list(values=result.list))
 
@@ -134,4 +136,5 @@ tuned <- sapply(weights[101:200], hook.run, candidate=list(values=result.list))
 ## default parametrization of SANN and the quality obtained with the
 ## best configuration found by irace.
 boxplot(list(default=default, tuned=tuned))
+}
 }

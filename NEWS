@@ -1,3 +1,17 @@
+1.02
+
+ * More concise output.
+
+ * The parameters expName and expDescription are now useless and they
+   were removed.
+
+ * Faster computation of similar candidates (Jeremie Dubois-Lacoste
+   and Leslie Perez).
+
+ * Fix bug when saving instances in tunerResults$experiments.
+
+ * irace.cmdline ("--help") does not try to quit R anymore.
+
 1.01
 
  * Fix bug caused by file.exists (and possibly other functions)
