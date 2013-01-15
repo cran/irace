@@ -1,10 +1,8 @@
 candidates.equal <- function(x, y, parameters, threshold)
 {
   d <- 0.0
-  # FIXME: If the distance used anything different than the
-  # maximum, then fixed parameters should be ignored.
   for (i in seq_along(parameters$names)) {
-#  for (param in parameters$names) {
+    if (parameters$isFixed[[i]]) next
     type <- parameters$types[[i]]
     param <- parameters$names[[i]]
     X <- x[[param]]
@@ -101,8 +99,7 @@ numeric.candidates.equal <- function(x, candidates, parameters, threshold, param
 ##
 similarCandidates.new <- function(candidates, parameters)
 {
-  debug.level <- getOption(".irace.debug.level")
-  
+  debug.level <- getOption(".irace.debug.level", 0)
   if (debug.level >= 1) cat ("# Computing similarity of candidates .")
 
   listCater <- c()
@@ -121,7 +118,7 @@ similarCandidates.new <- function(candidates, parameters)
   
   nbCater <- length(listCater)
   nbNumer <- length(listNumer)
-  
+
   ### CATEGORICAL/ORDINAL FILTERING ####
   if (nbCater > 0) {
     ## Build an array with the categorical append together in a string
@@ -129,6 +126,7 @@ similarCandidates.new <- function(candidates, parameters)
     for (i in 1:nrow(candidates)) {
       strings[i] <- paste(candidates[i, listCater], collapse=" ; ")
     }
+
     if (nbNumer != 0) candidates <- candidates[, c(".ID.", listNumer)]
     ord.strings <- order(strings)
     candidates <- candidates[ord.strings, ]
@@ -144,7 +142,9 @@ similarCandidates.new <- function(candidates, parameters)
     
     ## filtering them out:
     candidates <- candidates [keepIdx, , drop=FALSE]
-
+    ## filtering their strings out (to use them to define blocks):
+    strings <- strings [keepIdx]
+    
     ## if everything is already filtered out, return
     if (nrow(candidates) == 0) {
       if (debug.level >= 1) cat(" DONE\n")
@@ -152,22 +152,44 @@ similarCandidates.new <- function(candidates, parameters)
     }
   }
 
-  ### NUMERICAL PARAMETERS ###
+  
+  ### NUMERICAL PARAMETERS WITHIN BLOCKS OF SAME STRING ###
   if (nbNumer > 0) {
     similar <- c()
-    num.candidates <- nrow(candidates)
+    if (nbCater > 0) {
+      ## In this case the object "string" is available to define blocks
+      ## Loop over blocks:
+      beginBlock <- 1
+      while (beginBlock < nrow(candidates)) {
+        ## The current block is made of all candidates that have same
+        ## categorical string as the one of candidate[beginBlock, ]
+        blockIds <- which(strings == strings[beginBlock])
+        endBlock <- blockIds[length(blockIds)]
 
-    ## Compare numerical candidates
-    for (i in seq_len(num.candidates - 1)) {
-      similar <- c(similar,
-                   numeric.candidates.equal(candidates[i, ], candidates[(i+1):nrow(candidates),],
-                                            parameters, threshold = 0.00000001, param.names = listNumer))
-      if (debug.level >= 1) cat(".")
+        irace.assert (endBlock > beginBlock)
+        ## Loop inside blocks:
+        for (i in seq(beginBlock, endBlock-1)) {
+          ## Compare candidate i with all the one that are after in the block
+          similar <- c(similar,
+                       numeric.candidates.equal(candidates[i, ], candidates[(i+1):endBlock,],
+                                                parameters, threshold = 0.00000001, param.names = listNumer))
+          if (debug.level >= 1) cat(".")
+        }
+        beginBlock <- endBlock + 1 # Next block starts after the end of the current one
+      }
+    } else {
+      ## No categorical, so no blocks, just do the basic check without blocks
+      for (i in seq_len(nrow(candidates) - 1)) {
+        similar <- c(similar,
+                     numeric.candidates.equal(candidates[i, ], candidates[(i+1):nrow(candidates),],
+                                              parameters, threshold = 0.00000001, param.names = listNumer))
+        if (debug.level >= 1) cat(".")
+      }
     }
     similar <- unique(similar)
-    candidates <- candidates[candidates[, ".ID."] %in% similar,]
+    candidates <- candidates[candidates[, ".ID."] %in% similar,]   
   }
-
+  
   if (debug.level >= 1) cat(" DONE\n")
   if (nrow(candidates) == 0) {
     return (NULL)
@@ -177,18 +199,26 @@ similarCandidates.new <- function(candidates, parameters)
 }
 
 
-similarCandidates <- function(candidates, parameters)
+similarCandidates <- function(candidates, parameters, execDir = getwd())
 {
   similarIds.new <- similarCandidates.new (candidates,parameters)
 
-  if (getOption(".irace.debug.level") >= 1) {
+  if (getOption(".irace.debug.level", 0) >= 1) {
     similarIds.old <- similarCandidates.old (candidates,parameters)
-    
+
     if (!setequal(similarIds.old, similarIds.new)) {
-      tunerError("\nSimilar Candidates Error:\n",
-                 "Old: ", paste(similarIds.old), "\nNew: ", paste(similarIds.new),
-                 "\nIntersect:", paste(intersect(similarIds.old, similarIds.new)),
-                 "\nLength: ", length(intersect(similarIds.old,similarIds.new)), "\n")
+      cat("\nSimilar candidates error:\n",
+          "Old: ", paste(similarIds.old, collapse = ", "),
+          "\nNew: ", paste(similarIds.new, collapse = ", "),
+          "\nIntersect:",
+          paste(intersect(similarIds.old, similarIds.new), collapse = ", "),
+          "\nLength: ", length(intersect(similarIds.old,similarIds.new)), "\n")
+      cwd <- setwd(execDir)
+      # save.image() does not save anything!
+      save (list = c("candidates", "parameters", "similarIds.new",
+              "similarIds.old"), file = "similarCandidates.Rdat")
+      setwd(cwd)
+      irace.assert (setequal(similarIds.old, similarIds.new))
     }
   }
   return(similarIds.new)
@@ -402,16 +432,14 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
       cat("# ", format(Sys.time(), usetz=TRUE), ": Stopped because ",
           "there is no enough budget to sample new candidates\n",
           #(number of elites  + 1) * (mu + min(5, indexIteration)) > remainingBudget\n",
-          "# number of elites: ", nrow(eliteCandidates), "\n",
-          "# indexIteration: ", indexIteration, "\n",
-          "# mu: ", max(tunerConfig$mu, tunerConfig$firstTest), "\n",
-          "# nbIterations: ", nbIterations, "\n",
+          "# remainingBudget: ", remainingBudget, "\n",
           "# experimentsUsedSoFar: ", experimentsUsedSoFar, "\n",
           "# timeUsedSoFar: ", timeUsedSoFar, "\n",
           "# timeEstimate: ", timeEstimate, "\n",
-          "# remainingBudget: ", remainingBudget, "\n",
           "# currentBudget: ", currentBudget, "\n",
+          "# number of elites: ", nrow(eliteCandidates), "\n",
           "# nbCandidates: ", nbCandidates, "\n",
+          "# mu: ", max(tunerConfig$mu, tunerConfig$firstTest), "\n",
           sep="")
       return (eliteCandidates)
     }
@@ -483,35 +511,41 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
         cat(sep="", "# ", format(Sys.time(), usetz=TRUE), ": ",
             "Sample ", nbNewCandidates, " candidates from model\n") }
 
-      retrial <- FALSE
-
-      tunerResults$softRestart[indexIteration] <- 0
-
-      while (TRUE) {
-        #cat("# ", format(Sys.time(), usetz=TRUE), " sampleModel()\n")
-        newCandidates <- sampleModel(tunerConfig, parameters, eliteCandidates,
-                                     model, nbNewCandidates)
-        #cat("# ", format(Sys.time(), usetz=TRUE), " sampleModel() DONE\n")
-        # Set ID of the new candidates.
-        newCandidates <-
-          cbind (.ID. = max(0, allCandidates$.ID.) + 1:nrow(newCandidates),
-                 newCandidates)
-        testCandidates <- rbind(eliteCandidates[, 1:ncol(allCandidates)], newCandidates)
-        rownames(testCandidates) <- testCandidates$.ID.
-        if (!retrial && tunerConfig$softRestart) {
-#          Rprof("profile.out")
-          tmp.ids <- similarCandidates (testCandidates, parameters)
-#          Rprof(NULL)
-          if (is.null(tmp.ids)) break
-          cat(sep="", "# ", format(Sys.time(), usetz=TRUE), ": ",
-              "Soft restart: ", paste(collapse = " ", tmp.ids), " !\n")
-          model <- restartCandidates (testCandidates, tmp.ids, model, parameters, nbNewCandidates)
-          tunerResults$softRestart[indexIteration] <- tunerResults$softRestart[indexIteration] + 1
+      #cat("# ", format(Sys.time(), usetz=TRUE), " sampleModel()\n")
+      newCandidates <- sampleModel(tunerConfig, parameters, eliteCandidates,
+                                   model, nbNewCandidates)
+      #cat("# ", format(Sys.time(), usetz=TRUE), " sampleModel() DONE\n")
+      # Set ID of the new candidates.
+      newCandidates <- cbind (.ID. = max(0, allCandidates$.ID.) +
+                              1:nrow(newCandidates), newCandidates)
+      testCandidates <- rbind(eliteCandidates[, 1:ncol(allCandidates)],
+                              newCandidates)
+      rownames(testCandidates) <- testCandidates$.ID.
+      tunerResults$softRestart[indexIteration] <- FALSE
+      if (tunerConfig$softRestart) {
+        #          Rprof("profile.out")
+        tmp.ids <- similarCandidates (testCandidates, parameters, tunerConfig$execDir)
+        #          Rprof(NULL)
+        if (!is.null(tmp.ids)) {
+          if (debugLevel >= 1)
+            cat(sep="", "# ", format(Sys.time(), usetz=TRUE), ": ",
+                "Soft restart: ", paste(collapse = " ", tmp.ids), " !\n")
+          model <- restartCandidates (testCandidates, tmp.ids, model,
+                                      parameters, nbNewCandidates)
+          tunerResults$softRestart[indexIteration] <- TRUE
           tunerResults$model$afterSR[[indexIteration]] <- model
           if (debugLevel >= 2) { printModel (model) }
-          retrial <- TRUE
-        } else {
-          break
+          # Re-sample after restart like above
+          #cat("# ", format(Sys.time(), usetz=TRUE), " sampleModel()\n")
+          newCandidates <- sampleModel(tunerConfig, parameters, eliteCandidates,
+                                       model, nbNewCandidates)
+          #cat("# ", format(Sys.time(), usetz=TRUE), " sampleModel() DONE\n")
+          # Set ID of the new candidates.
+          newCandidates <- cbind (.ID. = max(0, allCandidates$.ID.) + 
+                                  1:nrow(newCandidates), newCandidates)
+          testCandidates <- rbind(eliteCandidates[, 1:ncol(allCandidates)],
+                                  newCandidates)
+          rownames(testCandidates) <- testCandidates$.ID.
         }
       }
 

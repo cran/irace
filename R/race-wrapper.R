@@ -51,7 +51,7 @@ check.output <- function(output, command = "", config = stop("config needed"))
 {
   # We check the output here to provide better error messages.
   err.msg <- NULL
-  if (length(output) < 1 || length(output) > 2 || any (is.na (output))) {
+  if (length(output) < 1 || length(output) > 2 || any (is.na (output)) || any (!is.numeric(output))) {
     err.msg <- paste("The output of `", command, "' is not numeric!\n", sep = "")
   } else if (any(is.infinite(output))) {
     err.msg <- paste("The output of `", command, "' is not finite!\n", sep = "")
@@ -102,7 +102,7 @@ parse.output <- function(outputRaw, command, config, hook.run.command = NULL)
                "The output was:\n", paste(outputRaw, sep="\n"),
                "\nThis is not a bug in irace, but means that something failed when",
                " running the command above or it was terminated before completion.",
-               " Try to run the commands above from the execution directory '",
+               " Try to run the command above from the execution directory '",
                config$execDir, "' to investigate the issue.")
   }
   return(output)
@@ -114,14 +114,14 @@ hook.evaluate.default <- function(instance, candidate, num.candidates, extra.par
   debugLevel <- config$debugLevel
   hookEvaluate <- config$hookEvaluate
   if (as.logical(file.access(hookEvaluate, mode = 1))) {
-    stop ("hookEvaluate `", hookEvaluate,
-          "' cannot be found or is not executable!\n")
+    tunerError ("hookEvaluate", shQuote(hookEvaluate), "cannot be found or is not executable!\n")
   }
 
   ## Redirects STDERR so outputRaw captures the whole output.
   command <- paste (hookEvaluate, instance, candidate$index, num.candidates, "2>&1")
   if (debugLevel >= 1) { cat(command, "\n") }
   cwd <- setwd (execDir)
+  # FIXME: This should use runcommand like hook.run.default
   outputRaw <- system (command, intern = TRUE)
   setwd (cwd)
 
@@ -137,29 +137,33 @@ hook.run.default <- function(instance, candidate, extra.params, config)
     if (debugLevel >= 1) {
       cat (format(Sys.time(), usetz=TRUE), ":", command, "\n")
     }
-    e <- tryCatch(output <- system(command, intern=TRUE), warning=function(w){w})
+    output <- NULL
+    e <- tryCatch(output <- system(command, intern=TRUE), warning = function(w){w})
     # If e is a warning, the command failed.
-    if (is.null(attributes(e))) {
-      if (debugLevel >= 1) cat (format(Sys.time(), usetz=TRUE), ": DONE\n")
-      e <- NULL
+    if (!is.null(attributes(e))) {
+      if (debugLevel >= 1) cat (format(Sys.time(), usetz=TRUE), ": ERROR (",
+            candidate$index, "):", e$message,"\n")
+      return(list(output = output, error = e$message))
     }
-    return(list(output = output, error = e))
+    if (debugLevel >= 1) cat (format(Sys.time(), usetz=TRUE), ": DONE (",
+          candidate$index, ")\n")
+    return(list(output = output, error = NULL))
   }
 
   hookRun <- config$hookRun
   if (as.logical(file.access(hookRun, mode = 1))) {
-    stop ("hookRun `", hookRun, "' cannot be found or is not executable!\n")
+    tunerError ("hookRun `", hookRun, "' cannot be found or is not executable!\n")
   }
   command <- paste (hookRun, instance, candidate$index, extra.params,
                     buildCommandLine(candidate$values, candidate$labels))
   output <- runcommand(command)
 
   if (!is.null(output$error)) {
-    tunerError(output$error, "!\n",
+    tunerError(output$error, "\n",
                "The output was:\n", paste(output$output, sep="\n"),
                "\nThis is not a bug in irace, but means that something failed when",
                " running the command above or it was terminated before completion.",
-               " Try to run the commands above from the execution directory '",
+               " Try to run the command above from the execution directory '",
                config$execDir, "' to investigate the issue.")
   }
 
@@ -182,14 +186,13 @@ race.wrapper <- function(candidate, task, which.alive, data)
 {
   debugLevel <- data$config$debugLevel
   execDir <- data$config$execDir
-  digits <- data$config$digits
   sgeCluster <- data$config$sgeCluster
   parallel <- data$config$parallel
   mpi <- data$config$mpi
   timeBudget <- data$config$timeBudget
 
   if (!isTRUE (file.info(execDir)$isdir)) {
-    stop("Execution directory '", execDir, "' is not found or not a directory\n")
+    tunerError ("Execution directory '", execDir, "' is not found or not a directory\n")
   }
 
   if (debugLevel >= 4) { print(data$candidates) }
