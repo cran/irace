@@ -133,17 +133,25 @@ hook.run.default <- function(instance, candidate, extra.params, config)
 {
   debugLevel <- config$debugLevel
   
-  runcommand <- function(command) {
+  runcommand <- function(command, args) {
     if (debugLevel >= 1) {
-      cat (format(Sys.time(), usetz=TRUE), ":", command, "\n")
+      cat (format(Sys.time(), usetz=TRUE), ":", command, args, "\n")
     }
-    output <- NULL
-    e <- tryCatch(output <- system(command, intern=TRUE), warning = function(w){w})
+    err <- NULL
+    output <-  withCallingHandlers(
+      tryCatch(system2(command, args, stdout = TRUE, stderr = TRUE),
+               error=function(e) {
+                 err <<- paste(err, conditionMessage(e), sep ="\n")
+                 NULL
+               }), warning=function(w) {
+                 err <<- paste(err, conditionMessage(w), sep ="\n")
+                 invokeRestart("muffleWarning")
+               })
     # If e is a warning, the command failed.
-    if (!is.null(attributes(e))) {
+    if (!is.null(err)) {
       if (debugLevel >= 1) cat (format(Sys.time(), usetz=TRUE), ": ERROR (",
-            candidate$index, "):", e$message,"\n")
-      return(list(output = output, error = e$message))
+            candidate$index, "):", err,"\n")
+      return(list(output = output, error = err))
     }
     if (debugLevel >= 1) cat (format(Sys.time(), usetz=TRUE), ": DONE (",
           candidate$index, ")\n")
@@ -154,9 +162,9 @@ hook.run.default <- function(instance, candidate, extra.params, config)
   if (as.logical(file.access(hookRun, mode = 1))) {
     tunerError ("hookRun `", hookRun, "' cannot be found or is not executable!\n")
   }
-  command <- paste (hookRun, instance, candidate$index, extra.params,
-                    buildCommandLine(candidate$values, candidate$labels))
-  output <- runcommand(command)
+  args <- paste(instance, candidate$index, extra.params,
+                buildCommandLine(candidate$values, candidate$labels))
+  output <- runcommand(hookRun, args)
 
   if (!is.null(output$error)) {
     tunerError(output$error, "\n",
@@ -169,10 +177,10 @@ hook.run.default <- function(instance, candidate, extra.params, config)
 
   if (!is.null(config$hookEvaluate)) {
     # FIXME: We should also check that the output is empty.
-    return(command)
+    return(paste(hookRun, args))
   }
   # hookEvalute is NULL, so parse the output just here.
-  return(parse.output (output$output, command, config))
+  return(parse.output (output$output, paste(hookRun, args), config))
 }
 
 
@@ -237,11 +245,26 @@ race.wrapper <- function(candidate, task, which.alive, data)
                             instance = instance, extra.params = extra.params,
                             config = data$config)
       } else {
-        library("multicore", quietly = TRUE)
+        library("parallel", quietly = TRUE)
         .irace$hook.output <-
-          multicore::mclapply(candidates, .irace$hook.run, mc.cores = parallel,
+          parallel::mclapply(candidates, .irace$hook.run,
+                              # FALSE means load-balancing.
+                              mc.preschedule = FALSE, mc.cores = parallel,
                               instance = instance, extra.params = extra.params,
                               config = data$config)
+        # FIXME: if stop() is called from mclapply, it does not
+        # terminate the execution of the parent process, so it will
+        # continue and give more errors later. We have to terminate
+        # here, but is there a nicer way to detect this and terminate?
+        if (any(sapply(.irace$hook.output, inherits, "try-error"))) {
+          # FIXME: mclapply has some bugs in case of error. In that
+          # case, each element of the list does not keep the output of
+          # each candidate and repetitions may occur.
+          cat(unique(unlist(
+            .irace$hook.output[sapply(
+              .irace$hook.output, inherits, "try-error")])), file = stderr())
+          tunerError("A child process triggered a fatal error")
+        }
       }
     } else if (sgeCluster) {
       .irace$hook.output <-
