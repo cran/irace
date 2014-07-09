@@ -1,57 +1,35 @@
-candidates.equal <- function(x, y, parameters, threshold)
+checkForbidden <- function(configurations, forbidden)
 {
-  d <- 0.0
-  for (i in seq_along(parameters$names)) {
-    if (parameters$isFixed[[i]]) next
-    type <- parameters$types[[i]]
-    param <- parameters$names[[i]]
-    X <- x[[param]]
-    Y <- y[[param]]
-    if (is.na (X) && is.na(Y)) {
-      # Both NA, just ignore this param
-      next
-    } else if (xor(is.na (X), is.na(Y))) {
-      # Distance is 1.0, so not equal
-      return(FALSE)
-    } else if (type == "i" || type == "r") {
-      lower <- oneParamLowerBound(param, parameters)
-      upper <- oneParamUpperBound(param, parameters)
-      d <- max(d, abs((as.numeric(X) - as.numeric(Y)) / (upper - lower)))
-      if (d > threshold) return(FALSE)
-    } else {
-      irace.assert(type == "c" || type == "o")
-      # Distance is 1.0, so definitely not equal.
-      if (X != Y) return(FALSE)
-    }
+  # We have to use a variable name that will never appear in
+  # configurations, so .FORBIDDEN .
+  for (.FORBIDDEN in forbidden) {
+    #print(.FORBIDDEN)
+    configurations <- subset(configurations, eval(.FORBIDDEN))
+    #print(configurations)
+    #print(str(configurations))
   }
-  ## cat ("X:\n")
-  ## print (x)
-  ## cat ("Y:\n")
-  ## print (y)
-  ## cat ("D = ", d, "\n")
-  return(TRUE)
+  #print(nrow(configurations))
+  return(configurations)
 }
 
-similarCandidates.old <- function(candidates, parameters)
+# Sets irace variables from a recovery file.  It is executed in the
+# parent environment.
+recoverFromFile <- function(filename)
 {
-  similar <- c()
-  num.candidates <- nrow(candidates)
-  #cat("# ", format(Sys.time(), usetz=TRUE), " similarCandidates()\n")
-  #cat ("# Computing similarity of candidates ")
-  for (i in seq_len(num.candidates - 1)) {
-    for (j in ((i+1):num.candidates)) {
-      if (i == j) next
-      if (candidates.equal (candidates[i,],
-                            candidates[j,],
-                            parameters, threshold = 0.00000001)) {
-        similar <- c(similar, candidates[i,".ID."], candidates[j,".ID."])
-      }
-    }
-    #cat(".")
-  }
-  #cat(" DONE\n")
-  #cat("# ", format(Sys.time(), usetz=TRUE), " similarCandidates() DONE\n")
-  return(unique(similar))
+  # substitute() is needed to evaluate filename here.
+  eval.parent(substitute({
+    # This restores tunerResults, so that doesn't need restoring.
+    load (filename)
+    # .Random.seed is special
+    for (name in setdiff(names(tunerResults$state), ".Random.seed"))
+      assign(name, tunerResults$state[[name]])
+    assign(".Random.seed", tunerResults$state$.Random.seed, .GlobalEnv)
+    # These variables are not state, but they are used directly by irace.
+    for (name in c("tunerConfig", "parameters", "allCandidates"))
+      assign(name, tunerResults[[name]])
+    options(.race.debug.level = tunerConfig$debugLevel)
+    options(.irace.debug.level = tunerConfig$debugLevel)
+  }))
 }
 
 ##
@@ -95,9 +73,9 @@ numeric.candidates.equal <- function(x, candidates, parameters, threshold, param
 }
 
 ##
-## New similar candidates function categorical+numerical
+## Identify which configurations are similar.
 ##
-similarCandidates.new <- function(candidates, parameters)
+similarCandidates <- function(candidates, parameters)
 {
   debug.level <- getOption(".irace.debug.level", 0)
   if (debug.level >= 1) cat ("# Computing similarity of candidates .")
@@ -119,12 +97,12 @@ similarCandidates.new <- function(candidates, parameters)
   nbCater <- length(listCater)
   nbNumer <- length(listNumer)
 
-  ### CATEGORICAL/ORDINAL FILTERING ####
+  ### Categorical/Ordinal filtering ####
   if (nbCater > 0) {
-    ## Build an array with the categorical append together in a string
+    ## Build an array with the categorical appended together in a string
     strings <- c()
     for (i in 1:nrow(candidates)) {
-      strings[i] <- paste(candidates[i, listCater], collapse=" ; ")
+      strings[i] <- paste(candidates[i, listCater], collapse = " ; ")
     }
 
     if (nbNumer != 0) candidates <- candidates[, c(".ID.", listNumer)]
@@ -151,9 +129,8 @@ similarCandidates.new <- function(candidates, parameters)
       return(NULL)
     }
   }
-
   
-  ### NUMERICAL PARAMETERS WITHIN BLOCKS OF SAME STRING ###
+  ### Numerical parameters within blocks of the same string ###
   if (nbNumer > 0) {
     similar <- c()
     if (nbCater > 0) {
@@ -199,31 +176,6 @@ similarCandidates.new <- function(candidates, parameters)
 }
 
 
-similarCandidates <- function(candidates, parameters, execDir = getwd())
-{
-  similarIds.new <- similarCandidates.new (candidates,parameters)
-
-  if (getOption(".irace.debug.level", 0) >= 1) {
-    similarIds.old <- similarCandidates.old (candidates,parameters)
-
-    if (!setequal(similarIds.old, similarIds.new)) {
-      cat("\nSimilar candidates error:\n",
-          "Old: ", paste(similarIds.old, collapse = ", "),
-          "\nNew: ", paste(similarIds.new, collapse = ", "),
-          "\nIntersect:",
-          paste(intersect(similarIds.old, similarIds.new), collapse = ", "),
-          "\nLength: ", length(intersect(similarIds.old,similarIds.new)), "\n")
-      cwd <- setwd(execDir)
-      # save.image() does not save anything!
-      save (list = c("candidates", "parameters", "similarIds.new",
-              "similarIds.old"), file = "similarCandidates.Rdat")
-      setwd(cwd)
-      irace.assert (setequal(similarIds.old, similarIds.new))
-    }
-  }
-  return(similarIds.new)
-}
-
 ## Number of iterations.
 computeNbIterations <- function(nbParameters)
 {
@@ -255,17 +207,13 @@ computeTerminationOfRace <- function(nbParameters)
 # race, it calls race, and then conversely converts the resulting data
 # into the proper data structures for irace.
 oneIterationRace <-
-  function(tunerConfig = NULL,
-           parameters = NULL,
-           candidates = NULL, 
-           budget = NULL,
-           minSurvival = NULL)
+  function(tunerConfig, candidates, parameters, budget, minSurvival)
 {
-  # Call to Race:
   result <- race (maxExp = budget,
                   first.test = tunerConfig$firstTest,
                   each.test = tunerConfig$eachTest,
                   stat.test = tunerConfig$testType,
+                  conf.level = tunerConfig$confidence,
                   stop.min.cand = minSurvival,
                   # Parameters for race-wrapper.R
                   candidates = removeCandidatesMetaData(candidates),
@@ -278,10 +226,10 @@ oneIterationRace <-
   # Create two columns for instances and iteration
   expResults <- as.data.frame(matrix(ncol = 2, nrow = nrow(result$results)))
   colnames(expResults) <- c("instance", "iteration")
-  # Fill instances (Iter will be outside this function)
   expResults$instance <- result$race.data$race.instances[1:result$no.tasks]
-  # Add two new columns to the matrix of results
+  # Add the results for each configuration as additional columns.
   expResults <- cbind(expResults, result$results)
+
   candidates$.ALIVE. <- as.logical(result$alive)
   # Assign the proper ranks in the candidates data.frame
   candidates$.RANK. <- Inf
@@ -301,6 +249,31 @@ oneIterationRace <-
                 expResults = expResults))
 }
 
+startParallel <- function(config)
+{
+  cwd <- setwd (config$execDir)
+  on.exit(setwd(cwd), add = TRUE)
+
+  parallel <- config$parallel
+  if (parallel > 1) {
+    if (config$mpi) {
+      mpiInit(parallel, config$debugLevel)
+    } else {
+      library("parallel", quietly = TRUE)
+      if (.Platform$OS.type == 'windows') {
+        .irace$cluster <- parallel::makeCluster(parallel)
+      }
+    }
+  }
+}
+
+stopParallel <- function()
+{
+  if (!is.null(.irace$cluster)) {
+    parallel::stopCluster(.irace$cluster)
+    .irace$cluster <- NULL
+  }
+}
 #' High-level function to use iterated Race
 #' 
 #' This function implement iterated Race. It receives some parameters to be tuned and returns the best
@@ -317,98 +290,192 @@ oneIterationRace <-
 irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
                   parameters = stop("parameter `parameters' is mandatory."))
 {
-  tunerConfig <- checkConfiguration(defaultConfiguration(tunerConfig))
+  catInfo <- function(..., verbose = TRUE) {
+    cat ("# ", format(Sys.time(), usetz=TRUE), ": ",
+         paste(..., sep = "", collapse = ""), "\n", sep = "")
+    if (verbose)
+      cat ("# Iteration: ", indexIteration, "\n",
+           "# nbIterations: ", nbIterations, "\n",
+           "# experimentsUsedSoFar: ", experimentsUsedSoFar, "\n",
+           "# timeUsedSoFar: ", timeUsedSoFar, "\n",
+           "# timeEstimate: ", timeEstimate, "\n",
+           "# remainingBudget: ", remainingBudget, "\n",
+           "# currentBudget: ", currentBudget, "\n",
+           "# number of elites: ", nrow(eliteCandidates), "\n",
+           "# nbCandidates: ", nbCandidates, "\n",
+           "# mu: ", max(tunerConfig$mu, tunerConfig$firstTest), "\n",
+           sep = "")
+  }
   
+  tunerConfig <- checkConfiguration(defaultConfiguration(tunerConfig))
+  # We need to do this here to use/recover .Random.seed later.
   if (is.na(tunerConfig$seed)) {
     tunerConfig$seed <- runif(1, 1, .Machine$integer.max)
   }
   set.seed(tunerConfig$seed)
-  debugLevel <- tunerConfig$debugLevel
-  # Set options controlling debug level.
-  # FIXME: This should be the other way around, the options set the debugLevel.
-  options(.race.debug.level = debugLevel)
-  options(.irace.debug.level = debugLevel)
   
-  # Create a data frame of all candidates ever generated.
-  namesParameters <- names(parameters$constraints)
-  if (!is.null(tunerConfig$candidatesFile)
-      && tunerConfig$candidatesFile != "") {
-    allCandidates <- readCandidatesFile(tunerConfig$candidatesFile,
-                                        parameters, debugLevel)
-    allCandidates <- cbind(.ID. = 1:nrow(allCandidates),
-                           allCandidates,
-                           .PARENT. = NA)
-    rownames(allCandidates) <- allCandidates$.ID.
+  # Recover state from file?
+  if (!is.null(tunerConfig$recoveryFile)){
+    cat ("# ", format(Sys.time(), usetz=TRUE), ": Resuming from file: '",
+         tunerConfig$recoveryFile,"'\n", sep="")
+    recoverFromFile(tunerConfig$recoveryFile)
   } else {
-    candidates.colnames <- c(".ID.", namesParameters, ".PARENT.")
-    allCandidates <-
-      as.data.frame(matrix(ncol = length(candidates.colnames),
-                           nrow = 0))
-    colnames(allCandidates) <- candidates.colnames
+    debugLevel <- tunerConfig$debugLevel
+    # Set options controlling debug level.
+    # FIXME: This should be the other way around, the options set the debugLevel.
+    options(.race.debug.level = debugLevel)
+    options(.irace.debug.level = debugLevel)
+    
+    # Create a data frame of all candidates ever generated.
+    namesParameters <- names(parameters$conditions)
+
+    if (!is.null(tunerConfig$candidatesFile)
+        && tunerConfig$candidatesFile != "") {
+      allCandidates <- readCandidatesFile(tunerConfig$candidatesFile,
+                                          parameters, debugLevel)
+      allCandidates <- cbind(.ID. = 1:nrow(allCandidates),
+                             allCandidates,
+                             .PARENT. = NA)
+      rownames(allCandidates) <- allCandidates$.ID.
+      num <- nrow(allCandidates)
+      allCandidates <- checkForbidden(allCandidates, tunerConfig$forbiddenExps)
+      if (nrow(allCandidates) < num) {
+        cat("# warning: some of the configurations in the candidates file were forbidden and, thus, discarded\n")
+      }
+      
+    } else {
+      candidates.colnames <- c(".ID.", namesParameters, ".PARENT.")
+      allCandidates <-
+        as.data.frame(matrix(ncol = length(candidates.colnames),
+                             nrow = 0))
+      colnames(allCandidates) <- candidates.colnames
+    }
+    eliteCandidates <- data.frame()
+    
+    timeBudget <- tunerConfig$timeBudget
+    timeEstimate <- tunerConfig$timeEstimate
+    
+    nbIterations <- ifelse (tunerConfig$nbIterations == 0,
+                            computeNbIterations(parameters$nbVariable),
+                            tunerConfig$nbIterations)
+    nbIterations <- floor(nbIterations)
+    
+    minSurvival <- ifelse (tunerConfig$minNbSurvival == 0,
+                           computeTerminationOfRace(parameters$nbVariable),
+                           tunerConfig$minNbSurvival)
+    minSurvival <- floor(minSurvival)
+
+    indexIteration <- 1
+
+    # Compute the total initial budget, that is, the maximum number of
+    # experiments that we can perform.
+    remainingBudget <- ifelse (timeBudget > 0,
+                               timeBudget / timeEstimate,
+                               tunerConfig$maxExperiments)
+    experimentsUsedSoFar <- 0
+    timeUsedSoFar <- 0
+    currentBudget <-
+      ifelse (tunerConfig$nbExperimentsPerIteration == 0,
+              computeComputationalBudget(remainingBudget, indexIteration,
+                                         nbIterations),
+              tunerConfig$nbExperimentsPerIteration)
+    currentBudget <- floor (currentBudget)
+
+    # To save the logs
+    tunerResults <- list()
+    tunerResults$tunerConfig <- tunerConfig
+    tunerResults$irace.version <- irace.version
+    tunerResults$parameters <- parameters
+    tunerResults$iterationElites <- NULL
+    tunerResults$experiments <- as.data.frame(matrix(ncol=2, nrow=0))
+    colnames(tunerResults$experiments) <- c("instance", "iteration")
+    model <- NULL
+    nbCandidates <- 0
   }
-  eliteCandidates <- data.frame()
-  
-  timeBudget <- tunerConfig$timeBudget
-  timeEstimate <- tunerConfig$timeEstimate
 
-  nbIterations <- ifelse (tunerConfig$nbIterations == 0,
-                          computeNbIterations(parameters$nbVariable),
-                          tunerConfig$nbIterations)
-  nbIterations <- floor(nbIterations)
-
-  minSurvival <- ifelse (tunerConfig$minNbSurvival == 0,
-                         computeTerminationOfRace(parameters$nbVariable),
-                         tunerConfig$minNbSurvival)
-  minSurvival <- floor(minSurvival)
-  
-  indexIteration <- 1
-  # Compute the total initial budget, that is, the maximum number of
-  # experiments that we can perform.
-  remainingBudget <- ifelse (timeBudget > 0,
-                             timeBudget / timeEstimate,
-                             tunerConfig$maxExperiments)
-  experimentsUsedSoFar <- 0
-  timeUsedSoFar <- 0
-
-  # To save the logs
-  tunerResults <- list()
-  tunerResults$tunerConfig <- tunerConfig
-  tunerResults$parameters <- parameters
-  tunerResults$iterationElites <- NULL
-  tunerResults$experiments <- as.data.frame(matrix(ncol=2, nrow=0))
-  colnames(tunerResults$experiments) <- c("instance", "iteration")
-  
-  cat("# ", format(Sys.time(), usetz=TRUE), ": INITIALIZATION \n",
-      "# nbIterations: ", nbIterations, "\n",
-      "# minSurvival: ", minSurvival, "\n",
-      "# nbParameters: ", parameters$nbVariable, "\n",
-      "# seed: ", tunerConfig$seed, "\n",
-      sep = "")
-
-  while (TRUE) {
-    if (remainingBudget <= 0) {
-      cat("# ", format(Sys.time(), usetz=TRUE), ": Stopped because ",
-          "budget is exhausted\n",
+  catInfo("Initialization\n", 
           "# nbIterations: ", nbIterations, "\n",
-          "# experimentsUsedSoFar: ", experimentsUsedSoFar, "\n",
-          "# timeUsedSoFar: ", timeUsedSoFar, "\n",
-          "# timeEstimate: ", timeEstimate, "\n",
+          "# minNbSurvival: ", minSurvival, "\n",
+          "# nbParameters: ", parameters$nbVariable, "\n",
+          "# seed: ", tunerConfig$seed, "\n",
+          "# confidence level: ", tunerConfig$confidence, "\n",
           "# remainingBudget: ", remainingBudget, "\n",
-          "# currentBudget: ", currentBudget, "\n",
-          "# number of elites: ", nrow(eliteCandidates), "\n",
-          "# nbCandidates: ", nbCandidates, "\n", sep="")
+          "# mu: ", max(tunerConfig$mu, tunerConfig$firstTest), "\n",
+          verbose = FALSE)
+
+  ## Compute the minimum budget required, and exits early in case the
+  ## budget given by the user is insufficient.
+  # This is computed from the default formulas as follows:
+  #  B_1 = B / I
+  #  B_2 = B -  (B/I) / (I - 1) = B / I
+  #  B_3 = B - 2(B/I) / (I - 2) = B / I
+  # thus
+  #  B_i = B / I
+  # and
+  #  C_i = B_i / (mu + min(5,i)) = B / (I * (mu + min(5,i))).
+  # We want to enforce that C_i >= min_surv + 1, thus
+  #  B / (I * (mu + min(5,i))) >= min_surv + 1        (1)
+  # becomes
+  #  B >= (min_surv + 1) * I * (mu + min(5,i))
+  # and the most strict value is for i >= 5, thus
+  #  B >= (min_surv + 1) * I * (mu + 5)
+  #
+  # This is an over-estimation, since actually B_1 = floor(B/I) and if
+  # floor(B/I) < B/I, then B_i < B/I, and we could still satisfy Eq. (1)
+  # with a smaller budget. However, the exact formula requires computing B_i
+  # taking into account the floor() function, which is not obvious.
+  minimumBudget <- (minSurvival + 1) * nbIterations *
+    (max(tunerConfig$mu, tunerConfig$firstTest) + 5)
+     
+  if (remainingBudget < minimumBudget) {
+    tunerError("Insufficient budget: ",
+               "With the current settings, irace will require a value of ",
+               "'maxExperiments' of at least '",  minimumBudget, "'. ",
+               "You can either increase the budget, ",
+               "or set a smaller value of either 'minNbSurvival' ",
+               "or 'nbIterations'")
+  }
+  
+  startParallel(tunerConfig)
+  on.exit(stopParallel())
+  
+  while (TRUE) {
+    # Recovery info 
+    tunerResults$state <- list(.Random.seed = .Random.seed, 
+                               currentBudget = currentBudget,
+                               debugLevel = debugLevel,
+                               eliteCandidates = eliteCandidates,
+                               experimentsUsedSoFar = experimentsUsedSoFar,
+                               indexIteration = indexIteration,
+                               minSurvival = minSurvival,
+                               model = model,
+                               nbCandidates = nbCandidates,
+                               nbIterations = nbIterations,
+                               remainingBudget = remainingBudget,
+                               timeBudget = timeBudget,
+                               timeEstimate = timeEstimate,
+                               timeUsedSoFar = timeUsedSoFar)
+    ## Save to the log file
+    tunerResults$allCandidates <- allCandidates
+    if (!is.null.or.empty(tunerConfig$logFile)) {
+      cwd <- setwd(tunerConfig$execDir)
+      save (tunerResults, file = tunerConfig$logFile)
+      setwd(cwd)
+    }
+
+    if (remainingBudget <= 0) {
+      catInfo("Stopped because budget is exhausted")
       return (eliteCandidates)
     }
 
     if (indexIteration > nbIterations) {
-      cat("# ", format(Sys.time(), usetz=TRUE), ": Limit of iterations reached\n", sep="")
+      catInfo("Limit of iterations reached", verbose = FALSE)
       if (tunerConfig$nbIterations == 0) {
         nbIterations <- indexIteration
       } else {
         return (eliteCandidates)
       }
     }
-
     # Compute the current budget (nb of experiments for this iteration)
     # or take the value given as parameter.
     currentBudget <-
@@ -425,67 +492,45 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
                                                 max(tunerConfig$mu,
                                                     tunerConfig$firstTest)),
                             tunerConfig$nbCandidates)
-    
+
     # Stop if  the number of candidates to produce is not greater than
     # the number of elites...
     if (nbCandidates <= nrow(eliteCandidates)) {
-      cat("# ", format(Sys.time(), usetz=TRUE), ": Stopped because ",
-          "there is no enough budget to sample new candidates\n",
-          #(number of elites  + 1) * (mu + min(5, indexIteration)) > remainingBudget\n",
-          "# remainingBudget: ", remainingBudget, "\n",
-          "# experimentsUsedSoFar: ", experimentsUsedSoFar, "\n",
-          "# timeUsedSoFar: ", timeUsedSoFar, "\n",
-          "# timeEstimate: ", timeEstimate, "\n",
-          "# currentBudget: ", currentBudget, "\n",
-          "# number of elites: ", nrow(eliteCandidates), "\n",
-          "# nbCandidates: ", nbCandidates, "\n",
-          "# mu: ", max(tunerConfig$mu, tunerConfig$firstTest), "\n",
-          sep="")
+      catInfo("Stopped because ",
+              "there is no enough budget left to race newly sampled configurations")
+      #(number of elites  + 1) * (mu + min(5, indexIteration)) > remainingBudget" 
       return (eliteCandidates)
     }
-    # ... or the number of candidates to test is NOT larger than the minimum.
+    # ... or if the number of candidates to test is NOT larger than the minimum.
     if (nbCandidates <= minSurvival) {
-      cat("# ", format(Sys.time(), usetz=TRUE), ": Stopped because ",
-          "the number of candidates (", nbCandidates,
-          ") is smaller than the minimum (", minSurvival,")\n",
-          "# You may either increase the budget or set 'minNbSurvival' to a lower value\n",
-          # FIXME: Create a helper function to report all this info
-          # and avoid repetition.
-          "# number of elites: ", nrow(eliteCandidates), "\n",
-          "# indexIteration: ", indexIteration, "\n",
-          "# mu: ", max(tunerConfig$mu, tunerConfig$firstTest), "\n",
-          "# nbIterations: ", nbIterations, "\n",
-          "# experimentsUsedSoFar: ", experimentsUsedSoFar, "\n",
-          "# timeUsedSoFar: ", timeUsedSoFar, "\n",
-          "# timeEstimate: ", timeEstimate, "\n",
-          "# remainingBudget: ", remainingBudget, "\n",
-          "# currentBudget: ", currentBudget, "\n",
-          "# nbCandidates: ", nbCandidates, "\n",
-          sep="")
+      catInfo("Stopped because there is no enough budget left to race more than ",
+              "the minimum (", minSurvival,")\n",
+              "# You may either increase the budget or set 'minNbSurvival' to a lower value")
       return (eliteCandidates)
     }
 
-    cat("# ", format(Sys.time(), usetz=TRUE),
-        ": ITERATION ", indexIteration, " of ", nbIterations, "\n",
-        "# experimentsUsedSoFar: ", experimentsUsedSoFar, "\n",
-        "# timeUsedSoFar: ", timeUsedSoFar, "\n",
-        "# timeEstimate: ", timeEstimate, "\n",
-        "# remainingBudget: ", remainingBudget, "\n",
-        "# currentBudget: ", currentBudget, "\n",
-        "# nbCandidates: ", nbCandidates, "\n", sep="")
-    
-    if (indexIteration == 1) {
+    catInfo("Iteration ", indexIteration, " of ", nbIterations, "\n",
+            "# experimentsUsedSoFar: ", experimentsUsedSoFar, "\n",
+            "# timeUsedSoFar: ", timeUsedSoFar, "\n",
+            "# timeEstimate: ", timeEstimate, "\n",
+            "# remainingBudget: ", remainingBudget, "\n",
+            "# currentBudget: ", currentBudget, "\n",
+            "# nbCandidates: ", nbCandidates,
+            verbose = FALSE)
+
+    # Sample for the first time.
+    if (nrow(eliteCandidates) == 0) {
       # If we need more candidates, sample uniformly.
       nbNewCandidates <- nbCandidates - nrow(allCandidates)
       if (nbNewCandidates > 0) {
         # Sample new candidates.
         if (debugLevel>= 1) {
-          cat(sep="", "# ", format(Sys.time(), usetz=TRUE), ": ",
-              "Sample ", nbNewCandidates,
-              " candidates from uniform distribution\n")
+          catInfo("Sample ", nbNewCandidates,
+                  " candidates from uniform distribution", verbose = FALSE)
         }
-        newCandidates <- sampleUniform(tunerConfig = tunerConfig,
-                                       parameters, nbNewCandidates)        
+        newCandidates <- sampleUniform(parameters, nbNewCandidates,
+                                       digits = tunerConfig$digits,
+                                       forbidden = tunerConfig$forbiddenExps)
         newCandidates <-
           cbind (.ID. = max(0, allCandidates$.ID.) + 1:nrow(newCandidates),
                  newCandidates)
@@ -513,7 +558,8 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
 
       #cat("# ", format(Sys.time(), usetz=TRUE), " sampleModel()\n")
       newCandidates <- sampleModel(tunerConfig, parameters, eliteCandidates,
-                                   model, nbNewCandidates)
+                                   model, nbNewCandidates,
+                                   forbidden = tunerConfig$forbiddenExps)
       #cat("# ", format(Sys.time(), usetz=TRUE), " sampleModel() DONE\n")
       # Set ID of the new candidates.
       newCandidates <- cbind (.ID. = max(0, allCandidates$.ID.) +
@@ -524,7 +570,7 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
       tunerResults$softRestart[indexIteration] <- FALSE
       if (tunerConfig$softRestart) {
         #          Rprof("profile.out")
-        tmp.ids <- similarCandidates (testCandidates, parameters, tunerConfig$execDir)
+        tmp.ids <- similarCandidates (testCandidates, parameters)
         #          Rprof(NULL)
         if (!is.null(tmp.ids)) {
           if (debugLevel >= 1)
@@ -538,7 +584,8 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
           # Re-sample after restart like above
           #cat("# ", format(Sys.time(), usetz=TRUE), " sampleModel()\n")
           newCandidates <- sampleModel(tunerConfig, parameters, eliteCandidates,
-                                       model, nbNewCandidates)
+                                       model, nbNewCandidates,
+                                       forbidden = tunerConfig$forbiddenExps)
           #cat("# ", format(Sys.time(), usetz=TRUE), " sampleModel() DONE\n")
           # Set ID of the new candidates.
           newCandidates <- cbind (.ID. = max(0, allCandidates$.ID.) + 
@@ -560,10 +607,11 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
     }
 
     if (debugLevel >= 1) {
-      cat(sep="", "# ", format(Sys.time(), usetz=TRUE), ": ", "Launch race\n")}
+      cat(sep="", "# ", format(Sys.time(), usetz=TRUE), ": Launch race\n")
+    }
     raceResults <- oneIterationRace (tunerConfig = tunerConfig,
-                                     parameters = parameters, 
                                      candidates = testCandidates,
+                                     parameters = parameters, 
                                      budget = currentBudget, 
                                      minSurvival = minSurvival)
     
@@ -600,6 +648,9 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
     }
 
     if (debugLevel >= 1) { cat("# Extract elites\n") }
+    # FIXME: Since we only actually keep the alive ones, we don't need
+    # to carry around rejected ones in raceResults$candidates. This
+    # would reduce overhead.
     eliteCandidates <- extractElites(raceResults$candidates,
                                      min(raceResults$nbAlive, minSurvival))
     cat("# Elite candidates:\n")
@@ -618,25 +669,8 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
       candidates.print(allCandidates, metadata = TRUE)
     }
 
-    ## Save to the log file
-    tunerResults$allCandidates <- allCandidates
-    if (!is.null.or.empty(tunerConfig$logFile)) {
-      cwd <- setwd(tunerConfig$execDir)
-      save (tunerResults, file = tunerConfig$logFile)
-      setwd(cwd)
-    }
-
     indexIteration <- indexIteration + 1
   }
-
-  cat("# ", format(Sys.time(), usetz=TRUE), ": Limit of iterations reached\n",
-      "# nbIterations: ", nbIterations, "\n",
-      "# experimentsUsedSoFar: ", experimentsUsedSoFar, "\n",
-      "# timeUsedSoFar: ", timeUsedSoFar, "\n",
-      "# timeEstimate: ", timeEstimate, "\n",
-      "# remainingBudget: ", remainingBudget, "\n",
-      "# currentBudget: ", currentBudget, "\n",
-      "# nbCandidates: ", nbCandidates, "\n", sep="")
-
+  # This code is actually never executed.
   return (eliteCandidates)
 }

@@ -1,0 +1,14 @@
+#!/bin/bash
+ 
+# To use --sge-cluster, irace must be invoked in the submission node.
+BINDIR=$1
+EXECDIR=$2
+DESTMAIL=${USER}@localhost
+shift 2
+$BINDIR/irace --exec-dir=$EXECDIR --sge-cluster $* \
+    1> $EXECDIR/irace-$$.stdout \
+    2> $EXECDIR/irace-$$.stderr
+if [ ${DESTMAIL} ]; then
+    cat "$EXECDIR/irace-$$.stderr" \
+        | mail -s "[irace] $EXECDIR/irace-$$ $*" $DESTMAIL
+fi

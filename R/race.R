@@ -104,7 +104,7 @@ race<-function(maxExp=0,
     if(!is.list(race.data))
       stop(paste("Error while running",.slave.init.function))
     precis.init<-TRUE
-  }else{
+  } else {
     race.data<-list()
     precis.init<-FALSE
   }
@@ -256,15 +256,16 @@ race<-function(maxExp=0,
 	      race.data=race.data,
               ranks = race.ranks)
 
-    if (end)
+    if (end) {
       log<-c(log,list(timestamp.end=timestamp.current,
                       description.best=description.best,
                       alive.inTime=ifelse(no.subtasks.sofar>1,
 		      	apply(Results[1:no.subtasks.sofar,],
                         	1,function(u){sum(!(is.na(u)))}),
 			sum(!is.na(Results[1,])))))
-    else
+    } else {
       log<-c(log,list(timestamp.current=timestamp.current))
+    }
     return(log)
   }
   
@@ -289,12 +290,14 @@ race<-function(maxExp=0,
       t<-qt(1-alpha/2,(n-1)*(k-1))*(2*(n*A-sum(R^2))/((n-1)*(k-1)))^(1/2)
       o<-order(R)
       J<-I[o[1]]
-      for (j in 2:k) 
-        if (abs(R[o[j]]-R[o[1]])>t) 
+      for (j in 2:k) {
+        if (abs(R[o[j]]-R[o[1]])>t) {
           break
-        else
+        } else {
           J<-c(J,I[o[j]])
-    }else{
+        }
+      }
+    } else {
       if (interactive)
         cat("|=|")
     }
@@ -345,22 +348,27 @@ race<-function(maxExp=0,
   
   aux.ttest<-function(adjust=c("none","bonferroni","holm")){
     adjust<-match.arg(adjust)
+    # FIXME why c()?
     mean.all<-array(0,c(ncol(Results)))
     for (j in 1:ncol(Results))
+      # FIXME: why not just mean() ?
       mean.all[j]<-sum(Results[1:no.subtasks.sofar,j]/no.subtasks.sofar)
+    # FIXME: which.min?
     best<<-match(min(mean.all[alive]),mean.all)
     race.ranks <<- mean.all[alive]
 
     PJ<-array(0,dim=c(2,0))
     for (j in which.alive) {
+      # FIXME: This doesn't seem to change so it could be outside the for()
       Vb<-Results[1:no.subtasks.sofar,best]
       Vj<-Results[1:no.subtasks.sofar,j]
       #cat("Vb:", Vb, "\n")
       #cat("Vj:", Vj, "\n")
       # t.test may fail if the data in each group is almost
-      # constant. Hence, we sourround the call in a try() and we
+      # constant. Hence, we surround the call in a try() and we
       # initialize p with 1 if the means are equal or zero if they are
       # different.
+      # FIXME: mean(Vb) doesn't seem to change either.
       p <- as.integer(isTRUE(all.equal(mean(Vb),mean(Vj))))
       try(p <- t.test(Vb,Vj,paired=TRUE)$p.value)
       if (!is.nan(p) & !is.na(p))
@@ -374,10 +382,11 @@ race<-function(maxExp=0,
         dropped.any<-TRUE
       }
     if (interactive){
-      if (dropped.any) 
+      if (dropped.any) {
         cat("|-|")
-      else
+      } else {
         cat("|=|")
+      }
     }
   }
 
@@ -399,6 +408,10 @@ race<-function(maxExp=0,
   for (current.task in 1:no.tasks) {
     which.alive<-which(alive)
     no.alive<-length(which.alive)
+    # FIXME: This should take into account each.test. It doesn't make
+    # much sense to see an additional instance if there is no budget
+    # to do a test. The point of each.test is to see instances in
+    # groups and this defeats its purpose.
     if (maxExp && no.experiments.sofar+no.alive>maxExp)
       break
     if (no.alive==1)
@@ -408,12 +421,13 @@ race<-function(maxExp=0,
                                 no.subtasks,
                                 no.subtasks[current.task])
     
-    if(length(no.subtasks)==1)
+    if (length(no.subtasks)==1) {
       subtasks.range<-
         (current.task-1)*no.subtasks+1:no.subtasks
-    else
+    } else {
       subtasks.range<-
         cumsum(c(0,no.subtasks))[current.task]+1:no.subtasks[current.task]
+    }
     
     for (current.candidate in which.alive){
       result <- do.call (.slave.wrapper.function,
@@ -431,17 +445,22 @@ race<-function(maxExp=0,
     no.tasks.sofar<-no.tasks.sofar+1
     no.subtasks.sofar<-no.subtasks.sofar+current.no.subtasks
     
-    # Drop bad candidates
+    ## Drop bad candidates.
+    # We assume that first.test is a multiple of each.test.  In any
+    # case, this will only do the first test after the first multiple
+    # of each.test that is larger than first.test.
     if ( (no.tasks.sofar>=first.test) && ((no.tasks.sofar %% each.test) == 0)) {
       switch(stat.test,
              friedman=aux.friedman(),
              t.none=aux.ttest("none"),
+             # FIXME: These two need to be exposed as options to irace's testType parameter.
              t.holm=aux.ttest("holm"),
              t.bonferroni=aux.ttest("bonferroni"))
     } else {
       if (interactive)
         cat("|x|")
       if (no.subtasks.sofar==1)  {
+        # FIXME: Shouldn't these be ranks when stat.test == "friedman" ?
         race.ranks <- Results[1,]
         best <- order(race.ranks)[1]
       } else  {
@@ -472,7 +491,7 @@ race<-function(maxExp=0,
                 formatC(no.experiments.sofar,width=11),"|\n",
                 sep=""))
 
-    # stop race if we have less than the minimum number of candidates
+    # stop race if we have less or equal than the minimum number of candidates
     if (no.tasks.sofar>=first.test) {
         which.alive<-which(alive)
     	if(length(which.alive) <= stop.min.cand)
@@ -480,10 +499,11 @@ race<-function(maxExp=0,
    }
   }
 
-  if (exists(.slave.describe.function,inherits=TRUE,mode="function"))
+  if (exists(.slave.describe.function,inherits=TRUE,mode="function")) {
     description.best<-do.call(.slave.describe.function,list(best,race.data))
-  else
+  } else {
     description.best<-NULL
+  }
   
   if (interactive) {
    cat(paste("+-+-----------+-----------+-----------+-----------+-----------+",

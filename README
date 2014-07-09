@@ -9,12 +9,13 @@ Contact email: irace@iridia.ulb.ac.be
 Requisites
 -------------
 
- * R (http://www.r-project.org/).
-   Versions that work: >= 2.9.2
-   Versions that do not work: 2.4 and earlier.
+ * R (http://www.r-project.org/) is required for running irace, but
+   you don't need to know the R language to use it.
+   Versions that work: >= 2.14.0
 
- * The wrappers `irace` and `parallel-irace` require GNU Bash.
-
+ * If you wish to use the command-line wrappers `irace` and
+   `parallel-irace`, they require GNU Bash.
+   
 
 Installation
 ------------
@@ -166,7 +167,7 @@ parallel. There are three ways to parallelize a single run of irace.
 
 3. SGE cluster: This mode requires Grid Engine commands qsub and
    qstat. The comand qsub should return a message that contains the
-   string: `Your job JOBID`. The command `qstat -j JOBID` returns
+   string: `Your job JOBID`. The command `qstat -j JOBID` should return
    nonzero if JOBID has finished, otherwise it should return zero.
 
    The option `--sge-cluster 1` will launch as many calls
@@ -175,9 +176,9 @@ parallel. There are three ways to parallelize a single run of irace.
    configuration for their cluster, otherwise `hookRun` will not submit
    jobs to the cluster. In this mode, irace must run in the submission
    node, and hence, qsub should not be used to invoke irace (either
-   directly or through tune-main).  
-   
-   See the examples in `$IRACE_HOME/examples/cluster-mode/`.
+   directly or through tune-main).  You also need to create a separate
+   hookEvaluate script to parse the results of the hookRun and return
+   them to irace. See the examples in `$IRACE_HOME/examples/sge-cluster/`.
 
 
 Frequently Asked Questions

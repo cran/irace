@@ -74,11 +74,11 @@
 ## Specifies the statistical test type: F-test or t-test.
 # testType <- "F-test"
 
-## Specifies how many instances are seen before the first test
-## is performed.
+## Specifies how many instances are seen before the first elimination
+## test. It must be a multiple of eachTest.
 # firstTest <- 5
 
-## Specifies how many instances are seen between tests.
+## Specifies how many instances are seen between elimination tests.
 # eachTest <- 1
 
 ## The minimum number of candidates that should survive to continue one
@@ -116,6 +116,18 @@
 ## Enable/disable a soft restart strategy to avoid premature convergence 
 ## of the probabilistic model.
 # softRestart <- 1
+
+## Confidence level for the elimination test.
+# confidence <- 0.95
+
+## Previously saved log file to recover the execution of irace, either
+## absolute path or relative to the current directory. If empty or
+## NULL, recovery is not performed.
+# recoveryFile <- ""
+
+## File containing a list of logical expressions that cannot be true
+## for any evaluated candidate. If empty or NULL, do not use a file.
+# forbiddenFile <- ""
 
 ## END of configuration file
 ############################################################################

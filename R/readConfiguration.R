@@ -17,7 +17,7 @@ readCandidatesFile <-
            parameters = stop("'parameters' is mandatory"), 
            debugLevel = 0)
 {
-  namesParameters <- names(parameters$constraints)
+  namesParameters <- names(parameters$conditions)
 
   # Read the file.
   candidateTable <- read.table(fileName, header = TRUE,
@@ -43,17 +43,27 @@ readCandidatesFile <-
     return(NULL)
   }
 
+  # Reorder columns.
+  candidateTable <- candidateTable[, namesParameters, drop = FALSE]
+  # Fix up numeric columns.
+  for (currentParameter in namesParameters) {
+    type <- parameters$types[[currentParameter]]
+    if (type == "i" || type == "r") {
+      candidateTable[, currentParameter] <- suppressWarnings(as.numeric(candidateTable[, currentParameter]))
+    }
+  }
+
   # Loop over all candidates in candidateTable
   for (k in seq_len(nbCandidates)) {
-    # Loop over all parameters, in an order taken from the constraints
+    # Loop over all parameters, in an order taken from the conditions
     for (currentParameter in namesParameters) {
       currentValue <- candidateTable[k, currentParameter]
       type <- parameters$types[[currentParameter]]
-      
-      # Check the status of the constraints for this parameter to know
+
+      # Check the status of the conditions for this parameter to know
       # if it must be enabled or not.
-      if (constraintsSatisfied(parameters, candidateTable[k, ], 
-                               currentParameter)) {
+      if (conditionsSatisfied(parameters, candidateTable[k, ], 
+                              currentParameter)) {
         # Check that the value is among the valid ones.
         if (type == "i" || type == "r") {
           currentValue <- as.numeric(currentValue)
@@ -92,19 +102,12 @@ readCandidatesFile <-
       } else if (!is.na(currentValue)) {
         tunerError ("Candidate n. ", k, " from file ", fileName,
                     " is invalid because parameter \"", currentParameter,
-                    "\" is not enabled but its value is \"",
+                    "\" is not enabled because of condition \"",
+                    parameters$conditions[[currentParameter]],
+                    "\" but its value is \"",
                     currentValue, "\" instead of NA")
         return(NULL)
       }
-    }
-  }
-  # Reorder columns.
-  candidateTable <- candidateTable[, namesParameters, drop = FALSE]
-  # Fix up numeric columns.
-  for (currentParameter in namesParameters) {
-    type <- parameters$types[[currentParameter]]
-    if (type == "i" || type == "r") {
-      candidateTable[, currentParameter] <- as.numeric(candidateTable[, currentParameter])
     }
   }
   return (candidateTable)
@@ -119,7 +122,7 @@ readConfiguration <- function(filename = "", configuration = list())
 {
   # First find out which file...
   if (filename == ""
-      && file.exists(.irace.params.def["configurationFile","default"])) {
+      && file.exists(.irace.params.def["configurationFile", "default"])) {
     filename <- .irace.params.def["configurationFile","default"]
     cat("Warning: A default configuration file", shQuote(filename),
         "has been found and will be read\n")
@@ -153,23 +156,24 @@ checkConfiguration <- function(configuration = defaultConfiguration())
   configuration <- defaultConfiguration (configuration)
   
   ## Check that everything is fine with external parameters
-  # Check that the files exists and are readable.
+  # Check that the files exist and are readable.
   configuration$parameterFile <- path.rel2abs(configuration$parameterFile)
   # We don't check this file here because the user may give the
   # parameters explicitly. And it is checked in readParameters anyway.
-
   configuration$execDir <- path.rel2abs(configuration$execDir)
   file.check (configuration$execDir, isdir = TRUE, text = "execution directory")
 
+  if (configuration$recoveryFile == "")
+    configuration$recoveryFile  <- NULL
+  if (!is.null(configuration$recoveryFile)) {
+    configuration$recoveryFile <- path.rel2abs(configuration$recoveryFile)
+    file.check(configuration$recoveryFile, readable = TRUE,
+               text = "recovery file")
+  }
+
   if (!is.null.or.empty(configuration$logFile)) {
-    cwd <- setwd(configuration$execDir)
-    configuration$logFile <- path.rel2abs(configuration$logFile)
-    tunerResults <- list()
-    tunerResults$tunerConfig <- configuration
-    # Try to save here and to give an earlier error if not possible.
-    # FIXME: Give a nicer error!
-    save (tunerResults, file = configuration$logFile)
-    setwd(cwd)
+    configuration$logFile <- path.rel2abs(configuration$logFile,
+                                          cwd = configuration$execDir)
   }
   
   if (is.function.name(configuration$hookRun)) {
@@ -236,6 +240,28 @@ checkConfiguration <- function(configuration = defaultConfiguration())
                 text = "candidates file")
   }
 
+  if (!is.null.or.empty(configuration$forbiddenFile)) {
+    configuration$forbiddenFile <- path.rel2abs(configuration$forbiddenFile)
+    file.check (configuration$forbiddenFile, readable = TRUE,
+                text = "forbidden candidates file")
+    # FIXME: Using && or || instead of & and | will not work. Detect
+    # this and give an error to the user.
+    configuration$forbiddenExps <- parse(file=configuration$forbiddenFile)
+    # When a is NA and we check a == 5, we would get NA, which is
+    # always FALSE, when we actually want to be TRUE, so we test
+    # is.na() first below.
+    configuration$forbiddenExps <-
+      sapply(configuration$forbiddenExps,
+             function(x) substitute(is.na(x) | !(x), list(x = x)))
+    # FIXME: Check that the parameter names that appear in forbidden
+    # all appear in parameters$names to catch typos.
+  }
+
+  # Make it NULL if it is "" or NA
+  # FIXME: If it is a non-empty vector of strings, parse them as above.
+  if (is.null.or.empty(configuration$forbiddenExps) || is.null.or.na(configuration$forbiddenExps))
+    configuration$forbiddenExps <- NULL
+
   # We have characters everywhere, set to the right types to avoid
   # problem later.
   intParams <- c("maxExperiments", "digits", "debugLevel",
@@ -256,11 +282,24 @@ checkConfiguration <- function(configuration = defaultConfiguration())
       tunerError ("'", param, "' must be an integer.")
   }
 
+  configuration$confidence <- suppressWarnings(as.numeric(configuration$confidence))
+  if (is.null(configuration$confidence)
+      || is.na (configuration$confidence)
+      || configuration$confidence < 0.0 || configuration$confidence > 1.0)
+    tunerError ("'confidence' must be a real value within [0, 1].")
+
+
+  if (configuration$firstTest %% configuration$eachTest != 0) {
+    tunerError("firstTest (", .irace.params.def["firstTest", "long"],
+               ") must be a multiple of eachTest (",
+               .irace.params.def["eachTest", "long"], ")")
+  }
+  
   if (configuration$mu < configuration$firstTest) {
     if (configuration$debugLevel >= 1) {
       cat("Warning: Assuming 'mu <- firstTest' because 'mu' cannot be lower than 'firstTest'\n")
     }
-    configuration$mu <- configuration$firstTtest
+    configuration$mu <- configuration$firstTest
   }
   
   as.boolean.param <- function(x, name, params)
@@ -282,28 +321,30 @@ checkConfiguration <- function(configuration = defaultConfiguration())
   }
 
   if (configuration$sgeCluster && configuration$mpi) {
-    tunerError("'mpi' (", .irace.params.def["mpi","long"], ") and ",
-               "'sgeCluster' (", .irace.params.def["sgeCluster","long"], ") ",
+    tunerError("'mpi' (", .irace.params.def["mpi", "long"], ") and ",
+               "'sgeCluster' (", .irace.params.def["sgeCluster", "long"], ") ",
                "cannot be enabled at the same time")
   }
 
   if (configuration$sgeCluster && configuration$parallel > 1) {
     tunerError("It does not make sense to use ",
-               "'parallel' (", .irace.params.def["parallel","long"], ") and ",
-               "'sgeCluster' (", .irace.params.def["sgeCluster","long"], ") ",
+               "'parallel' (", .irace.params.def["parallel", "long"], ") and ",
+               "'sgeCluster' (", .irace.params.def["sgeCluster", "long"], ") ",
                "at the same time")
   }
   
   if (configuration$timeBudget > 0 && configuration$timeEstimate <= 0) {
-    tunerError ("When using 'timeBudget' (", .irace.params.def["timeBudget","long"],
-                "), 'timeEstimate' (",
-                .irace.params.def["timeEstimate","long"], ") must be larger than zero")
+    tunerError ("When using 'timeBudget' (",
+                .irace.params.def["timeBudget", "long"], "), 'timeEstimate' (",
+                .irace.params.def["timeEstimate", "long"],
+                ") must be larger than zero")
   }
 
   if (configuration$timeBudget <= 0 && configuration$timeEstimate > 0) {
-    tunerError ("When using 'timeEstimate' (", .irace.params.def["timeEstimate","long"],
-                "), 'timeBudget' (",
-                .irace.params.def["timeBudget","long"], ") must be larger than zero")
+    tunerError ("When using 'timeEstimate' (",
+                .irace.params.def["timeEstimate", "long"], "), 'timeBudget' (",
+                .irace.params.def["timeBudget", "long"],
+                ") must be larger than zero")
   }
 
   if (tolower(configuration$testType) %in% c("f-test", "friedman")) {
@@ -312,7 +353,7 @@ checkConfiguration <- function(configuration = defaultConfiguration())
     configuration$testType <- "t.none"
   } else {
     tunerError ("invalid setting '", configuration$testType,
-                "' of 'testType' (", .irace.params.def["testType","long"],
+                "' of 'testType' (", .irace.params.def["testType", "long"],
                 "), valid values are: F-test, t-test")
   }
   

@@ -47,31 +47,51 @@ race.info <- function(data)
               no.candidates = data$no.candidates, 
               no.tasks = data$no.tasks))
 
-check.output <- function(output, command = "", config = stop("config needed"))
+check.output <- function(output, command, config, hook.run.call = NULL, outputRaw = NULL)
 {
   # We check the output here to provide better error messages.
   err.msg <- NULL
   if (length(output) < 1 || length(output) > 2 || any (is.na (output)) || any (!is.numeric(output))) {
-    err.msg <- paste("The output of `", command, "' is not numeric!\n", sep = "")
+    err.msg <- paste("The output of '", command, "' is not numeric!", sep = "")
   } else if (any(is.infinite(output))) {
-    err.msg <- paste("The output of `", command, "' is not finite!\n", sep = "")
+    err.msg <- paste("The output of '", command, "' is not finite!", sep = "")
   }
 
   if (config$timeBudget > 0 && length(output) < 2)
-    err.msg <- paste("When timeBudget > 0, the output of `",
-                     command,
-                     "' must be two numbers 'cost time'!\n", sep = "")
+    err.msg <- paste("When timeBudget > 0, the output of `", command,
+                     "' must be two numbers 'cost time'!", sep = "")
 
   if (!is.null(err.msg)) {
-    tunerError(err.msg,
-               "The output was:\n", paste(output, sep="\n"),
-               "\nThis is not a bug in irace, but means that something failed in",
-               " a call to the hookRun or hookEvaluate functions provide by the user.",
-               " Please check those functions carefully.")
+    if (!is.null(hook.run.call)) {
+      err.msg <- paste(err.msg, "\n", .irace.prefix,
+                       "The call to hookRun was:\n", hook.run.call, sep="")
+    }
+
+    if (is.null(outputRaw)) {
+      # Message for a function call.
+      outputRaw <- output
+      advice.txt <- paste(
+        "This is not a bug in irace, but means that something failed in",
+        "a call to the hookRun or hookEvaluate functions provided by the user.",
+        "Please check those functions carefully.")
+    } else {
+      # Message for an external script.
+      advice.txt <- paste(
+        sep="",
+        "This is not a bug in irace, but means that something failed when",
+        " running the command above or it was terminated before completion.",
+        " Try to run the command above from the execution directory '",
+        config$execDir, "' to investigate the issue.")
+    }
+    tunerError(err.msg, "\n", .irace.prefix,
+               "The output was:\n", paste(outputRaw, collapse = "\n"),
+               "\n", .irace.prefix, advice.txt)
   }
 }
 
-parse.output <- function(outputRaw, command, config, hook.run.command = NULL)
+# This function is used by the hook.run.default and hook.evaluate.default. If
+# overridden, check.output will be called again later.
+parse.output <- function(outputRaw, command, config, hook.run.call = NULL)
 {
   if (config$debugLevel >= 1) { cat (outputRaw, sep="\n") }
 
@@ -82,33 +102,13 @@ parse.output <- function(outputRaw, command, config, hook.run.command = NULL)
     # suppressWarnings to avoid NAs introduced by coercion
     output <- suppressWarnings (as.numeric (output))
   }
-  
   # We check the output here to provide better error messages.
-  err.msg <- NULL
-  if (length(output) < 1 || length(output) > 2 || any (is.na (output))) {
-    err.msg <- paste("The output of ", shQuote(command), " is not numeric!\n", sep = "")
-  } else if (any(is.infinite(output))) {
-    err.msg <- paste("The output of ", shQuote(command), " is not finite!\n", sep = "")
-  }
+  check.output(output, command, config, hook.run.call, outputRaw = outputRaw)
   
-  if (config$timeBudget > 0 && length(output) < 2)
-    err.msg <- paste("When timeBudget > 0, the output of `", command,
-                     "' must be two numbers 'cost time'!\n", sep = "")
-  if (!is.null(err.msg)) {
-    if (!is.null(hook.run.command)) {
-      err.msg <- paste(err.msg, "The call to hookRun was:\n", hook.run.command, "\n",sep="")
-    }
-    tunerError(err.msg,
-               "The output was:\n", paste(outputRaw, sep="\n"),
-               "\nThis is not a bug in irace, but means that something failed when",
-               " running the command above or it was terminated before completion.",
-               " Try to run the command above from the execution directory '",
-               config$execDir, "' to investigate the issue.")
-  }
   return(output)
 }
 
-hook.evaluate.default <- function(instance, candidate, num.candidates, extra.params, config, hook.run.command)
+hook.evaluate.default <- function(instance, candidate, num.candidates, extra.params, config, hook.run.call)
 {
   execDir <- config$execDir
   debugLevel <- config$debugLevel
@@ -119,14 +119,14 @@ hook.evaluate.default <- function(instance, candidate, num.candidates, extra.par
 
   ## Redirects STDERR so outputRaw captures the whole output.
   command <- paste (hookEvaluate, instance, candidate$index, num.candidates, "2>&1")
-  if (debugLevel >= 1) { cat(command, "\n") }
+  if (debugLevel >= 1) {
+    cat (format(Sys.time(), usetz=TRUE), ":", command, "\n")
+  }
   cwd <- setwd (execDir)
   # FIXME: This should use runcommand like hook.run.default
   outputRaw <- system (command, intern = TRUE)
   setwd (cwd)
-
-  output <- parse.output (outputRaw, command, config, hook.run.command = hook.run.command)
-  return (output)
+  return(parse.output (outputRaw, command, config, hook.run.call = hook.run.call))
 }
 
 hook.run.default <- function(instance, candidate, extra.params, config)
@@ -136,25 +136,30 @@ hook.run.default <- function(instance, candidate, extra.params, config)
   runcommand <- function(command, args) {
     if (debugLevel >= 1) {
       cat (format(Sys.time(), usetz=TRUE), ":", command, args, "\n")
+      elapsed <- proc.time()["elapsed"]
     }
     err <- NULL
     output <-  withCallingHandlers(
       tryCatch(system2(command, args, stdout = TRUE, stderr = TRUE),
                error=function(e) {
-                 err <<- paste(err, conditionMessage(e), sep ="\n")
+                 err <<- c(err, paste(conditionMessage(e), collapse="\n"))
                  NULL
                }), warning=function(w) {
-                 err <<- paste(err, conditionMessage(w), sep ="\n")
+                 err <<- c(err, paste(conditionMessage(w), collapse="\n"))
                  invokeRestart("muffleWarning")
                })
     # If e is a warning, the command failed.
     if (!is.null(err)) {
-      if (debugLevel >= 1) cat (format(Sys.time(), usetz=TRUE), ": ERROR (",
-            candidate$index, "):", err,"\n")
+      err <- paste(err, collapse ="\n")
+      if (debugLevel >= 1)
+        cat (format(Sys.time(), usetz=TRUE), ": ERROR (", candidate$index,
+             ") :", err, "\n")
       return(list(output = output, error = err))
     }
-    if (debugLevel >= 1) cat (format(Sys.time(), usetz=TRUE), ": DONE (",
-          candidate$index, ")\n")
+    if (debugLevel >= 1) {
+      cat (format(Sys.time(), usetz=TRUE), ": DONE (", candidate$index,
+           ") Elapsed: ", proc.time()["elapsed"] - elapsed, "\n")
+    }
     return(list(output = output, error = NULL))
   }
 
@@ -167,9 +172,11 @@ hook.run.default <- function(instance, candidate, extra.params, config)
   output <- runcommand(hookRun, args)
 
   if (!is.null(output$error)) {
-    tunerError(output$error, "\n",
-               "The output was:\n", paste(output$output, sep="\n"),
-               "\nThis is not a bug in irace, but means that something failed when",
+    tunerError(output$error, "\n", .irace.prefix,
+               "The call to hookRun was:\n", hookRun, " ", args, "\n", .irace.prefix,
+               "The output was:\n", paste(output$output, collapse = "\n"),
+               "\n", .irace.prefix,
+               "This is not a bug in irace, but means that something failed when",
                " running the command above or it was terminated before completion.",
                " Try to run the command above from the execution directory '",
                config$execDir, "' to investigate the issue.")
@@ -179,7 +186,7 @@ hook.run.default <- function(instance, candidate, extra.params, config)
     # FIXME: We should also check that the output is empty.
     return(paste(hookRun, args))
   }
-  # hookEvalute is NULL, so parse the output just here.
+  # hookEvaluate is NULL, so parse the output just here.
   return(parse.output (output$output, paste(hookRun, args), config))
 }
 
@@ -187,6 +194,10 @@ hook.run.default <- function(instance, candidate, extra.params, config)
 # FIXME: This is needed because race.R is not divided in two-stages
 # run/evaluate like irace is, so there is no way to communicate data
 # from the first stage to the second.
+#
+# FIXME: In fact, we should use this trick also in irace.R to avoid
+# pass-by-copy-on-write of huge matrices and data.frames and instead
+# pass-by-reference an environment containing those.
 .irace <- new.env()
 
 ## FIXME: This function needs a description, what is candidate, task and data?
@@ -237,22 +248,15 @@ race.wrapper <- function(candidate, task, which.alive, data)
     # Execute commands
     .irace$hook.output <- vector("list", length(which.alive))
     cwd <- setwd (execDir)
+    on.exit(setwd(cwd), add = TRUE)
+    
     if (parallel > 1) {
       if (mpi) {
-        mpiInit(parallel, data$config$debugLevel)
         .irace$hook.output <-
           Rmpi::mpi.applyLB(candidates, .irace$hook.run,
                             instance = instance, extra.params = extra.params,
                             config = data$config)
-      } else {
-        library("parallel", quietly = TRUE)
-        .irace$hook.output <-
-          parallel::mclapply(candidates, .irace$hook.run,
-                              # FALSE means load-balancing.
-                              mc.preschedule = FALSE, mc.cores = parallel,
-                              instance = instance, extra.params = extra.params,
-                              config = data$config)
-        # FIXME: if stop() is called from mclapply, it does not
+        # FIXME: if stop() is called from mpi.applyLB, it does not
         # terminate the execution of the parent process, so it will
         # continue and give more errors later. We have to terminate
         # here, but is there a nicer way to detect this and terminate?
@@ -262,8 +266,40 @@ race.wrapper <- function(candidate, task, which.alive, data)
           # each candidate and repetitions may occur.
           cat(unique(unlist(
             .irace$hook.output[sapply(
-              .irace$hook.output, inherits, "try-error")])), file = stderr())
-          tunerError("A child process triggered a fatal error")
+              .irace$hook.output, inherits, "try-error")])), file = stderr(), sep="")
+          tunerError("A slave process terminated with a fatal error")
+        }
+      } else {
+        if (.Platform$OS.type == 'windows') {
+          irace.assert(!is.null(.irace$cluster))
+          # FIXME: How to do load-balancing?
+          .irace$hook.output <-
+            parallel::parLapply(.irace$cluster, candidates, .irace$hook.run,
+                                instance = instance,
+                                extra.params = extra.params,
+                                config = data$config)
+          # FIXME: if stop() is called from parLapply, then the parent
+          # process also terminates, and we cannot give further errors.
+        } else {
+          .irace$hook.output <-
+            parallel::mclapply(candidates, .irace$hook.run,
+                               # FALSE means load-balancing.
+                               mc.preschedule = FALSE, mc.cores = parallel,
+                               instance = instance, extra.params = extra.params,
+                               config = data$config)
+          # FIXME: if stop() is called from mclapply, it does not
+          # terminate the execution of the parent process, so it will
+          # continue and give more errors later. We have to terminate
+          # here, but is there a nicer way to detect this and terminate?
+          if (any(sapply(.irace$hook.output, inherits, "try-error"))) {
+            # FIXME: mclapply has some bugs in case of error. In that
+            # case, each element of the list does not keep the output of
+            # each candidate and repetitions may occur.
+            cat(unique(unlist(
+              .irace$hook.output[sapply(
+                .irace$hook.output, inherits, "try-error")])), file = stderr())
+            tunerError("A child process triggered a fatal error")
+          }
         }
       }
     } else if (sgeCluster) {
@@ -280,8 +316,6 @@ race.wrapper <- function(candidate, task, which.alive, data)
                           config = data$config)
       }
     }
-    setwd (cwd)
-
     # hook.evaluate may be NULL. If so, .irace$hook.output must
     # contain the right output already.
     if (!is.null(.irace$hook.evaluate)) {
@@ -290,12 +324,13 @@ race.wrapper <- function(candidate, task, which.alive, data)
         .irace$hook.output[[k]] <-
           .irace$hook.evaluate(candidate = candidates[[k]], length(candidates),
                                instance = instance, extra.params = extra.params,
-                               config = data$config, .irace$hook.output[[k]])
+                               config = data$config, hook.run.call = .irace$hook.output[[k]])
       }
     }
   }
 
   output <- .irace$hook.output[[match(candidate, which.alive)]]
+  # FIXME: Pass the call to hook.run as hook.run.call if hook.evaluate was used.
   check.output(output, command = if (is.null(.irace$hook.evaluate)) "hookRun" else "hookEvaluate",
                config = data$config)
   return(output)
