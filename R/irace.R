@@ -14,11 +14,26 @@ checkForbidden <- function(configurations, forbidden)
 
 # Sets irace variables from a recovery file.  It is executed in the
 # parent environment.
+#
+# FIXME: Restoring occurs after reading the command-line/configuration
+# file. At least for the irace command-line parameters (tunerConfig),
+# it should occur before. We
+# would need to:
+#
+# 1) Read recovery file settings from command-line/config file
+#
+# 2) if set, then recover irace configuration
+
+# 3) then read other configuration from command-line/config file being
+# careful to not override whatever the recovery has set.
+#
+# A work-around is to modify the recovery file (you can load it in R,
+# modify tunerConfig then save it again).
 recoverFromFile <- function(filename)
 {
   # substitute() is needed to evaluate filename here.
   eval.parent(substitute({
-    # This restores tunerResults, so that doesn't need restoring.
+    # This restores tunerResults, thus it doesn't need restoring.
     load (filename)
     # .Random.seed is special
     for (name in setdiff(names(tunerResults$state), ".Random.seed"))
@@ -403,7 +418,7 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
           "# mu: ", max(tunerConfig$mu, tunerConfig$firstTest), "\n",
           verbose = FALSE)
 
-  ## Compute the minimum budget required, and exits early in case the
+  ## Compute the minimum budget required, and exit early in case the
   ## budget given by the user is insufficient.
   # This is computed from the default formulas as follows:
   #  B_1 = B / I
@@ -469,7 +484,14 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
     }
 
     if (indexIteration > nbIterations) {
-      catInfo("Limit of iterations reached", verbose = FALSE)
+        if (debugLevel >= 3) {
+            # This message is more confusing than useful, since this
+            # is not really a limit. First, since we require a minimum
+            # budget, this number of iterations should always be
+            # reached. Second, as long as there is enough budget, we
+            # always do more iterations.
+            catInfo("Limit of iterations reached", verbose = FALSE)
+        }
       if (tunerConfig$nbIterations == 0) {
         nbIterations <- indexIteration
       } else {
@@ -524,7 +546,7 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
       nbNewCandidates <- nbCandidates - nrow(allCandidates)
       if (nbNewCandidates > 0) {
         # Sample new candidates.
-        if (debugLevel>= 1) {
+        if (debugLevel >= 1) {
           catInfo("Sample ", nbNewCandidates,
                   " candidates from uniform distribution", verbose = FALSE)
         }
@@ -536,10 +558,15 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
                  newCandidates)
         allCandidates <- rbind(allCandidates, newCandidates)
         rownames(allCandidates) <- allCandidates$.ID.
+      } else if (nbNewCandidates < 0) {
+        # We also truncate allCandidates in case there were too many
+        # initial candidates.
+        catInfo("Only ", nbCandidates,
+                " from candidates file will be used, the rest are discarded",
+                verbose = FALSE)
+        allCandidates <- allCandidates[1:nbCandidates,]
       }
-      # FIXME: We should probably also truncate allCandidates like this:
-      # testCandidates <- allCandidates <- allCandidates[1:nbCandidates,]
-      testCandidates <- allCandidates[1:nbCandidates,]
+      testCandidates <- allCandidates
     } else {
       # How many new candidates should be sampled?
       nbNewCandidates <- nbCandidates - nrow(eliteCandidates)
