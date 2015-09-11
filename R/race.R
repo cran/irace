@@ -51,10 +51,8 @@ race<-function(maxExp=0,
                stop.min.cand=1,
                ...){
 
-  timestamp.start<-date()
-
   # Change warning behavior
-  .race.warn.save<-getOption("warn")
+  .race.warn.save <- getOption("warn")
   on.exit(options(warn=.race.warn.save))
   options(warn=.race.warn.level)
   
@@ -72,11 +70,11 @@ race<-function(maxExp=0,
        length(maxExp)!=1 ||
        !is.finite(maxExp)))
     stop("maxExp must be an single number")
-  maxExp<-ifelse(maxExp>0,maxExp,0)
-  maxExp<-floor(maxExp)
+  maxExp <- ifelse(maxExp>0,maxExp,0)
+  maxExp <- floor(maxExp)
 
   # Check argument: stat.test
-  stat.test<-match.arg(stat.test)
+  stat.test <- match.arg(stat.test)
 
   # Check argument: conf.level
   if (!missing(conf.level) &&
@@ -90,8 +88,8 @@ race<-function(maxExp=0,
        length(first.test)!=1 ||
        !is.finite(first.test)))
     stop("first.test must be an single number")
-  first.test<-ifelse(first.test>0,first.test,0)
-  first.test<-floor(first.test)
+  first.test <- ifelse(first.test>0,first.test,0)
+  first.test <- floor(first.test)
 
   # Check argument: interactive
   if (!missing(interactive) &&
@@ -100,17 +98,17 @@ race<-function(maxExp=0,
 
   # Run init function
   if (exists(.slave.init.function,inherits=TRUE,mode="function")){
-    race.data<-do.call(.slave.init.function,list(...))
-    if(!is.list(race.data))
+    race.data <- do.call(.slave.init.function,list(...))
+    if (!is.list(race.data))
       stop(paste("Error while running",.slave.init.function))
-    precis.init<-TRUE
+    precis.init <- TRUE
   } else {
-    race.data<-list()
-    precis.init<-FALSE
+    race.data <- list()
+    precis.init <- FALSE
   }
 
   # Collect info on race from wrapper
-  race.info<-do.call(.slave.info.function,list(race.data))
+  race.info <- do.call(.slave.info.function,list(race.data))
   # Check race.info
   if (# race.info$race.name must be a string
       is.na(match("race.name",names(race.info)))||
@@ -128,28 +126,17 @@ race<-function(maxExp=0,
       length(race.info$no.tasks)!=1 ||
       !is.finite(race.info$no.tasks) ||
       race.info$no.tasks!=as.integer(race.info$no.tasks)||
-      # race.info$no.subtasks is a non-compulsory integer.
-      (!is.na(match("no.subtasks",names(race.info)))&&
-      (!is.numeric(race.info$no.subtasks) ||
-       (length(race.info$no.subtasks)!=1 &&
-        length(race.info$no.subtasks)!=race.info$no.tasks) ||
-       any(!is.finite(race.info$no.subtasks)) ||
-       any(race.info$no.subtasks!=as.integer(race.info$no.subtasks))))||
       # race.info$extra is a non-compulsory string or paragraph.
       (!is.na(match("extra",names(race.info)))&&
        !is.character(race.info$extra)))
     stop(paste("Function \"",.slave.info.function,
                "\" returned an invalid object",sep=""))
 
-  # Default for no.subtasks
-  if (is.na(match("no.subtasks",names(race.info))))
-    race.info$no.subtasks<-1
-
   # copy race.info contents to workspace for convenience
-  race.name<-race.info$race.name
-  no.candidates<-race.info$no.candidates
-  no.tasks<-race.info$no.tasks
-  no.subtasks<-race.info$no.subtasks   
+  # LESLIE: Why is it used this race.info variable?
+  race.name     <- race.info$race.name
+  no.candidates <- race.info$no.candidates
+  no.tasks      <- race.info$no.tasks
 
   # Prepare a precis for documentation
   format.precis <- function(title, value) {
@@ -158,18 +145,14 @@ race<-function(maxExp=0,
     return(paste(string, "\n"))
   }
 
-  precis<-paste("\n",
+  # LESLIE: should this be removed?
+  precis <- paste("\n",
                 "Racing methods for the selection of the best\n",
                 "Copyright (C) 2003 Mauro Birattari\n",
                 "This software comes with ABSOLUTELY NO WARRANTY\n\n",
                 format.precis("Race name",race.name),
                 format.precis("Number of candidates",no.candidates),
                 format.precis("Number of available tasks",no.tasks),
-                ifelse(length(no.subtasks)>1,
-                       format.precis("Subtasks per task","task-dependent"),
-                       ifelse(no.subtasks>1,
-                              format.precis("Subtasks per task",no.subtasks),
-                              "")),
                 format.precis("Max number of experiments",
                               ifelse(maxExp,maxExp,"unlimited")),
                 format.precis("Statistical test",
@@ -189,14 +172,16 @@ race<-function(maxExp=0,
                               ifelse(precis.init,"ok","none found")),
                 sep="")
 
+  # LESLIE: why is this check? race.info$extra does not exists!
   if (!is.null(race.info$extra)){
-    extra<-paste(strwrap(race.info$extra,width=60,prefix="\t"),collapse="\n")
-    precis<-paste(precis,"\n",extra,"\n")
+    extra  <- paste(strwrap(race.info$extra,width=60,prefix="\t"),collapse="\n")
+    precis <- paste(precis,"\n",extra,"\n")
   }
 
 
   # Do not print precis. All information are redundant with
   # the ones provided from irace.
+  # LESLIE: should this be removed?
   interactive <- FALSE
   # Print out precis if interactive
   if (interactive) 
@@ -210,91 +195,80 @@ race<-function(maxExp=0,
     stop("Not enough candidates (", no.candidates, ") for a race (stop.min.cand=", stop.min.cand, ")")
   }
   
-  check.result<-function(result){
-    expected.length<-ifelse(length(no.subtasks)==1,
-                            no.subtasks,
-                            no.subtasks[current.task])
+  check.result <- function(result){
+    expected.length <- 1
     if (length(result)!=expected.length)
       stop(paste("Bad output returned by \"",
                  .slave.wrapper.function,"\"",sep=""))
   }
   
   # Initialize some variables...
-  Tasks<-1:no.tasks
-  Results<-matrix(data=NA,
-                  nrow=ifelse(length(no.subtasks)==1,
-                    no.tasks*no.subtasks,sum(no.subtasks)),
-                  ncol=no.candidates)
+  Results <- matrix(data=NA,
+                    nrow = first.test,
+                    ncol = no.candidates)
   Time <- matrix(data = NA,
-                 nrow = ifelse(length(no.subtasks) == 1,
-                   no.tasks * no.subtasks, sum(no.subtasks)),
+                 nrow = first.test,
                  ncol = no.candidates)
-  alive<-array(TRUE,no.candidates)
-  no.experiments.sofar<-0
-  no.subexperiments.sofar<-0
-  best<-0
+  alive <- array(TRUE,no.candidates)
+  no.experiments.sofar <- 0
+  best <- 0
   race.ranks <- c()
-  no.tasks.sofar<-0
-  no.subtasks.sofar<-0
+  no.tasks.sofar <- 0
   
   # Define some functions...
   # FIXME: Keep only what we need!
-  log.list<-function(end=FALSE){
-    timestamp.current<-date()
-    log<-list(precis=precis,
-              results=Results[1:no.subtasks.sofar,],
-              time = Time[1:no.subtasks.sofar, ],
+  log.list <- function(end=FALSE){
+    log <- list(precis=precis,
+              results=Results[1:no.tasks.sofar,],
+              time = Time[1:no.tasks.sofar, ],
               no.candidates=no.candidates,
               no.tasks=no.tasks.sofar,
-              no.subtasks=no.subtasks,
               no.experiments=no.experiments.sofar,
               no.alive=sum(alive),
               alive=alive,
               best=best,
               mean.best=mean.best,
-              timestamp.start=timestamp.start,
 	      race.data=race.data,
               ranks = race.ranks)
 
     if (end) {
-      log<-c(log,list(timestamp.end=timestamp.current,
-                      description.best=description.best,
-                      alive.inTime=ifelse(no.subtasks.sofar>1,
-		      	apply(Results[1:no.subtasks.sofar,],
+      log <- c(log,list(description.best=description.best,
+                      alive.inTime=ifelse(no.tasks.sofar > 1,
+		      	apply(Results[1:no.tasks.sofar,],
                         	1,function(u){sum(!(is.na(u)))}),
 			sum(!is.na(Results[1,])))))
     } else {
-      log<-c(log,list(timestamp.current=timestamp.current))
+      log <- log
     }
     return(log)
   }
   
-  aux2.friedman<-function(y,I=1:ncol(y),n=nrow(y),conf.level=0.95){
-    k<-length(I)
-    r<-t(apply(y[1:n,I], 1, rank))
-    A<-sum(as.vector(r)^2)
-    R<-apply(r, 2, sum)
-    J<-I[order(R)]
-    alpha<-1-conf.level
-    TIES<-tapply(r, row(r), table)
-    STATISTIC<-((12 * sum((R - n * (k + 1) / 2)^2)) /
+  aux2.friedman <- function(y,I=1:ncol(y),n=nrow(y),conf.level=0.95){
+    k <- length(I)
+    r <- t(apply(y[1:n,I], 1, rank))
+    A <- sum(as.vector(r)^2)
+    R <- apply(r, 2, sum)
+    J <- I[order(R)]
+    alpha <- 1-conf.level
+    TIES <- tapply(r, row(r), table)
+    STATISTIC <- ((12 * sum((R - n * (k + 1) / 2)^2)) /
                 (n * k * (k + 1)
                  - (sum(unlist(lapply(TIES, function (u) {u^3 - u}))) /
                     (k - 1))))
-    PARAMETER<-k-1
-    PVAL<-pchisq(STATISTIC, PARAMETER, lower.tail = FALSE)
+    PARAMETER <- k-1
+    PVAL <- pchisq(STATISTIC, PARAMETER, lower.tail = FALSE)
       
     if (!is.nan(PVAL) && (PVAL<alpha)){
       if (interactive)
         cat("|-|")
-      t<-qt(1-alpha/2,(n-1)*(k-1))*(2*(n*A-sum(R^2))/((n-1)*(k-1)))^(1/2)
-      o<-order(R)
-      J<-I[o[1]]
+      t <- qt(1-alpha/2,(n-1)*(k-1))*(2*(n*A-sum(R^2))/((n-1)*(k-1)))^(1/2)
+      o <- order(R)
+      J <- I[o[1]]
       for (j in 2:k) {
         if (abs(R[o[j]]-R[o[1]])>t) {
           break
         } else {
-          J<-c(J,I[o[j]])
+          J <- c(J,I[o[j]])
         }
       }
     } else {
@@ -306,53 +280,53 @@ race<-function(maxExp=0,
   }
 
   
-  aux.friedman<-function(){
+  aux.friedman <- function(){
     if (no.alive==2) {
       # If only 2 candidates are left, switch to Wilcoxon
-      V1<-Results[1:(no.subtasks.sofar),which.alive[1]]
-      V2<-Results[1:(no.subtasks.sofar),which.alive[2]]
-      PVAL<-wilcox.test(V1,V2,paired=TRUE,exact=FALSE)$p.value
+      V1 <- Results[1:no.tasks.sofar,which.alive[1]]
+      V2 <- Results[1:no.tasks.sofar,which.alive[2]]
+      PVAL <- wilcox.test(V1,V2,paired=TRUE,exact=FALSE)$p.value
       if (!is.nan(PVAL)&&!is.na(PVAL)&&(PVAL<1-conf.level)){
         if (interactive)
           cat("|-|")
         if (median(V1-V2)<0){
-          best<<-which.alive[1]
-          alive[which.alive[2]]<<-FALSE
+          best <<- which.alive[1]
+          alive[which.alive[2]] <<- FALSE
           race.ranks <<- c(1,2)
         }else{
-          best<<-which.alive[2]
-          alive[which.alive[1]]<<-FALSE
+          best <<- which.alive[2]
+          alive[which.alive[1]] <<- FALSE
           race.ranks <<- c(2,1)
         }
       }else{
         if (interactive)
           cat("|=|")
         if (median(V1-V2)<0){
-          best<<-which.alive[1]
+          best <<- which.alive[1]
           race.ranks <<- c(1,2)
         }else{
-          best<<-which.alive[2]
+          best <<- which.alive[2]
           race.ranks <<- c(2,1)
         }
       }
     }else{
       # If more then 2 candidates are left, use Friedman
-      J<-aux2.friedman(Results[1:(no.subtasks.sofar),],which.alive,
+      J <- aux2.friedman(Results[1:no.tasks.sofar,],which.alive,
                        conf.level=conf.level)
-      alive[-J]<<-FALSE
-      best<<-J[1]
+      alive[-J] <<- FALSE
+      best <<- J[1]
     }
   }
 
 
   
-  aux.ttest<-function(adjust=c("none","bonferroni","holm")){
-    adjust<-match.arg(adjust)
+  aux.ttest <- function(adjust=c("none","bonferroni","holm")){
+    adjust <- match.arg(adjust)
     # FIXME why c()?
-    mean.all<-array(0,c(ncol(Results)))
+    mean.all <- array(0,c(ncol(Results)))
     for (j in 1:ncol(Results))
       # FIXME: why not just mean() ?
-      mean.all[j]<-sum(Results[1:no.subtasks.sofar,j]/no.subtasks.sofar)
+      mean.all[j] <- sum(Results[1:no.tasks.sofar,j]/no.tasks.sofar)
     # FIXME: which.min?
     best<<-match(min(mean.all[alive]),mean.all)
     race.ranks <<- mean.all[alive]
@@ -360,8 +334,8 @@ race<-function(maxExp=0,
     PJ<-array(0,dim=c(2,0))
     for (j in which.alive) {
       # FIXME: This doesn't seem to change so it could be outside the for()
-      Vb<-Results[1:no.subtasks.sofar,best]
-      Vj<-Results[1:no.subtasks.sofar,j]
+      Vb <- Results[1:no.tasks.sofar,best]
+      Vj <- Results[1:no.tasks.sofar,j]
       #cat("Vb:", Vb, "\n")
       #cat("Vj:", Vj, "\n")
       # t.test may fail if the data in each group is almost
@@ -374,12 +348,12 @@ race<-function(maxExp=0,
       if (!is.nan(p) & !is.na(p))
         PJ<-array(c(PJ,j,p),dim=dim(PJ)+c(0,1))
     }
-    PJ[2,]<-p.adjust(PJ[2,],method=adjust)
-    dropped.any<-FALSE
+    PJ[2,] <- p.adjust(PJ[2,],method=adjust)
+    dropped.any <- FALSE
     for (j in 1:ncol(PJ))
       if (PJ[2,j]<(1-conf.level)){
-        alive[PJ[1,j]]<<-FALSE
-        dropped.any<-TRUE
+        alive[PJ[1,j]] <<- FALSE
+        dropped.any <- TRUE
       }
     if (interactive){
       if (dropped.any) {
@@ -391,60 +365,62 @@ race<-function(maxExp=0,
   }
 
   if (interactive)
-    cat("                            Markers:                           \n",
-        "                               x No test is performed.         \n",
-        "                               - The test is performed and     \n",
-        "                                 some candidates are discarded.\n", 
-        "                               = The test is performed but     \n",
-        "                                 no candidate is discarded.    \n",
-        "                                                               \n",
-        "                                                               \n",
-        "+-+-----------+-----------+-----------+-----------+-----------+\n",
-        "| |       Task|      Alive|       Best|  Mean best| Exp so far|\n",
-        "+-+-----------+-----------+-----------+-----------+-----------+\n",
+    cat("
+                            Markers:
+                               x No test is performed.
+                               - The test is performed and
+                                 some candidates are discarded.
+                               = The test is performed but
+                                 no candidate is discarded.
+
++-+-----------+-----------+-----------+-----------+-----------+--------+
+| |       Task|      Alive|       Best|  Mean best| Exp so far|Run Time|
++-+-----------+-----------+-----------+-----------+-----------+--------+
+",
         sep="")
   
   # Start main loop
   for (current.task in 1:no.tasks) {
-    which.alive<-which(alive)
-    no.alive<-length(which.alive)
+    which.alive <- which(alive)
+    no.alive    <- length(which.alive)
     # FIXME: This should take into account each.test. It doesn't make
     # much sense to see an additional instance if there is no budget
     # to do a test. The point of each.test is to see instances in
     # groups and this defeats its purpose.
-    if (maxExp && no.experiments.sofar+no.alive>maxExp)
+    if (maxExp && no.experiments.sofar + no.alive > maxExp)
       break
     if (no.alive==1)
       break
 
-    current.no.subtasks<-ifelse(length(no.subtasks)==1,
-                                no.subtasks,
-                                no.subtasks[current.task])
-    
-    if (length(no.subtasks)==1) {
-      subtasks.range<-
-        (current.task-1)*no.subtasks+1:no.subtasks
-    } else {
-      subtasks.range<-
-        cumsum(c(0,no.subtasks))[current.task]+1:no.subtasks[current.task]
-    }
-    
-    for (current.candidate in which.alive){
-      result <- do.call (.slave.wrapper.function,
-                         list(current.candidate, current.task,
-                              which.alive, race.data))
+    start.time <- Sys.time()
+    # Execute test  
+    output <- do.call (.slave.wrapper.function,
+                       list(race.data$candidates, race.data$race.instances[current.task],
+                       which.alive, race.data))
+
+    # Extract results
+    for (i in 1:length(which.alive)){
+      current.candidate <- which.alive[i]
+      result <- output[[i]]
       check.result(result[1])
-      Results[subtasks.range, current.candidate] <- result[1]
-      Time[subtasks.range, current.candidate] <- result[2]
+      if (nrow(Results) < current.task) {
+        Results <- rbind(Results,
+                         matrix(data=NA, nrow = each.test,
+                                ncol = no.candidates))
+        Time <- rbind(Time, matrix(data=NA, nrow = each.test,
+                                   ncol = no.candidates))
+      }
+      Results[current.task, current.candidate] <- result[1]
+      if (length(result)>1)
+        Time[current.task, current.candidate] <- result[2]
     }
 
-    no.experiments.sofar<-no.experiments.sofar+no.alive
-    no.subexperiments.sofar<-no.subexperiments.sofar+
-      current.no.subtasks*no.alive
-    
-    no.tasks.sofar<-no.tasks.sofar+1
-    no.subtasks.sofar<-no.subtasks.sofar+current.no.subtasks
-    
+    no.experiments.sofar<-no.experiments.sofar + no.alive
+    no.tasks.sofar <- no.tasks.sofar + 1
+
+    # Update next instance
+    .irace$next.instance <- max(.irace$next.instance, race.data$race.instances[current.task]+1)
+
     ## Drop bad candidates.
     # We assume that first.test is a multiple of each.test.  In any
     # case, this will only do the first test after the first multiple
@@ -459,12 +435,12 @@ race<-function(maxExp=0,
     } else {
       if (interactive)
         cat("|x|")
-      if (no.subtasks.sofar==1)  {
+      if (no.tasks.sofar == 1)  {
         # FIXME: Shouldn't these be ranks when stat.test == "friedman" ?
         race.ranks <- Results[1,]
         best <- order(race.ranks)[1]
       } else  {
-        tmpResults <- Results[1:no.subtasks.sofar, which.alive]
+        tmpResults <- Results[1:no.tasks.sofar, which.alive]
         irace.assert(!any(is.na(tmpResults)))
         if (stat.test == "friedman") {
           race.ranks <- colSums(t(apply(tmpResults, 1, rank)))
@@ -481,20 +457,24 @@ race<-function(maxExp=0,
     irace.assert(length(race.ranks) == sum(alive))
     # FIXME: This is the mean of the best, but perhaps it should be
     # the sum of ranks in the case of test == friedman?
-    mean.best <- mean(Results[1:no.subtasks.sofar, best])
+    mean.best <- mean(Results[1:no.tasks.sofar, best])
 
-    if (interactive) 
+    if (interactive) {
+      time.diff <- difftime(Sys.time(), start.time, units="secs")
       cat(paste(formatC(no.tasks.sofar,width=11),"|",
                 formatC(sum(alive),width=11),"|",
                 formatC(best,width=11),"|",
                 formatC(mean.best,width=11),"|",
-                formatC(no.experiments.sofar,width=11),"|\n",
+                formatC(no.experiments.sofar,width=11),"|",
+                # FIXME: Maybe faster with as.numeric(z, units = "secs")
+                format(.POSIXct(time.diff, tz="GMT"), "%H:%M:%S"),"|\n",
                 sep=""))
+    }
 
     # stop race if we have less or equal than the minimum number of candidates
     if (no.tasks.sofar>=first.test) {
         which.alive<-which(alive)
-    	if(length(which.alive) <= stop.min.cand)
+    	if (length(which.alive) <= stop.min.cand)
     	break	
    }
   }
@@ -506,7 +486,7 @@ race<-function(maxExp=0,
   }
   
   if (interactive) {
-   cat(paste("+-+-----------+-----------+-----------+-----------+-----------+",
+   cat(paste("+-+-----------+-----------+-----------+-----------+-----------+--------+",
               "\n\n",
               "Selected candidate:",formatC(best,width=12),
               "\tmean value:",formatC(mean.best,width=11),
@@ -517,7 +497,13 @@ race<-function(maxExp=0,
       cat("\n\n")
     }
   }
+
+  if (race.data$config$debugLevel >= 3) {
+    irace.note ("Memory used in race():\n")
+    irace.print.memUsed()
+  }
   
   # Build the return variable with everything inside: 
   invisible(log.list(end=TRUE))
 }
+

@@ -224,6 +224,7 @@ computeTerminationOfRace <- function(nbParameters)
 oneIterationRace <-
   function(tunerConfig, candidates, parameters, budget, minSurvival)
 {
+
   result <- race (maxExp = budget,
                   first.test = tunerConfig$firstTest,
                   each.test = tunerConfig$eachTest,
@@ -231,7 +232,8 @@ oneIterationRace <-
                   conf.level = tunerConfig$confidence,
                   stop.min.cand = minSurvival,
                   # Parameters for race-wrapper.R
-                  candidates = removeCandidatesMetaData(candidates),
+                  #candidates = removeCandidatesMetaData(candidates),
+                  candidates = candidates,
                   parameters = parameters,
                   config = tunerConfig)
 
@@ -257,6 +259,11 @@ oneIterationRace <-
   if (result$no.alive < nrow(candidates))
     irace.assert(!any(as.logical(candidates[(result$no.alive + 1):nrow(candidates) , ".ALIVE."])))
 
+  if (tunerConfig$debugLevel >= 3) {
+    irace.note ("Memory used in oneIterationRace():\n")
+    irace.print.memUsed()
+  }
+  
   return (list (nbAlive = result$no.alive,
                 experimentsUsed = result$no.experiments,
                 timeUsed = sum(result$time, na.rm = TRUE),
@@ -274,7 +281,7 @@ startParallel <- function(config)
     if (config$mpi) {
       mpiInit(parallel, config$debugLevel)
     } else {
-      library("parallel", quietly = TRUE)
+      requireNamespace("parallel", quietly = TRUE)
       if (.Platform$OS.type == 'windows') {
         .irace$cluster <- parallel::makeCluster(parallel)
       }
@@ -289,6 +296,22 @@ stopParallel <- function()
     .irace$cluster <- NULL
   }
 }
+
+irace.init <- function(configuration)
+{
+  # We need to do this here to use/recover .Random.seed later.
+  if (is.na(configuration$seed)) {
+    configuration$seed <- trunc(runif(1, 1, .Machine$integer.max))
+  }
+  set.seed(configuration$seed)
+  
+  ## FIXME: It would be much better to generate instances at the start of each
+  ## race if we need them at all.
+  # Generate instance + seed list 
+  configuration$instancesList <- generateInstances(configuration)
+  return(configuration)
+}
+
 #' High-level function to use iterated Race
 #' 
 #' This function implement iterated Race. It receives some parameters to be tuned and returns the best
@@ -306,8 +329,7 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
                   parameters = stop("parameter `parameters' is mandatory."))
 {
   catInfo <- function(..., verbose = TRUE) {
-    cat ("# ", format(Sys.time(), usetz=TRUE), ": ",
-         paste(..., sep = "", collapse = ""), "\n", sep = "")
+    irace.note (..., "\n")
     if (verbose)
       cat ("# Iteration: ", indexIteration, "\n",
            "# nbIterations: ", nbIterations, "\n",
@@ -323,11 +345,6 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
   }
   
   tunerConfig <- checkConfiguration(defaultConfiguration(tunerConfig))
-  # We need to do this here to use/recover .Random.seed later.
-  if (is.na(tunerConfig$seed)) {
-    tunerConfig$seed <- runif(1, 1, .Machine$integer.max)
-  }
-  set.seed(tunerConfig$seed)
   
   # Recover state from file?
   if (!is.null(tunerConfig$recoveryFile)){
@@ -335,6 +352,7 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
          tunerConfig$recoveryFile,"'\n", sep="")
     recoverFromFile(tunerConfig$recoveryFile)
   } else {
+    tunerConfig <- irace.init (tunerConfig)
     debugLevel <- tunerConfig$debugLevel
     # Set options controlling debug level.
     # FIXME: This should be the other way around, the options set the debugLevel.
@@ -355,9 +373,10 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
       num <- nrow(allCandidates)
       allCandidates <- checkForbidden(allCandidates, tunerConfig$forbiddenExps)
       if (nrow(allCandidates) < num) {
-        cat("# warning: some of the configurations in the candidates file were forbidden and, thus, discarded\n")
+        cat("# Warning: some of the configurations in the candidates file were forbidden and, thus, discarded\n")
       }
-      
+      cat("# ", num, " initial configuration(s) read from '",
+          tunerConfig$candidatesFile, "'\n", sep="")
     } else {
       candidates.colnames <- c(".ID.", namesParameters, ".PARENT.")
       allCandidates <-
@@ -402,10 +421,44 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
     tunerResults$irace.version <- irace.version
     tunerResults$parameters <- parameters
     tunerResults$iterationElites <- NULL
+    tunerResults$allElites <- list()
     tunerResults$experiments <- as.data.frame(matrix(ncol=2, nrow=0))
     colnames(tunerResults$experiments) <- c("instance", "iteration")
     model <- NULL
     nbCandidates <- 0
+
+    ## Compute the minimum budget required, and exit early in case the
+    ## budget given by the user is insufficient.
+    # This is computed from the default formulas as follows:
+    #  B_1 = B / I
+    #  B_2 = B -  (B/I) / (I - 1) = B / I
+    #  B_3 = B - 2(B/I) / (I - 2) = B / I
+    # thus
+    #  B_i = B / I
+    # and
+    #  C_i = B_i / (mu + min(5,i)) = B / (I * (mu + min(5,i))).
+    # We want to enforce that C_i >= min_surv + 1, thus
+    #  B / (I * (mu + min(5,i))) >= min_surv + 1        (1)
+    # becomes
+    #  B >= (min_surv + 1) * I * (mu + min(5,i))
+    # and the most strict value is for i >= 5, thus
+    #  B >= (min_surv + 1) * I * (mu + 5)
+    #
+    # This is an over-estimation, since actually B_1 = floor(B/I) and if
+    # floor(B/I) < B/I, then B_i < B/I, and we could still satisfy Eq. (1)
+    # with a smaller budget. However, the exact formula requires computing B_i
+    # taking into account the floor() function, which is not obvious.
+    minimumBudget <- (minSurvival + 1) * nbIterations *
+      (max(tunerConfig$mu, tunerConfig$firstTest) + 5)
+     
+    if (remainingBudget < minimumBudget) {
+      tunerError("Insufficient budget: ",
+                 "With the current settings, irace will require a value of ",
+                 "'maxExperiments' of at least '",  minimumBudget, "'. ",
+                 "You can either increase the budget, ",
+                 "or set a smaller value of either 'minNbSurvival' ",
+                 "or 'nbIterations'")
+    }
   }
 
   catInfo("Initialization\n", 
@@ -418,42 +471,9 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
           "# mu: ", max(tunerConfig$mu, tunerConfig$firstTest), "\n",
           verbose = FALSE)
 
-  ## Compute the minimum budget required, and exit early in case the
-  ## budget given by the user is insufficient.
-  # This is computed from the default formulas as follows:
-  #  B_1 = B / I
-  #  B_2 = B -  (B/I) / (I - 1) = B / I
-  #  B_3 = B - 2(B/I) / (I - 2) = B / I
-  # thus
-  #  B_i = B / I
-  # and
-  #  C_i = B_i / (mu + min(5,i)) = B / (I * (mu + min(5,i))).
-  # We want to enforce that C_i >= min_surv + 1, thus
-  #  B / (I * (mu + min(5,i))) >= min_surv + 1        (1)
-  # becomes
-  #  B >= (min_surv + 1) * I * (mu + min(5,i))
-  # and the most strict value is for i >= 5, thus
-  #  B >= (min_surv + 1) * I * (mu + 5)
-  #
-  # This is an over-estimation, since actually B_1 = floor(B/I) and if
-  # floor(B/I) < B/I, then B_i < B/I, and we could still satisfy Eq. (1)
-  # with a smaller budget. However, the exact formula requires computing B_i
-  # taking into account the floor() function, which is not obvious.
-  minimumBudget <- (minSurvival + 1) * nbIterations *
-    (max(tunerConfig$mu, tunerConfig$firstTest) + 5)
-     
-  if (remainingBudget < minimumBudget) {
-    tunerError("Insufficient budget: ",
-               "With the current settings, irace will require a value of ",
-               "'maxExperiments' of at least '",  minimumBudget, "'. ",
-               "You can either increase the budget, ",
-               "or set a smaller value of either 'minNbSurvival' ",
-               "or 'nbIterations'")
-  }
-  
   startParallel(tunerConfig)
   on.exit(stopParallel())
-  
+
   while (TRUE) {
     # Recovery info 
     tunerResults$state <- list(.Random.seed = .Random.seed, 
@@ -498,7 +518,7 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
         return (eliteCandidates)
       }
     }
-    # Compute the current budget (nb of experiments for this iteration)
+    # Compute the current budget (nb of experiments for this iteration),
     # or take the value given as parameter.
     currentBudget <-
       ifelse (tunerConfig$nbExperimentsPerIteration == 0,
@@ -507,13 +527,27 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
               tunerConfig$nbExperimentsPerIteration)
     currentBudget <- floor (currentBudget)
     
-    # Compute the number of candidate configurations for this race or
-    # take the value given as a parameter.
-    nbCandidates <- ifelse (tunerConfig$nbCandidates == 0,
-                            computeNbCandidates(currentBudget, indexIteration,
-                                                max(tunerConfig$mu,
-                                                    tunerConfig$firstTest)),
-                            tunerConfig$nbCandidates)
+    # Compute the number of candidate configurations for this race.
+    nbCandidates <- computeNbCandidates(currentBudget, indexIteration,
+                                        max(tunerConfig$mu,
+                                            tunerConfig$firstTest))
+
+    # If a value was given as a parameter, then this value limits the maximum,
+    # but if we have budget only for less than this, then we have run out of
+    # budget.
+    if (tunerConfig$nbCandidates > 0) {
+      if (tunerConfig$nbCandidates < nbCandidates) {
+        nbCandidates <- tunerConfig$nbCandidates
+      } else if (currentBudget < remainingBudget) {
+        # We skip one iteration
+        indexIteration <- indexIteration + 1
+        next
+      } else {
+        catInfo("Stopped because ",
+                "there is no enough budget to enforce the value of nbCandidates")
+        return (eliteCandidates)
+      }
+    }
 
     # Stop if  the number of candidates to produce is not greater than
     # the number of elites...
@@ -634,8 +668,10 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
     }
 
     if (debugLevel >= 1) {
-      cat(sep="", "# ", format(Sys.time(), usetz=TRUE), ": Launch race\n")
+      irace.note("Launch race\n")
     }
+
+    .irace$next.instance <- max(tunerResults$experiments$instance, 0) + 1
     raceResults <- oneIterationRace (tunerConfig = tunerConfig,
                                      candidates = testCandidates,
                                      parameters = parameters, 
@@ -683,6 +719,7 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
     cat("# Elite candidates:\n")
     candidates.print(eliteCandidates, metadata = debugLevel >= 1)
     tunerResults$iterationElites <- c(tunerResults$iterationElites, eliteCandidates$.ID.[1])
+    tunerResults$allElites[[indexIteration]] <- eliteCandidates$.ID.
     
     if (indexIteration == 1) {
       if (debugLevel >= 1)  { cat("# Initialise model\n") }
@@ -697,6 +734,10 @@ irace <- function(tunerConfig = stop("parameter `tunerConfig' is mandatory."),
     }
 
     indexIteration <- indexIteration + 1
+    if (tunerConfig$debugLevel >= 3) {
+      irace.note ("Memory used in irace():\n")
+      irace.print.memUsed()
+    }
   }
   # This code is actually never executed.
   return (eliteCandidates)
