@@ -25,7 +25,7 @@
 #  or by writing to the  Free Software Foundation, Inc., 59 Temple Place,
 #                  Suite 330, Boston, MA 02111-1307 USA
 # -------------------------------------------------------------------------
-# $Revision: 1600 $
+# $Revision: 1661 $
 # =========================================================================
 
 ## __VERSION__ below will be replaced by the version defined in R/version.R
@@ -247,13 +247,13 @@ checkIraceScenario <- function(scenario, parameters = NULL)
   printScenario(scenario)
  
   if (is.null(parameters)) {
-    cat("# Reading parameter file [", scenario$parameterFile, "].\n")
+    cat("# Reading parameter file '", scenario$parameterFile, "'.\n", sep = "")
     parameters <- readParameters (file = scenario$parameterFile,
                                   digits = scenario$digits,
                                   debugLevel = 2)
   } else if (!is.null.or.empty(scenario$parameterFile)) {
     cat("# Parameters provided by user.\n",
-        "# Parameter file [ ", scenario$parameterFile, " ] will be ignored\n", sep="")
+        "# Parameter file '", scenario$parameterFile, "' will be ignored\n", sep = "")
   }
 
   cat("# Checking target execution.\n")
