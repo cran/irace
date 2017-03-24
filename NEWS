@@ -1,9 +1,82 @@
+2.2
+
+ * Command-line parameters are printed to stdout (useful for future
+   replications). (Manuel López-Ibáñez, suggested by Markus Wagner)
+
+ * Users may provide a function to repair configurations before being
+   evaluated. See the scenario variable repairConfiguration.
+                                                     (Manuel López-Ibáñez)
+ 
+ * The option --sge-cluster (sgeCluster) was removed and replaced by
+   --batchmode (batchmode). It is now the responsibility of the target-runner to
+   parse the output of the batch job submission command (e.g., qsub or squeue),
+   and return just the job ID. Values supported are: "sge", "torque", "pbs" and
+   "slurm".
+                                                     (Manuel López-Ibáñez)
+
+ * The option --parallel can now be combined with --batchmode to limit the
+   number of jobs submitted by irace at once. This may be useful in batch
+   clusters that have a small queue of jobs.
+                                                   (Manuel López-Ibáñez)
+
+ * New examples under inst/examples/batchmode-cluster/.
+                                                       (Manuel López-Ibáñez)
+
+ * It is now possible to include scenario definition files from other scenario
+   files by using:
+   
+      eval.parent(source("scenario-common.txt", chdir = TRUE, local = TRUE))
+
+   This feature is VERY experimental and the syntax is likely to change in the
+   future.                                             (Manuel López-Ibáñez)
+ 
+ * Fix a bug that re-executed elite results under some circumstances.
+   (Leslie Pérez Cáceres)
+
+ * Restrict the number of maximum configurations per race to 1024.
+   (Leslie Pérez Cáceres)
+   
+ * Do not warn if the last line in the instance file does not terminate with a
+   newline. (Manuel López-Ibáñez)
+ 
+ * Fix bug when deterministic == 1.
+   (Manuel López-Ibáñez, Leslie Pérez Cáceres)
+
+ * Update manual and vignette with details about the expected arguments and
+   return value of targetRunner and targetEvaluator. (Manuel López-Ibáñez)
+
+ * Many updates to the User Guide vignette. (Manuel López-Ibáñez)
+
+ * Fix \dontrun example in irace-package.Rd (Manuel López-Ibáñez)
+
+ * Fix bug: If testInstances contains duplicates, results of testing are not
+   correctly saved in iraceResults$testing$experiments nor reported correctly
+   at the end of a run. Now unique IDs of the form 1t, 2t, ... are used for
+   each testing instance. These IDs are used for the rownames of
+   iraceResults$testing$experiments and the names of the scenario$testInstances
+   and iraceResults$testing$seeds vectors.  (Manuel López-Ibáñez)
+
+ * Fix bug where irace keeps retrying the target-runner call even if it
+   succeeds. (Manuel López-Ibáñez)
+
+ * New command-line parameter
+
+       --only-test FILE
+
+   which just evaluates the configurations given in FILE on the testing
+   instances defined by the scenario. Useful if you decide on the testing
+   instances only after running irace.    (Manuel López-Ibáñez)
+
+ * Bugfix: When using maxTime != 0, the number of experiments performed may be
+   miscounted in some cases.              (Manuel López-Ibáñez)
+
+
 2.1
 
  * Fix CRAN errors in tests. (Manuel López-Ibáñez)
  
  * Avoid generating too many configurations at once if the initial time
-    estimation is too small. (Manuel López-Ibáñez)
+   estimation is too small. (Manuel López-Ibáñez)
  
 2.0
 

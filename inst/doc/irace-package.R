@@ -50,10 +50,6 @@ options(width = 60)
 #                           scenario = defaultScenario())
 #  checkIraceScenario(scenario = scenario, parameters = parameters)
 
-## ----irace_path,eval=FALSE, prompt=FALSE------------------
-#  library("irace")
-#  system.file(package = "irace")
-
 ## ----irace_R_exe, eval=FALSE, prompt=FALSE----------------
 #  library("irace")
 #  # Go to the directory containing the scenario files
@@ -85,8 +81,8 @@ print(parameters)
 print(experiment)
 
 ## ----targetEvaluator, prompt=FALSE, eval=FALSE------------
-#  targetEvaluator(experiment, num.configs, all.conf.id, scenario,
-#                  target.runner.call)
+#  targetEvaluator(experiment, num.configurations, all.conf.id,
+#                  scenario, target.runner.call)
 
 ## ----instance1, prompt=FALSE, eval=FALSE------------------
 #  scenario$instances <- c("rosenbrock_20", "rosenbrock_40",
@@ -94,6 +90,14 @@ print(experiment)
 #  scenario$instances.extra.params <-
 #    c("--function=12 --nvar 20", "--function=12 --nvar 30",
 #      "--function=15 --nvar 20", "--function=15 --nvar 30")
+
+## ----repairEx,prompt=FALSE, eval=FALSE--------------------
+#  repairConfiguration <- function (configuration, parameters, digits)
+#  {
+#    isreal <- parameters$type[colnames(configuration)] %in% "r"
+#    configuration[isreal] <- configuration[isreal] / sum(configuration[isreal])
+#    return(configuration)
+#  }
 
 ## ----targetRunnerParallel,prompt=FALSE, eval=FALSE--------
 #    targetRunnerParallel(experiments, exec.target.runner, scenario)
@@ -187,8 +191,8 @@ conf <- gl(ncol(results), # number of configurations
 pairwise.wilcox.test (as.vector(results), conf, paired = TRUE, p.adj = "bonf")
 # Plot the results
 boxplot (iraceResults$testing$experiments,
-         ylab = "solution quality",
-         xlab = "configuration id")
+         ylab = "Solution cost",
+         xlab = "Configuration ID")
 
 ## ----freq, fig.pos="H", fig.cap="Parameters sampling frequency.", prompt=TRUE, eval=TRUE, comment=""----
 parameterFrequency(iraceResults$allConfigurations, iraceResults$parameters)
@@ -205,10 +209,13 @@ parallelCoordinatesPlot (conf, iraceResults$parameters,
                          hierarchy = FALSE)
 
 ## ----faq3, eval=FALSE-------------------------------------
-#    library(Rmpi)
-#    mpi.spawn.Rslaves(nslaves = 10)
-#    x <- mpi.applyLB(1:10, function(x) {
-#                             library(irace)
-#                             return(path.package("irace")) })
-#    print(x)
+#  library(Rmpi)
+#  mpi.spawn.Rslaves(nslaves = 10)
+#  x <- mpi.applyLB(1:10, function(x) {
+#    library(irace)
+#    return(path.package("irace")) })
+#         print(x)
+
+## ----R_irace_home2, prompt=FALSE, eval=FALSE--------------
+#  system.file(package = "irace")
 

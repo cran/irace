@@ -2,39 +2,43 @@
 \alias{irace-package}
 \docType{package}
 \title{
-The irace package
+The irace package: \packageTitle{irace}
 }
 \description{
-Iterated racing for Automatic Algorithm Configuration
+  \packageDescription{irace}
 }
 \details{
 \tabular{ll}{
 Package: \tab irace\cr
 Type: \tab Package\cr
-Version: \tab 2.1 \cr
-Date: \tab 2016-10-18 \cr
+Version: \tab 2.2 \cr
+Date: \tab 2017-03-23 \cr
 License: \tab GPL (>= 2)\cr
 LazyLoad: \tab yes\cr
 }
 }
 \author{
-Maintainer: Manuel López-Ibáñez and Jérémie Dubois-Lacoste
+Maintainer: Manuel López-Ibáñez and Leslie Pérez Cáceres
 \email{irace@iridia.ulb.ac.be}
 
 
-Author: Manuel López-Ibáñez, Jérémie Dubois-Lacoste,
-Thomas Stützle, Mauro Birattari, Eric Yuan and Prasanna Balaprakash
+Author: \packageAuthor{irace}
 }
 \references{
 
+  Manuel López-Ibáñez, Jérémie Dubois-Lacoste, Leslie Pérez Cáceres,
+  Thomas Stützle, and Mauro Birattari. The irace package: Iterated
+  Racing for Automatic Algorithm Configuration. \emph{Operations Research
+  Perspectives}, 2016. \doi{10.1016/j.orp.2016.09.002}
+    
   Manuel López-Ibáñez, Jérémie Dubois-Lacoste, Thomas Stützle, and Mauro
   Birattari. \emph{The irace package, Iterated Race for Automatic
   Algorithm Configuration}. Technical Report TR/IRIDIA/2011-004, IRIDIA,
   Université Libre de Bruxelles, Belgium, 2011.
   
   Manuel López-Ibáñez and Thomas Stützle. The Automatic Design of
-  Multi-Objective Ant Colony Optimization Algorithms. IEEE Transactions
-  on Evolutionary Computation, 2012.
+  Multi-Objective Ant Colony Optimization Algorithms. \emph{IEEE Transactions
+  on Evolutionary Computation}, 2012.
 
 }
 \keyword{package}
@@ -102,21 +106,33 @@ target.runner <- function(experiment, scenario)
                  , tmax = as.numeric(configuration[["tmax"]])
                  , temp = as.numeric(configuration[["temp"]])
                  ))
-  return(res$value)
+  ## New output interface in irace 2.0. This list may also contain:
+  ## - 'time' if irace is called with 'maxTime'
+  ## - 'error' is a string used to report an error
+  ## - 'outputRaw' is a string used to report the raw output of calls to
+  ##   an external program or function.
+  ## - 'call' is a string used to report how target.runner called the
+  ##   external program or function.
+  return(list(cost = res$value))
 }
+
+## We define a configuration scenario by setting targetRunner to the
+## function define above, instances to the first 100 random weights, and
+## a maximum budget of 1000 calls to targetRunner.
+scenario <- list(targetRunner = target.runner,
+                 instances = weights[1:100],
+                 maxExperiments = 1000,
+                 logFile = "")
+
+## We check that the scenario is valid. This will also try to execute
+## target.runner.
+checkIraceScenario(scenario, parameters = parameters)
 
 \dontrun{
 ## We are now ready to launch irace. We do it by means of the irace
-## function by setting targetRunner to the function define above, instances to
-## the first 100 random weights, and a maximum budget of 1000 calls to
-## targetRunner. The function irace will print information about its
+## function. The function will print information about its
 ## progress. This may require a few minutes, so it is not run by default.
-result <- irace(scenario = list(
-                  targetRunner = target.runner,
-                  instances = weights[1:100],
-                  maxExperiments = 1000,
-                  logFile = ""),
-                parameters = parameters)
+tuned.confs <- irace(scenario = scenario, parameters = parameters)
 
 ## We can print the best configurations found by irace as follows:
 configurations.print(result)
@@ -126,17 +142,24 @@ configurations.print(result)
 ## the other 100 instances previously generated.
 ## To do so, first we apply the default configuration of the SANN
 ## algorithm to these instances:
-default <- sapply(weights[101:200], target.runner,
-                  configuration=list(values=list(tmax=10,temp=10)))
+test <- function(configuration)
+{
+  res <- lapply(weights[101:200],
+                function(x) target.runner(
+                              experiment = list(instance = x,
+                                                configuration = configuration),
+                              scenario = scenario))
+  return (sapply(res, getElement, name = "cost"))
+}
+default <- test(data.frame(tmax=10, temp=10))
 
 ## We extract and apply the winning configuration found by irace
 ## to these instances:
-result.list <- as.list(removeConfigurationsMetaData(result[1,]))
-tuned <- sapply(weights[101:200], target.runner, configuration=list(values=result.list))
+tuned <- test (removeConfigurationsMetaData(tuned.confs[1,]))
 
 ## Finally, we can compare using a boxplot the quality obtained with the
 ## default parametrization of SANN and the quality obtained with the
 ## best configuration found by irace.
-boxplot(list(default=default, tuned=tuned))
+boxplot(list(default = default, tuned = tuned))
 }
 }

@@ -25,7 +25,7 @@
 #  or by writing to the  Free Software Foundation, Inc., 59 Temple Place,
 #                  Suite 330, Boston, MA 02111-1307 USA
 # -------------------------------------------------------------------------
-# $Revision: 1661 $
+# $Revision: 1738 $
 # =========================================================================
 
 ## __VERSION__ below will be replaced by the version defined in R/version.R
@@ -64,23 +64,24 @@ read.table.text <- function(text, header = TRUE, stringsAsFactors = FALSE, ...)
 }
 
 # Non-variable options (such as --help and --version) have names starting with '.'
-# Variables that do not have an option have description == ""
+# Variables that do not have a command-line option have description == ""
 # Types are b(oolean), i(nteger), s(tring), r(eal), p(ath), x (R object or no value)
 # FIXME: For i and r add their range.
 # FIXME: Align columns.
 # FIXME: make order of the parameters
+# FIXME: Add type for R functions.
 .irace.params.def <- read.table.text('
 name                       type short  long                           default            description
 .help                      x    "-h"   "--help"                       NA                 "Show this help." 
 .version                   x    "-v"   "--version"                    NA                 "Show irace package version."
 .check                     x    "-c"   "--check"                      NA                 "Check scenario."
+.onlytest                  p    ""     "--only-test"                  ""                 "Only test the configurations given in the file passed as argument."
 scenarioFile               p    "-s"   "--scenario"                   "./scenario.txt"   "File that describes the configuration scenario setup and other irace settings." 
 parameterFile              p    "-p"   "--parameter-file"             "./parameters.txt" "File that contains the description of the parameters to be tuned. See the template." 
 execDir                    p    ""     "--exec-dir"                   "./"               "Directory where the programs will be run." 
 logFile                    p    "-l"   "--log-file"                   "./irace.Rdata"    "File to save tuning results as an R dataset, either absolute path or relative to execDir." 
 recoveryFile               p    ""     "--recovery-file"              ""                 "Previously saved log file to recover the execution of irace, either absolute path or relative to the current directory.  If empty or NULL, recovery is not performed."
 instances                  s    ""     ""                             ""                 ""
-instancesList              s    ""     ""                             ""                 "" # List of instances + seed.
 instances.extra.params     s    ""     ""                             ""                 ""
 trainInstancesDir          p    ""     "--train-instances-dir"        "./Instances"      "Directory where tuning instances are located; either absolute path or relative to current directory." 
 trainInstancesFile         p    ""     "--train-instances-file"       ""                 "File containing a list of instances and optionally additional parameters for them." 
@@ -112,7 +113,7 @@ seed                       i    ""     "--seed"                       NA        
 parallel                   i    ""     "--parallel"                   0                  "Number of calls to targetRunner to execute in parallel. 0 or 1 mean disabled."
 loadBalancing              b    ""     "--load-balancing"             1                  "Enable/disable load-balancing when executing experiments in parallel. Load-balancing makes better use of computing resources, but increases communication overhead. If this overhead is large, disabling load-balancing may be faster."
 mpi                        b    ""     "--mpi"                        0                  "Enable/disable MPI. Use Rmpi to execute targetRunner in parallel (parameter parallel is the number of slaves)."
-sgeCluster                 b    ""     "--sge-cluster"                0                  "Enable/disable SGE cluster mode. Use qstat to wait for cluster jobs to finish (targetRunner must invoke qsub)."
+batchmode                    s    ""     "--batchmode"                    0                 "Specify how irace waits for jobs to finish when targetRunner submits jobs to a batch cluster: sge, pbs, torque or slurm."
 softRestart                b    ""     "--soft-restart"               1                  "Enable/disable the soft restart strategy that avoids premature convergence of the probabilistic model."
 softRestartThreshold       r    ""     "--soft-restart-threshold"     NA                 "Soft restart threshold value for numerical parameters. If NA, it computed as 10^-digits."
 testInstancesDir           p    ""     "--test-instances-dir"         ""                 "Directory where testing instances are located, either absolute or relative to current directory."
@@ -125,11 +126,12 @@ elitist                    b    "-e"   "--elitist"                    1         
 ## MANUEL: These comments are not so clear.
 elitistNewInstances        i    ""     "--elitist-new-instances"      1                  "Number of instances added to the execution list before previous instances in elitist irace."
 elitistLimit               i    ""     "--elitist-limit"              2                  "Limit for the elitist race, number statistical test without elimination peformed. Use 0 for no limit."
+repairConfiguration        x    ""     ""                             ""                 "User-defined R function that takes a configuration generated by irace and repairs it."
 ')
 rownames (.irace.params.def) <- .irace.params.def[,"name"]
 .irace.params.names <- rownames(.irace.params.def)[substring(rownames(.irace.params.def), 1, 1) != "."]
 ## FIXME: If these values are special perhaps they should be saved in $state ?
-.irace.params.recover <- c("instances", "instancesList", "instances.extra.params", "seed",
+.irace.params.recover <- c("instances", "instances.extra.params", "seed",
                            "testInstances", "testInstances.extra.params",
                            # We need this because this data may mutate
                            "targetRunnerData", "elitist", "deterministic")
@@ -239,6 +241,50 @@ testing.main <- function(logFile)
   return(TRUE)
 }
 
+testing.cmdline <- function(filename, scenario)
+{
+  irace.note ("Checking scenario\n")
+  scenario <- checkScenario(scenario)
+  printScenario(scenario)
+
+  irace.note("Reading parameter file '", scenario$parameterFile, "'.\n")
+  parameters <- readParameters (file = scenario$parameterFile,
+                                digits = scenario$digits)
+  allConfigurations <- readConfigurationsFile (filename, parameters)
+  allConfigurations <- cbind(.ID. = 1:nrow(allConfigurations),
+                             allConfigurations,
+                             .PARENT. = NA)
+  rownames(allConfigurations) <- allConfigurations$.ID.
+  num <- nrow(allConfigurations)
+  allConfigurations <- checkForbidden(allConfigurations, scenario$forbiddenExps)
+  if (nrow(allConfigurations) < num) {
+    cat("# Warning: some of the configurations in the configurations file were forbidden",
+        "and, thus, discarded\n")
+  }
+
+  # To save the logs
+  iraceResults <- list()
+  iraceResults$scenario <- scenario
+  iraceResults$irace.version <- irace.version
+  iraceResults$parameters <- parameters
+  iraceResults$allConfigurations <- allConfigurations
+  
+  irace.note ("Testing configurations: \n")
+  configurations.print(allConfigurations)  
+  iraceResults$testing <- testConfigurations(allConfigurations, scenario, parameters)
+
+  # FIXME : We should print the seeds also. As an additional column?
+  irace.note ("Testing results (column number is configuration ID):\n")
+  print(iraceResults$testing$experiments)
+  if (!is.null.or.empty(scenario$logFile)) {
+    cwd <- setwd(scenario$execDir)
+    save (iraceResults, file = scenario$logFile)
+    setwd(cwd)
+  }
+  irace.note ("Finished testing\n")
+  return(iraceResults)
+}
+
 checkIraceScenario <- function(scenario, parameters = NULL)
 {
   irace.note ("Checking scenario\n")
@@ -247,7 +293,7 @@ checkIraceScenario <- function(scenario, parameters = NULL)
   printScenario(scenario)
  
   if (is.null(parameters)) {
-    cat("# Reading parameter file '", scenario$parameterFile, "'.\n", sep = "")
+    irace.note("Reading parameter file '", scenario$parameterFile, "'.\n")
     parameters <- readParameters (file = scenario$parameterFile,
                                   digits = scenario$digits,
                                   debugLevel = 2)
@@ -325,20 +371,20 @@ irace.cmdline <- function(args = commandArgs (trailingOnly = TRUE))
 
   if (!is.null(readArg (short = "-v", long = "--version"))) {
     cat.irace.license()
-    cat ("\tinstalled at: ", system.file(package="irace"), "\n", sep="")
+    cat ("# installed at: ", system.file(package="irace"), "\n", sep = "")
     return(invisible(NULL))
   }
 
   cat.irace.license()
-  cat ("\tinstalled at: ", system.file(package="irace"), "\n", sep="")
+  cat ("# installed at: ", system.file(package="irace"), "\n",
+       "# called with: ", paste(args, collapse = " "), "\n", sep = "")
   
   # Read the scenario file and the command line
   scenarioFile <- readCmdLineParameter ("scenarioFile", default = "")
   scenario <- readScenario(scenarioFile)
   for (param in .irace.params.names) {
-    scenario[[param]] <-
-      readCmdLineParameter (paramName = param,
-                            default = scenario[[param]])
+    scenario[[param]] <- readCmdLineParameter (paramName = param,
+                                               default = scenario[[param]])
   }
  
   # Check scenario
@@ -346,7 +392,13 @@ irace.cmdline <- function(args = commandArgs (trailingOnly = TRUE))
     checkIraceScenario(scenario)
     return(invisible(NULL))
   }
-  
+
+  # Only do testing
+  testFile <- readArg (long = "--only-test")
+  if (!is.null(testFile)) {
+    return(invisible(testing.cmdline(testFile, scenario)))
+  }
+
   if (length(args) > 0) {
     irace.error ("Unknown command-line options: ", paste(args, collapse = " "))
   }

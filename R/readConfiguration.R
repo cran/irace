@@ -133,13 +133,23 @@ readConfigurationsFile <- function(filename, parameters, debugLevel = 0)
   return (configurationTable)
 }
 
-# reads scenario setup from filename and returns it as a list. Anything
-# not mentioned in the file is not present in the list (that is, it is
-# NULL).
-# FIXME: Does passing an initial scenario actually work? It seems
-# it gets completely overriden by the loop below.
+# Reads scenario setup from filename and returns it as a list. Anything not
+# mentioned in the file is not present in the list (that is, it is NULL).
+# FIXME: Does passing an initial scenario actually work? It seems it gets
+# completely overriden by the loop below.
 readScenario <- function(filename = "", scenario = list())
 {
+  # This function allows recursively including scenario files.
+  envir <- environment()
+  include.scenario <- function(rfilename, topfile = filename, envir. = envir)
+  {
+    if (!file.exists (rfilename)) {
+      irace.error ("The scenario file ", shQuote(rfilename), " included from ",
+                   shQuote(topfile), " does not exist.")
+    }
+    source(rfilename, local = envir., chdir = TRUE)
+  }
+
   # First find out which file...
   if (filename == "") {
     filename <- .irace.params.def["scenarioFile","default"]
@@ -158,7 +168,8 @@ readScenario <- function(filename = "", scenario = list())
     debug.level <- getOption(".irace.debug.level", default = 0)
     if (debug.level >= 1)
       cat ("# Reading scenario file", shQuote(filename), ".......")
-    source(filename, local = TRUE)
+    # chdir = TRUE to allow recursive sourcing.
+    source(filename, local = TRUE, chdir = TRUE)
     if (debug.level >= 1) cat (" done!\n")
   } else {
     irace.error ("The scenario file ", shQuote(filename), " does not exist.")
@@ -213,11 +224,21 @@ checkScenario <- function(scenario = defaultScenario())
     }
   }
 
-
+  quote.param <- function(name)
+  {
+    return(paste0("'", name, "' (", .irace.params.def[name, "long"], ")"))
+  }
+  
   if (is.null.or.empty(scenario$targetRunnerParallel)) {
     scenario$targetRunnerParallel <- NULL
   } else if (!is.function.name(scenario$targetRunnerParallel)) {
-    irace.error("targetRunnerParallel must be a function")
+    irace.error("'targetRunnerParallel' must be a function")
+  }
+  
+  if (is.null.or.empty(scenario$repairConfiguration)) {
+    scenario$repairConfiguration <- NULL
+  } else if (!is.function.name(scenario$repairConfiguration)) {
+    irace.error("'repairConfiguration' must be a function")
   }
 
   if (is.function.name(scenario$targetRunner)) {
@@ -229,10 +250,10 @@ checkScenario <- function(scenario = defaultScenario())
                   text = "target runner")
       .irace$target.runner <- target.runner.default
     } else {
-      irace.error("targetRunner must be a function or an executable program")
+      irace.error("'targetRunner' must be a function or an executable program")
     }
   }
-  
+
   if (scenario$targetEvaluator == "") scenario$targetEvaluator <- NULL
   if (is.null(scenario$targetEvaluator)) {
     .irace$target.evaluator <- NULL
@@ -244,8 +265,10 @@ checkScenario <- function(scenario = defaultScenario())
                 text = "target evaluator")
     .irace$target.evaluator <- target.evaluator.default
   } else {
-    irace.error("targetEvaluator must be a function or an executable program")
+    irace.error("'targetEvaluator' must be a function or an executable program")
   }
+
+  irace.assert(is.null(scenario$targetEvaluator) == is.null(.irace$target.evaluator))
   
   # Training instances
   if (is.null.or.empty(scenario$instances.extra.params)) {
@@ -280,6 +303,12 @@ checkScenario <- function(scenario = defaultScenario())
       scenario$testInstances <- NULL
     }
   }
+  if (!is.null(scenario$testInstances)
+      && is.null(names(scenario$testInstances))) {
+    # Create unique IDs for testInstances
+    names (scenario$testInstances) <-
+      paste0(1:length(scenario$testInstances), "t")
+  }
   
   # Configurations file
   if (!is.null.or.empty(scenario$configurationsFile)) {
@@ -297,7 +326,7 @@ checkScenario <- function(scenario = defaultScenario())
                 text = "forbidden configurations file")
     # FIXME: Using && or || instead of & and | will not work. Detect
     # this and give an error to the user.
-    scenario$forbiddenExps <- parse(file=scenario$forbiddenFile)
+    scenario$forbiddenExps <- parse(file = scenario$forbiddenFile)
     # When a is NA and we check a == 5, we would get NA, which is
     # always FALSE, when we actually want to be TRUE, so we test
     # is.na() first below.
@@ -307,8 +336,8 @@ checkScenario <- function(scenario = defaultScenario())
     # FIXME: Check that the parameter names that appear in forbidden
     # all appear in parameters$names to catch typos.
     cat("# ", length(scenario$forbiddenExps),
-        " expression(s) specifying forbidden scenarios read from '",
-        scenario$forbiddenFile, "'\n", sep="")
+        " expression(s) specifying forbidden configurations read from '",
+        scenario$forbiddenFile, "'\n", sep = "")
   }
 
   # Make it NULL if it is "" or NA
@@ -329,13 +358,16 @@ checkScenario <- function(scenario = defaultScenario())
     if (is.null(scenario[[param]])
         || is.na (scenario[[param]])
         || !is.wholenumber(scenario[[param]]))
-      irace.error ("'", param, "' must be an integer.")
+      irace.error (quote.param (param), " must be an integer.")
   }
-  
+
+  if (scenario$firstTest <= 1) {
+    irace.error(quote.param ("firstTest"), " must be larger than 1.")
+  }
+
   if (scenario$firstTest %% scenario$eachTest != 0) {
-    irace.error("firstTest (", .irace.params.def["firstTest", "long"],
-               ") must be a multiple of eachTest (",
-               .irace.params.def["eachTest", "long"], ")")
+    irace.error(quote.param("firstTest"), " must be a multiple of ",
+                quote.param("eachTest"), ".")
   }
   
   if (scenario$mu < scenario$firstTest) {
@@ -355,47 +387,46 @@ checkScenario <- function(scenario = defaultScenario())
     if (is.null(scenario[[param]])
         || is.na (scenario[[param]])
         || scenario[[param]] < 0.0 || scenario[[param]] > 1.0)
-      irace.error ("'", param, "' must be a real value within [0, 1].")
+      irace.error (quote.param(param), " must be a real value within [0, 1].")
   }
   
-  ## Only maxExperiments or maxTime should be set. Negative values are not allowed.
+  ## Only maxExperiments or maxTime should be set. Negative values are not
+  ## allowed.
   if (scenario$maxExperiments == 0 && scenario$maxTime == 0) {
-    irace.error("Tuning budget was not provided. Set maxExperiments (",
-                .irace.params.def["maxExperiments", "long"], ") or maxTime (",
-                .irace.params.def["maxTime", "long"], ").\n" )
+    irace.error("Tuning budget was not provided. Set ",
+                quote.param("maxExperiments"), "or ",
+                quote.param("maxTime"), ".")
   } else if (scenario$maxExperiments > 0 && scenario$maxTime > 0) {
-    irace.error("Two different tuning budgets provided, please set only maxExperiments (",
-                .irace.params.def["maxExperiments", "long"], ") or only maxTime (",
-                .irace.params.def["maxTime", "long"], ").\n" )
+    irace.error("Two different tuning budgets provided, please set only ",
+                quote.param("maxExperiments"), " or only ",
+                quote.param ("maxTime"), ".")
   } else if (scenario$maxExperiments < 0 ) {
-    irace.error("Negative budget provided, maxExperiments (",
-                .irace.params.def["maxExperiments", "long"], ") must be >= 0.\n" )
+    irace.error("Negative budget provided, ", quote.param("maxExperiments"),
+                "must be >= 0." )
   } else if (scenario$maxTime < 0) {
-    irace.error("Negative budget provided, maxTime  (",
-                .irace.params.def["maxTime", "long"], ") must be >= 0.\n" )
+    irace.error("Negative budget provided, ", quote.param("maxTime"),
+                " must be >= 0.")
   }
   
   if (scenario$maxTime > 0 && (scenario$budgetEstimation <= 0 || scenario$budgetEstimation >= 1)) 
-    irace.error("budgetEstimation (", .irace.params.def["budgetEstimation", "long"],
-                ") must be within (0,1).")
+    irace.error(quote.param("budgetEstimation"), " must be within (0,1).")
   
   if (is.na (scenario$softRestartThreshold)) {
     scenario$softRestartThreshold <- 10^(- scenario$digits)
   }
   
   # Boolean control parameters
-  as.boolean.param <- function(x, name, params)
+  as.boolean.param <- function(x, name)
   {
-    tmp <- as.integer(x)
-    if (is.na (tmp) || (tmp != 0 && tmp != 1)) {
-      irace.error ("'", name, "' (", params[name, "long"],
-                   ") must be either 0 or 1")
+    x <- as.integer(x)
+    if (is.na (x) || (x != 0 && x != 1)) {
+      irace.error (quote.param(name), " must be either 0 or 1.")
     }
-    return(as.logical(tmp))
+    return(as.logical(x))
   }
   boolParams <- .irace.params.def[.irace.params.def[, "type"] == "b", "name"]
   for (p in boolParams) {
-    scenario[[p]] <- as.boolean.param (scenario[[p]], p, .irace.params.def)
+    scenario[[p]] <- as.boolean.param (scenario[[p]], p)
   }
 
   if (scenario$deterministic &&
@@ -406,36 +437,48 @@ checkScenario <- function(scenario = defaultScenario())
   }
 
   if (scenario$mpi && scenario$parallel < 2) {
-    irace.error ("'parallel' (", .irace.params.def["parallel","long"],
-                 ") must be larger than 1 when mpi is enabled")
+    irace.error (quote.param("parallel"),
+                 " must be larger than 1 when mpi is enabled.")
   }
 
-  if (scenario$sgeCluster && scenario$mpi) {
-    irace.error("'mpi' (", .irace.params.def["mpi", "long"], ") and ",
-                "'sgeCluster' (", .irace.params.def["sgeCluster", "long"], ") ",
-                "cannot be enabled at the same time")
+  if (is.null.or.empty(scenario$batchmode))
+    scenario$batchmode <- 0
+  if (scenario$batchmode != 0) {
+    scenario$batchmode <- tolower(scenario$batchmode)
+    # FIXME: We should encode options in the large table in main.R
+    valid.batchmode <- c("sge", "pbs", "torque", "slurm")
+    if (!(scenario$batchmode %in% valid.batchmode)) {
+      irace.error ("Invalid value '", scenario$batchmode,
+                   "' of ", quote.param("batchmode"),
+                   ", valid values are: ",
+                   paste0(valid.batchmode, collapse = ", "))
+    }
+  }
+  # Currently batchmode requires a targetEvaluator
+  if (scenario$batchmode != 0 && is.null(scenario$targetEvaluator)) {
+    irace.error(quote.param("batchmode"), " requires using ",
+                quote.param("targetEvaluator"), ".")
   }
 
-  if (scenario$sgeCluster && scenario$parallel > 1) {
-    irace.error("It does not make sense to use ",
-                "'parallel' (", .irace.params.def["parallel", "long"], ") and ",
-                "'sgeCluster' (", .irace.params.def["sgeCluster", "long"], ") ",
-                "at the same time")
+  if (scenario$batchmode != 0 && scenario$mpi) {
+    irace.error(quote.param("mpi"), " and ", quote.param("batchmode"),
+                " cannot be enabled at the same time.")
   }
-  
-  scenario$testType <- switch(tolower(scenario$testType),
-                                   "f-test" =, # Fall-through
-                                   "friedman" = "friedman",
-                                   "t-test" =, # Fall-through
-                                   "t.none" = "t.none",
-                                   "t-test-holm" =, # Fall-through,
-                                   "t.holm" = "t.holm",
-                                   "t-test-bonferroni" =, # Fall-through,
-                                   "t.bonferroni" = "t.bonferroni",
-                                   irace.error ("Invalid value '", scenario$testType,
-                                                "' of 'testType' (", .irace.params.def["testType", "long"],
-                                                "), valid values are: ",
-                                                "F-test, t-test, t-test-holm, t-test-bonferroni"))
+
+  scenario$testType <-
+    switch(tolower(scenario$testType),
+           "f-test" =, # Fall-through
+           "friedman" = "friedman",
+           "t-test" =, # Fall-through
+           "t.none" = "t.none",
+           "t-test-holm" =, # Fall-through,
+           "t.holm" = "t.holm",
+           "t-test-bonferroni" =, # Fall-through,
+           "t.bonferroni" = "t.bonferroni",
+           irace.error ("Invalid value '", scenario$testType,
+                        "' of ", quote.param("testType"),
+                        ", valid values are: ",
+                        "F-test, t-test, t-test-holm, t-test-bonferroni"))
   return (scenario)
 }
 
@@ -504,7 +547,8 @@ readInstances <- function(instancesDir = NULL, instancesFile = NULL)
   
   if (!is.null.or.empty(instancesFile)) {
     file.check (instancesFile, readable = TRUE, text = "instance file")
-    lines <- readLines (instancesFile)
+    # We do not warn if the last line does not finish with a newline.
+    lines <- readLines (instancesFile, warn = FALSE)
     lines <- sub("#.*$", "", lines) # Remove comments
     lines <- sub("^[[:space:]]+", "", lines) # Remove extra spaces
     lines <- lines[lines != ""] # Delete empty lines
@@ -535,7 +579,8 @@ checkTargetFiles <- function(scenario, parameters)
   conf.id <- c("testConfig1","testConfig2")
   configurations <- sampleUniform(parameters, length(conf.id),
                                   digits = scenario$digits,
-                                  forbidden = scenario$forbiddenExps)
+                                  forbidden = scenario$forbiddenExps,
+                                  repair = scenario$repairConfiguration)
   configurations <- cbind (.ID. = conf.id, configurations)
   
   # Get info of the configuration
@@ -569,6 +614,13 @@ checkTargetFiles <- function(scenario, parameters)
                    paste0(conditionMessage(w), collapse="\n"))
                invokeRestart("muffleWarning")})
 
+  if (scenario$debugLevel >= 1) {
+    cat ("# targetRunner returned:\n")
+    print(output)
+  }
+  
+  irace.assert(is.null(scenario$targetEvaluator) == is.null(.irace$target.evaluator))
+
   if (!is.null(.irace$target.evaluator)) {
     cat("# Executing targetEvaluator...\n")
     output <-  withCallingHandlers(
@@ -584,6 +636,10 @@ checkTargetFiles <- function(scenario, parameters)
                        "\n# Warning ocurred while executing targetEvaluator:",
                        paste0(conditionMessage(w), collapse="\n"))
                    invokeRestart("muffleWarning")})
+    if (scenario$debugLevel >= 1) {
+      cat ("# targetEvaluator returned:\n")
+      print(output)
+    }
   }
   return(result)
 }

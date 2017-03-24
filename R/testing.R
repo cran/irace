@@ -5,20 +5,18 @@ testConfigurations <- function(configurations, scenario, parameters)
   scenario <- checkScenario(defaultScenario(scenario))
   
   testInstances <- scenario$testInstances
+  instances.ID <- names(testInstances)
+  
   extra.params  <- scenario$testInstances.extra.params
   # 2147483647 is the maximum value for a 32-bit signed integer.
   # We use replace = TRUE, because replace = FALSE allocates memory for each possible number.
   instanceSeed <- sample.int(2147483647, size = length(testInstances), replace = TRUE)
-
+  names(instanceSeed) <- instances.ID
+  
   values <- removeConfigurationsMetaData(configurations)
-  values <- values[,parameters$names, drop = FALSE]
+  values <- values[, parameters$names, drop = FALSE]
   switches <- parameters$switches[parameters$names]
 
-  if (scenario$debugLevel >= 3) {
-    irace.note ("Memory used in testConfigurations():\n")
-    irace.print.memUsed()
-  }
-  
   # If there is no ID (e.g., after using readConfigurations), then add it.
   if (! (".ID." %in% colnames(configurations))) {
     configurations$.ID. <- 1:nrow(configurations)
@@ -29,7 +27,7 @@ testConfigurations <- function(configurations, scenario, parameters)
   for (i in 1:nrow(configurations)) {
     for (j in 1:length(testInstances)) {
       experiments[[ntest]] <- list(id.configuration = configurations[i, ".ID."],
-                                   id.instance  = paste0(j, "t"),
+                                   id.instance  = instances.ID[j],
                                    seed         = instanceSeed[j],
                                    configuration = values[i, , drop = FALSE],
                                    instance = testInstances[j],
@@ -43,7 +41,7 @@ testConfigurations <- function(configurations, scenario, parameters)
   on.exit(stopParallel())
 
   if (scenario$debugLevel >= 3) {
-    irace.note ("Memory used in testConfigurations():\n")
+    irace.note ("Memory used before execute.experiments in testConfigurations():\n")
     irace.print.memUsed()
   }
 
@@ -56,13 +54,17 @@ testConfigurations <- function(configurations, scenario, parameters)
 
   testResults <- matrix(NA, ncol = nrow(configurations), nrow = length(testInstances),
                         # dimnames = list(rownames, colnames)
-                        dimnames = list (testInstances, configurations$.ID.))
+                        dimnames = list (instances.ID, configurations$.ID.))
 
   for (i in seq_along(experiments)) {
-    testResults[rownames(testResults) == experiments[[i]]$instance,
+    testResults[rownames(testResults) == experiments[[i]]$id.instance,
                 colnames(testResults) == experiments[[i]]$id.configuration] <- target.output[[i]]$cost
   }
-  ## MANUEL: Shouldn't we record these experiments in experimentLog
-  
+  if (scenario$debugLevel >= 3) {
+    irace.note ("Memory used at the end of testConfigurations():\n")
+    irace.print.memUsed()
+  }
+
+  ## FIXME: Shouldn't we record these experiments in experimentLog ?
   return(list(experiments = testResults, seeds = instanceSeed))
 }
