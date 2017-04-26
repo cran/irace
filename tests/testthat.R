@@ -1,3 +1,4 @@
+library(irace)
 ## Functions ##########################################################
 f_rosenbrock <- function (x) {
   d  <- length(x)
@@ -43,7 +44,6 @@ weights <- rnorm(200, mean = 0.9, sd = 0.02)
 sann.irace <- function(...)
 {
   args <- list(...)
-  require("irace")
 
   parameters.table <- '
    tmax "" i (1, 5000)

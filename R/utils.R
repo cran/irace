@@ -53,10 +53,7 @@ irace.error <- function(...)
 irace.dump.frames <- function()
 {
   execDir <- getOption(".irace.execdir")
-  if (!is.null(execDir)) {
-    cwd <- setwd(execDir)
-    on.exit(setwd(cwd), add = TRUE)
-  }
+  if (!is.null(execDir)) cwd <- setwd(execDir)
   ## Only a very recent R version allows saving GlovalEnv:
   ## https://stat.ethz.ch/pipermail/r-devel/2016-November/073378.html
   # utils::dump.frames(dumpto = "iracedump", to.file = TRUE, include.GlobalEnv = TRUE)
@@ -64,6 +61,10 @@ irace.dump.frames <- function()
   ## http://stackoverflow.com/questions/40421552/r-how-make-dump-frames-include-all-variables-for-later-post-mortem-debugging
   utils::dump.frames(dumpto = "iracedump")
   save.image(file = "iracedump.rda")
+
+  if (!is.null(execDir)) setwd(cwd)
+  # We need this to signal an error in R CMD check.
+  q("no", status = 1, runLast = FALSE)  
 }
 
 irace.assert <- function(exp)
