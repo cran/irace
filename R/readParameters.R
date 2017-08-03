@@ -82,6 +82,8 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
   # *  If a parameter depends on another one not defined, execution is stopped
   treeLevelAux <- function(paramName, conditionsTree, rootParam)
   {
+    ## FIXME: In R 3.2, all.vars does not work with byte-compiled expressions.
+    ## but we can use all.vars(.Internal(disassemble(condition))[[3]][[1]])
     vars <- all.vars (conditionsTree[[paramName]])
     if (length(vars) == 0) {
       return (1) # This parameter does not have conditions
@@ -128,9 +130,6 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
                  " at ", filename, ", line ", line, context)
   }
   
-  # *************************************************************************
-  # FIXME: Only domain needs to be a list, the rest should be
-  # vectors, which will make many operations way faster.
   parameters <- list(names = c(),
                      types = c(),
                      switches = c(),
@@ -205,6 +204,8 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
       }
 
       if (param.type == "r") {
+        # FIXME: Given (0.01,0.99) and digits=1, this produces (0, 1), which is
+        # probably not what the user wants.
         param.value <- round(param.value, digits = digits)
       } else if (param.type == "i" && !all(is.wholenumber(param.value))) {
         errReadParameters (filename, nbLines, NULL,
@@ -266,7 +267,7 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
       errReadParameters (filename, nbLines, line,
                          "expected '|' before condition")
     } else {
-      conditions[[param.name]] <- expression(TRUE)
+      conditions[[param.name]] <- TRUE
     }
     # *****************************************************************
   } # end loop on lines

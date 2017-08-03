@@ -38,27 +38,29 @@ SET "stderr=c%config_id%-%instance_id%.stderr"
 
 :: If the program just prints a number, we can use 'exec' to avoid
 :: creating another process, but there can be no other commands after exec.
-::exec %exe %FIXED_PARAMS% -i %instance %candidate_parameters%
+::exec %exe %fixed_params% -i %instance %candidate_parameters%
 :: exit 1
 ::
 :: Otherwise, save the output to a file, and parse the result from it.
 :: (If you wish to ignore segmentation faults you can use '{}' around
 :: the command.)
-%exe% %FIXED_PARAMS% --seed %seed% -i %instance% %candidate_parameters% 1>%stdout% 2>%stderr%
+%exe% %fixed_params% --seed %seed% -i %instance% %candidate_parameters% 1>%stdout% 2>%stderr%
 
 ::if %errorlevel% neq 0 exit /b %errorlevel%
 
-:: # This may be used to introduce a delay if there are filesystem
-:: # issues.
+:: :: # This may be used to introduce a delay if there are filesystem
+:: :: # issues.
+:: :: FIXME: The following is not BAT code, so it cannot really be executed in
+:: :: Windows. What is the Windows equivalent?
 :: SLEEPTIME=1
 :: while [ ! -s "%stdout%" ]; do
 ::     sleep %SLEEPTIME
 ::     let "SLEEPTIME += 1"
 :: done
 ::
-:: This is an example of reading a number from the output.
-:: It assumes that the objective value is the first number in
-:: the first column of the last line of the output.
+:: :: This is an example of reading a number from the output.
+:: :: It assumes that the objective value is the first number in
+:: :: the first column of the last line of the output.
 
 
 ::if exist %stdout% (

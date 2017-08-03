@@ -18,16 +18,19 @@ irace.reload.debug <- function(package = "irace")
 
 irace.print.memUsed <- function(objects)
 {
+  object.size.kb <- function (name, envir) {
+    object.size(get(name, envir = envir)) / 1024
+  }
+
   envir <- parent.frame()
   if (missing(objects)) {
     objects <- ls(envir = envir, all.names = TRUE)
   }
-  x <- sapply(objects, function(name)
-              object.size(get(name, envir = envir)) / 1024)
+  
+  x <- sapply(objects, object.size.kb, envir = envir)
 
-  objects <- ls(envir = .irace)
-  y <- sapply(objects, function(name)
-              object.size(get(name, envir = .irace)) / 1024)
+  y <- sapply(ls(envir = .irace, all.names = TRUE),
+              object.size.kb, envir = .irace)
   names(y) <- paste0(".irace$", names(y))
   x <- c(x, y)
 
@@ -35,6 +38,8 @@ irace.print.memUsed <- function(objects)
   x <- x[x > 32]
   cat(sep="", sprintf("%30s : %17.1f Kb\n", names(x), x))
   cat(sep="", sprintf("%30s : %17.1f Mb\n", "Total", sum(x) / 1024))
+  # This does garbage collection and also prints memory used by R.
+  cat(sep="", sprintf("%30s : %17.1f Mb\n", "gc", sum(gc()[,2])))
 }
 
 # Print a user-level fatal error message, when the calling context
@@ -64,7 +69,20 @@ irace.dump.frames <- function()
 
   if (!is.null(execDir)) setwd(cwd)
   # We need this to signal an error in R CMD check.
-  q("no", status = 1, runLast = FALSE)  
+  if (!interactive()) q("no", status = 1, runLast = FALSE)
+}
+
+# Print an internal fatal error message that signals a bug in irace.
+irace.internal.error <- function(...)
+{
+  traceback(1)
+  op <- options(warning.length = 8170,
+                error = if (interactive()) utils::recover
+                        else irace.dump.frames)
+  on.exit(options(op))
+  warnings()
+  stop (.irace.prefix, ..., "\n", .irace.bug.report, call. = TRUE)
+  invisible()
 }
 
 irace.assert <- function(exp)
@@ -79,6 +97,7 @@ irace.assert <- function(exp)
                 error = if (interactive()) utils::recover
                         else irace.dump.frames)
   on.exit(options(op))
+  warnings()
   stop (msg)
   invisible()
 }
@@ -98,9 +117,10 @@ file.check <- function (file, executable = FALSE, readable = executable,
   if (!is.character(file) || is.null.or.empty(file)) {
     irace.error (text, " ", shQuote(file), " is not a vaild filename")
   }
-  ## Remove trailing slash if present for windows OS compatibility
-  if (substring(file, nchar(file), nchar(file)) %in% c("/", "\\"))
-    file <- substring(file, 1, nchar(file) - 1)
+  file <- path.rel2abs(file)
+  ## The above should remove the trailing separator if present for windows OS
+  ## compatibility, except when we have just C:/, where the trailing separator
+  ## must remain.
   
   if (!file.exists(file)) {
     irace.error (text, " '", file, "' does not exist")
@@ -150,107 +170,128 @@ is.null.or.empty <- function(x)
   is.null(x) || (length(x) == 1 && is.character(x) && x == "")
 }
 
+is.bytecode <- function(x) typeof(x) == "bytecode"
+
+bytecompile <- function(x)
+{
+  if (is.bytecode(x)) return(x)
+  else return(compiler::cmpfun(x))
+}
+
 strcat <- function(...)
 {
   do.call(paste0, args = list(..., collapse = NULL))
 }
 
-# FIXME: Isn't there an R function to do this? More portable?
-canonical.dirname <- function(dirname)
-{
-  if (missing(dirname))
-    stop ("argument 'dirname' is required")
-  ## FIXME: Perhaps this is better?
-  # s <- .Platform$file.sep
-  # return(sub(paste0(s,"?$"), s, dirname))
-  return (sub ("([^/])$", "\\1/", dirname))
-}
-
 # Function to convert a relative to an absolute path. CWD is the
 # working directory to complete relative paths. It tries really hard
 # to create canonical paths.
-## FIXME: This needs to be tested on Windows.
 path.rel2abs <- function (path, cwd = getwd())
 {
+  # Keep doing gsub as long as x keeps changing.
+  gsub.all <- function(pattern, repl, x, ...) {
+    repeat {
+      newx <- gsub(pattern, repl, x, ...)
+      if (newx == x) return(newx)
+      x <- newx
+    }
+  }
+  irace.normalize.path <- function(path) {
+    return(suppressWarnings(normalizePath(path, winslash = "/", mustWork = NA)))
+  }
+    
   if (is.null.or.na(path)) {
     return (NULL)
   } else if (path == "") {
     return ("")
   }
-
-  s <- .Platform$file.sep
+  # Using .Platform$file.sep is too fragile. Better just use "/" everywhere.
+  s <- "/"
 
   # Possibly expand ~/path to /home/user/path.
   path <- path.expand(path)
-  filename <- basename(path)
-  path <- dirname(path)
+  # Remove winslashes if given.
+  path <- gsub("\\", s, path, fixed = TRUE)
 
-  # Prefix the current cwd to the path if it doesn't start with "c:\" or /
-  reg.exp <- strcat("^", s, "|^[A-Za-z]:", s)
-  if (path == "." || !grepl(reg.exp, path)) {
+  # Detect a Windows drive
+  windrive.regex <- "^[A-Za-z]:"
+  windrive <- ""
+  if (grepl(paste0(windrive.regex, "($|", s, ")"), path)) {
+    m <- regexpr(windrive.regex, path)
+    windrive <- regmatches(path, m)
+    path <- sub(windrive.regex, "", path)
+  }
+
+  
+  # Change "/./" to "/" to get a canonical form 
+  path <- gsub.all(paste0(s, ".", s), s, path, fixed = TRUE)
+  # Change "//" to "/" to get a canonical form 
+  path <- gsub(paste0(s, s, "+"), s, path)
+  # Change "/.$" to "/" to get a canonical form 
+  path <- sub(paste0(s, "\\.$"), s, path)
+  # Drop final "/"
+  path <- sub(paste0(s, "$"), "", path)
+  if (path == "") path <- s
+  
+  # Prefix the current cwd to the path if it doesn't start with
+  # / \\ or whatever separator.
+  if (path == "." || !grepl(paste0("^",s), path)) {
     # There is no need to normalize cwd if it was returned by getwd()
     if (!missing(cwd)) {
-      # Change "//" to "/" to get a canonical form
-      cwd <- gsub(strcat(s, s, "+"), s, cwd)
-      # Drop final '/' if any
-      cwd <- sub(strcat(s, "$"), "", cwd)
-      if (substr(cwd, 0, 1) == ".") {
-        # Recurse to get absolute cwd
-        cwd <- path.rel2abs(cwd)
-      }
+      # Recurse to get absolute cwd
+      cwd <- path.rel2abs(cwd)
     }
+
+    # Speed-up the most common cases.
+    # If it is just "."
     if (path == ".") {
-      if (filename == ".") { # This is the current directory
-        return (suppressWarnings(normalizePath(cwd, mustWork = NA)))
-        # We handle the case ".." later.
-      } else if (filename != "..") { # This is a file in the current directory
-        path <- strcat(cwd, s, filename)
-        return(suppressWarnings(normalizePath(path, mustWork = NA)))
-      }
+      return (irace.normalize.path(cwd))
     }
-    path <- strcat(cwd, s, path)
+    # Remove "./" from the start of path.
+    path <- sub(paste0("^\\.", s), "", path)
+    # Make it absolute but avoid doubling s
+    if (substring(cwd, nchar(cwd)) == s) path <- paste0(cwd, path)
+    else path <- paste0(cwd, s, path)
+    # If it is just a path without ".." inside
+    if (!grepl(paste0(s,"\\.\\."), path)) {
+      return (irace.normalize.path(path))
+    }
+    # Detect a Windows drive
+    if (grepl(paste0(windrive.regex, "($|", s, ")"), path)) {
+      m <- regexpr(windrive.regex, path)
+      windrive <- regmatches(path, m)
+      path <- sub(windrive.regex, "", path)
+    }
   }
   # else
 
-  # Change "//" to "/" to get a canonical form 
-  path <- gsub(strcat(s, s, "+"), s, path)
-
-  # Change "/./" to "/" to get a canonical form 
-  path <- gsub(strcat(s, ".", s), s, path, fixed = TRUE)
-
-  # Change "/.$" to "/" to get a canonical form 
-  path <- sub(strcat(s, "\\.$"), s, path)
-
-  # Change "/x/../" to "/" to get a canonical form 
-  prevdir.regex <- strcat(s, "[^", s,"]+", s, "\\.\\.")
+  # Change "/x/.." to "/" to get a canonical form 
+  prevdir.regex <- paste0(s, "[^", s,"]+", s, "\\.\\.")
   repeat {
     # We need to do it one by one so "a/b/c/../../../" is not converted to "a/b/../"
-    tmp <- sub(strcat(prevdir.regex, s), s, path)
+    tmp <- sub(paste0(prevdir.regex, s), s, path)
     if (tmp == path) break
     path <- tmp
   }
   # Handle "/something/..$" to "/" that is, when ".." is the last thing in the path.
-  path <- sub(strcat(prevdir.regex, "$"), s, path)
+  path <- sub(paste0(prevdir.regex, "$"), s, path)
 
   # Handle "^/../../.." to "/" that is, going up at the root just returns the root.
   repeat {
     # We need to do it one by one so "a/b/c/../../../" is not converted to "a/b/../"
-    tmp <- sub(strcat("^", s, "\\.\\.", s), s, path)
+    tmp <- sub(paste0("^", s, "\\.\\.", s), s, path)
     if (tmp == path) break
     path <- tmp
   }
   # Handle "^/..$" to "/" that is, when ".." is the last thing in the path.
-  path <- sub(strcat("^", s, "\\.\\.$"), s, path)
+  path <- sub(paste0("^", s, "\\.\\.$"), s, path)
 
-  # It may happen that path ends in "/", for example, for "/x". Do
-  # not add another "/"
-  if (filename != ".") {
-    # Drop final '/' if any
-    path <- sub(strcat(s, "?$"), strcat(s, filename), path)
-  }
+  # Add back Windows drive, if any.
+  path <- paste0(windrive, path)
+
   # We use normalizePath, which will further simplify the path if
   # the path exists.
-  return (suppressWarnings(normalizePath(path, mustWork = NA)))
+  return (irace.normalize.path(path))
 }
 
 is.function.name <- function(FUN)
@@ -271,6 +312,17 @@ strlimit <- function(str, limit = 5000)
     return(paste0(substr(str, 1, limit - 3), "..."))
   }
   return(str)
+}
+
+test.type.order.str <- function(test.type)
+{
+  return (switch(test.type,
+                 friedman = "sum of ranks",
+                 t.none =, # Fall-throught
+                 t.holm =, # Fall-throught
+                 t.bonferroni = "mean value",
+                 irace.internal.error ("test.type.order.str() Invalid value '",
+                                       test.type, "' of test.type")))
 }
 
 trim.leading <- function(str)
@@ -503,7 +555,7 @@ concordance <- function(data)
 #       data: matrix with the data, instances in rows (judges), configurations
 #             in columns.
 # Returns: variance value [0,1], where 0 is a homogeneous set of instances and 
-#          1 is a heterogeneous set. 
+#          1 is a heterogeneous set.
 dataVariance <- function(data)
 {
   irace.assert (is.matrix(data) && is.numeric(data))
@@ -534,7 +586,7 @@ dataVariance <- function(data)
 
 runcommand <- function(command, args, id, debugLevel)
 {
-  if (debugLevel >= 2) {
+  if (debugLevel >= 2L) {
     irace.note (command, " ", args, "\n")
     elapsed <- proc.time()["elapsed"]
   }
@@ -556,11 +608,11 @@ runcommand <- function(command, args, id, debugLevel)
     err <- paste(err, collapse ="\n")
     if (!is.null(attr(output, "errmsg")))
       output <- paste(sep = "\n", attr(output, "errmsg"))
-    if (debugLevel >= 2)
+    if (debugLevel >= 2L)
       irace.note ("ERROR (", id, "): ", err, "\n")
     return(list(output = output, error = err))
   }
-  if (debugLevel >= 2) {
+  if (debugLevel >= 2L) {
     irace.note ("DONE (", id, ") Elapsed: ",
                 formatC(proc.time()["elapsed"] - elapsed,
                         format = "f", digits = 2), "\n")

@@ -12,14 +12,19 @@
 ## as in the file containing the definition of the parameters.
 ##
 ## FIXME: What about digits?
-readConfigurationsFile <- function(filename, parameters, debugLevel = 0)
+readConfigurationsFile <- function(filename, parameters, debugLevel = 0, text)
 {
-  namesParameters <- names(parameters$conditions)
-  
-  # Read the file.
-  configurationTable <- read.table(filename, header = TRUE,
-                               colClasses = "character",
-                               stringsAsFactors = FALSE)
+  if (missing(filename) && !missing(text)) {
+    filename <- strcat("text=", deparse(substitute(text)))
+    configurationTable <- read.table(text = text, header = TRUE,
+                                     colClasses = "character",
+                                     stringsAsFactors = FALSE)
+  } else {
+    # Read the file.
+    configurationTable <- read.table(filename, header = TRUE,
+                                     colClasses = "character",
+                                     stringsAsFactors = FALSE)
+  }
   irace.assert(is.data.frame(configurationTable))
   nbConfigurations <- nrow(configurationTable)
   # Print the table that has been read.
@@ -28,6 +33,7 @@ readConfigurationsFile <- function(filename, parameters, debugLevel = 0)
     print(as.data.frame(configurationTable, stringAsFactor = FALSE))
   }
 
+  namesParameters <- names(parameters$conditions)
   # This ignores fixed parameters unless they are given with a different value.
   if (ncol(configurationTable) != length(namesParameters)
       || !setequal (colnames(configurationTable), namesParameters)) {
@@ -43,8 +49,7 @@ readConfigurationsFile <- function(filename, parameters, debugLevel = 0)
     }
 
     # All non-fixed parameters must appear in column names.
-    # FIXME: varParameters <- parameters$names[!parameters$isFixed]
-    varParameters <- parameters$names[!unlist(parameters$isFixed)]
+    varParameters <- parameters$names[!parameters$isFixed]
     missing <- setdiff (varParameters, colnames(configurationTable))
     if (length(missing) > 0) {
       irace.error("The parameter names (",
@@ -59,7 +64,7 @@ readConfigurationsFile <- function(filename, parameters, debugLevel = 0)
       tmp <- lapply(missing, function(x) get.fixed.value(x, parameters))
       names(tmp) <- missing
       configurationTable <- cbind.data.frame(configurationTable, tmp,
-                                         stringsAsFactors = FALSE)
+                                             stringsAsFactors = FALSE)
     }
   }
 
@@ -69,13 +74,14 @@ readConfigurationsFile <- function(filename, parameters, debugLevel = 0)
   for (currentParameter in namesParameters) {
     type <- parameters$types[[currentParameter]]
     if (type == "i" || type == "r") {
-      configurationTable[, currentParameter] <- suppressWarnings(as.numeric(configurationTable[, currentParameter]))
+      configurationTable[, currentParameter] <-
+        suppressWarnings(as.numeric(configurationTable[, currentParameter]))
     }
   }
 
   # Loop over all configurations in configurationTable
   for (k in seq_len(nbConfigurations)) {
-    # Loop over all parameters, in an order taken from the conditions
+    # Loop over all parameters, in hierarchical order.
     for (currentParameter in namesParameters) {
       currentValue <- configurationTable[k, currentParameter]
       type <- parameters$types[[currentParameter]]
@@ -132,6 +138,30 @@ readConfigurationsFile <- function(filename, parameters, debugLevel = 0)
   }
   return (configurationTable)
 }
+
+readForbiddenFile <- function(filename)
+{
+  forbiddenExps <- parse(file = filename)
+  # FIXME: Using && or || instead of & and | will not work. Detect
+  # this and give an error to the user.
+
+  # When a is NA and we check a == 5, we would get NA, which is
+  # always FALSE, when we actually want to be TRUE, so we test
+  # is.na() first below.
+  forbiddenExps <- sapply(forbiddenExps,
+                          function(x) substitute(is.na(x) | !(x), list(x = x)))
+  # FIXME: Check that the parameter names that appear in forbidden
+  # all appear in parameters$names to catch typos.
+
+  # FIXME: Instead of a list, we should generate a single expression that is
+  # the logical-OR of all elements of the list.
+
+  # Byte-compile them. We expect that there will be undefined variables, since
+  # the expressions will be evaluated within a data.frame later.
+  forbiddenExps <- sapply(forbiddenExps, compiler::compile,
+                          options = list(suppressUndefined=TRUE))
+  return(forbiddenExps)
+}      
 
 # Reads scenario setup from filename and returns it as a list. Anything not
 # mentioned in the file is not present in the list (that is, it is NULL).
@@ -239,10 +269,13 @@ checkScenario <- function(scenario = defaultScenario())
     scenario$repairConfiguration <- NULL
   } else if (!is.function.name(scenario$repairConfiguration)) {
     irace.error("'repairConfiguration' must be a function")
+  } else {
+    # Byte-compile it.
+    scenario$repairConfiguration <- bytecompile(scenario$repairConfiguration)
   }
 
   if (is.function.name(scenario$targetRunner)) {
-    .irace$target.runner <- scenario$targetRunner
+    .irace$target.runner <- bytecompile(scenario$targetRunner)
   } else if (is.null(scenario$targetRunnerParallel)) {
     if (is.character(scenario$targetRunner)) {
       scenario$targetRunner <- path.rel2abs(scenario$targetRunner)
@@ -258,7 +291,7 @@ checkScenario <- function(scenario = defaultScenario())
     scenario$targetEvaluator <- NULL
     .irace$target.evaluator <- NULL
   } else if (is.function.name(scenario$targetEvaluator)) {
-    .irace$target.evaluator <- scenario$targetEvaluator
+    .irace$target.evaluator <- bytecompile(scenario$targetEvaluator)
   } else if (is.character(scenario$targetEvaluator)) {
     scenario$targetEvaluator <- path.rel2abs(scenario$targetEvaluator)
     file.check (scenario$targetEvaluator, executable = TRUE,
@@ -271,24 +304,17 @@ checkScenario <- function(scenario = defaultScenario())
   irace.assert(is.null(scenario$targetEvaluator) == is.null(.irace$target.evaluator))
   
   # Training instances
-  if (is.null.or.empty(scenario$instances.extra.params)) {
-    scenario$instances.extra.params <- NULL
-  }
   if (is.null.or.empty(scenario$instances)) {
     scenario$trainInstancesDir <- path.rel2abs(scenario$trainInstancesDir)
     if (!is.null.or.empty(scenario$trainInstancesFile)) {
       scenario$trainInstancesFile <- path.rel2abs(scenario$trainInstancesFile)
     }
-    scenario[c("instances", "instances.extra.params")] <-
-      readInstances(instancesDir = canonical.dirname (scenario$trainInstancesDir),
+    scenario$instances <-
+      readInstances(instancesDir = scenario$trainInstancesDir,
                     instancesFile = scenario$trainInstancesFile)
   }
   
   # Testing instances
-  if (is.null.or.empty(scenario$testInstances.extra.params)) {
-    scenario$testInstances.extra.params <- NULL
-  }
-
   if (is.null.or.empty(scenario$testInstances)) {
     if (!is.null.or.empty(scenario$testInstancesDir) || 
         !is.null.or.empty(scenario$testInstancesFile)) {
@@ -296,8 +322,8 @@ checkScenario <- function(scenario = defaultScenario())
       if (!is.null.or.empty(scenario$testInstancesFile)) {
         scenario$testInstancesFile <- path.rel2abs(scenario$testInstancesFile)
       }
-      scenario[c("testInstances", "testInstances.extra.params")] <-
-        readInstances(instancesDir = canonical.dirname (scenario$testInstancesDir),
+      scenario$testInstances <-
+        readInstances(instancesDir = scenario$testInstancesDir,
                       instancesFile = scenario$testInstancesFile)
     } else {
       scenario$testInstances <- NULL
@@ -324,17 +350,7 @@ checkScenario <- function(scenario = defaultScenario())
     scenario$forbiddenFile <- path.rel2abs(scenario$forbiddenFile)
     file.check (scenario$forbiddenFile, readable = TRUE,
                 text = "forbidden configurations file")
-    # FIXME: Using && or || instead of & and | will not work. Detect
-    # this and give an error to the user.
-    scenario$forbiddenExps <- parse(file = scenario$forbiddenFile)
-    # When a is NA and we check a == 5, we would get NA, which is
-    # always FALSE, when we actually want to be TRUE, so we test
-    # is.na() first below.
-    scenario$forbiddenExps <-
-      sapply(scenario$forbiddenExps,
-             function(x) substitute(is.na(x) | !(x), list(x = x)))
-    # FIXME: Check that the parameter names that appear in forbidden
-    # all appear in parameters$names to catch typos.
+    scenario$forbiddenExps <- readForbiddenFile(scenario$forbiddenFile)
     cat("# ", length(scenario$forbiddenExps),
         " expression(s) specifying forbidden configurations read from '",
         scenario$forbiddenFile, "'\n", sep = "")
@@ -482,16 +498,6 @@ checkScenario <- function(scenario = defaultScenario())
   return (scenario)
 }
 
-print.instances.extra.params <- function(param, value)
-{
-  if (is.null.or.empty(paste(value, collapse=""))) {
-    cat (param, "= NULL\n")
-  } else {
-    cat (param, "=\n")
-    cat(paste(names(value), value, sep=" : "), sep="\n")
-  }
-}
-
 print.instances <- function(param, value)
 {
   cat (param, "= \"")
@@ -504,12 +510,8 @@ printScenario <- function(scenario)
   cat("## irace scenario:\n")
   for (param in .irace.params.names) {
     
-    # Special case for instances.extra.params
-    if (param == "instances.extra.params"
-        || param == "testInstances.extra.params") {
-      print.instances.extra.params (param, scenario[[param]])
-    } else if (param == "instances" || param == "testInstances") {
-      # Special case for instances
+    # Special case for instances
+    if (param == "instances" || param == "testInstances") {
       print.instances (param, scenario[[param]])
     } else {# All other parameters (no vector, but can be functions)
       # FIXME: Perhaps deparse() is not the right way to do this?
@@ -527,7 +529,7 @@ defaultScenario <- function(scenario = list())
     irace.error("Unknown scenario parameters: ",
                 paste(names(scenario)[which(!names(scenario)
                                             %in% .irace.params.names)],
-                      sep=", "))
+                      collapse = ", "))
   }
 
   for (k in .irace.params.names) {
@@ -543,19 +545,19 @@ readInstances <- function(instancesDir = NULL, instancesFile = NULL)
   if (is.null.or.empty(instancesDir) && is.null.or.empty(instancesFile))
     irace.error("Both instancesDir and instancesFile are empty: No instances provided")
   
-  instances <- instances.extra.params <- NULL
+  instances <- NULL
   
   if (!is.null.or.empty(instancesFile)) {
     file.check (instancesFile, readable = TRUE, text = "instance file")
     # We do not warn if the last line does not finish with a newline.
-    lines <- readLines (instancesFile, warn = FALSE)
-    lines <- sub("#.*$", "", lines) # Remove comments
-    lines <- sub("^[[:space:]]+", "", lines) # Remove extra spaces
-    lines <- lines[lines != ""] # Delete empty lines
-    instances <- sub("^([^[:space:]]+).*$", "\\1", lines)
-    instances <- paste0 (instancesDir, instances)
-    instances.extra.params <- sub("^[^[:space:]]+(.*)$", "\\1", lines)
-    names (instances.extra.params) <- instances
+    instances <- readLines (instancesFile, warn = FALSE)
+    instances <- sub("#.*$", "", instances) # Remove comments
+    instances <- sub("^[[:space:]]+", "", instances) # Remove leading whitespace
+    instances <- instances[instances != ""] # Delete empty lines
+    if (is.null.or.empty(instances))
+      irace.error("No instances found in `", instancesFile, "'")
+    if (!is.null.or.empty(instancesDir))
+       instances <- paste0 (instancesDir, "/", instances)
   } else {
     file.check (instancesDir, isdir = TRUE, notempty = TRUE,
                 text = "instances directory")
@@ -567,8 +569,7 @@ readInstances <- function(instancesDir = NULL, instancesFile = NULL)
       irace.error("No instances found in `", instancesDir, "'")
   }
   
-  return(list(instances = instances,
-              instances.extra.params = instances.extra.params))
+  return(instances)
 }
 
 ## Check targetRunner execution
@@ -596,7 +597,6 @@ checkTargetFiles <- function(scenario, parameters)
                               seed = 1234567,
                               configuration = values[i, , drop = FALSE],
                               instance = scenario$instances[1],
-                              extra.params = scenario$instances.extra.params[[1]],
                               switches = switches)
   # Executing targetRunner
   cat("# Executing targetRunner (", nrow(configurations), "times)...\n")

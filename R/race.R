@@ -47,11 +47,6 @@ race.wrapper <- function(configurations, instance.idx, which.alive, which.exe, p
   seed <- .irace$instancesList[instance.idx, "seed"]
   id.instance  <- .irace$instancesList[instance.idx, "instance"]
   instance <- scenario$instances[[id.instance]]
-  extra.params <- NULL
-  if (!is.null (scenario$instances.extra.params)
-      && !is.na (scenario$instances.extra.params[[id.instance]]))
-    extra.params <- scenario$instances.extra.params[[id.instance]]
-
   values <- removeConfigurationsMetaData(configurations)
   values <- values[, parameters$names, drop = FALSE]
   switches <- parameters$switches[parameters$names]
@@ -65,7 +60,6 @@ race.wrapper <- function(configurations, instance.idx, which.alive, which.exe, p
                                   seed = seed,
                                   configuration = values[i, , drop = FALSE],
                                   instance = instance, 
-                                  extra.params = extra.params,
                                   switches = switches)
     ntest <- ntest + 1
   }
@@ -222,50 +216,31 @@ aux.ttest <- function(results, no.tasks.sofar, alive, which.alive, no.alive, con
               dropped.any = dropped.any, p.value = min(PJ[2,])))
 }
 
-# FIXME: This can be simplified a lot more. Some arguments already appear in
-# scenario.
-race <- function(maxExp = 0,
-                 minSurvival = 1,
-                 elite.data = NULL,
-                 configurations,
-                 parameters,
-                 scenario,
-                 elitistNewInstances)
+race.init.instances <- function(deterministic, max.instances)
 {
-  # FIXME: Remove argument checking. This must have been done by the caller.
-  stat.test <- scenario$testType
-  conf.level <- scenario$confidence
-  first.test <- scenario$firstTest
-  each.test <- scenario$eachTest
-  elitist <- scenario$elitist
-  
-  # Check argument: maxExp
-  if (!missing(maxExp) &&
-      (!is.numeric(maxExp) ||
-       length(maxExp)!=1 ||
-       !is.finite(maxExp)))
-    stop("maxExp must be an single number")
-  maxExp <- ifelse(maxExp>0,maxExp,0)
-  maxExp <- floor(maxExp)
+  if (.irace$next.instance <= max.instances) {
+    race.instances <- .irace$next.instance : max.instances
+  } else {
+    # This may happen if the scenario is deterministic and we would need
+    # more instances than what we have.
+    irace.assert(deterministic)
+    race.instances <- 1 : max.instances
+  }
+  return(race.instances)
+}
 
-  # Check argument: conf.level
-  if (!missing(conf.level) &&
-      (!is.numeric(conf.level) || length(conf.level)!=1 ||
-       !is.finite(conf.level) || conf.level<0 || conf.level>1)) 
-    stop("conf.level must be a single number between 0 and 1")
-
-  # Create the instance list according to the algorithm selected
+elitrace.init.instances <- function(race.env, deterministic, max.instances)
+{
   # if next.instance == 1 then this is the first iteration.
-  max.instances <- nrow(.irace$instancesList)
-  if (elitist && .irace$next.instance != 1) {
+  if (.irace$next.instance != 1) {
     new.instances <- NULL
-    last.new <- .irace$next.instance - 1 + elitistNewInstances
+    last.new <- .irace$next.instance + race.env$elitistNewInstances - 1
     # Do we need to add new instances?
-    if (elitistNewInstances > 0) {
+    if (race.env$elitistNewInstances > 0) {
       if (last.new > max.instances) {
         # This may happen if the scenario is deterministic and we would need
         # more instances than what we have.
-        irace.assert(scenario$deterministic)
+        irace.assert(deterministic)
         if (.irace$next.instance <= max.instances) {
           # Add all instances that we have not seen yet as new ones.
           last.new <- max.instances
@@ -273,7 +248,7 @@ race <- function(maxExp = 0,
         } # else new.instances remains NULL and last.new remains > number of instances.
         # We need to update this because the value is used below and now there
         # may be fewer than expected, even zero.
-        elitistNewInstances <- length(new.instances)
+        race.env$elitistNewInstances <- length(new.instances)
       } else {
         new.instances <- .irace$next.instance : last.new
       }
@@ -285,61 +260,15 @@ race <- function(maxExp = 0,
     # new.instances + past.instances + future.instances
     race.instances <- c(new.instances, sample.int(.irace$next.instance - 1),
                         future.instances)
-  } else if (.irace$next.instance <= max.instances) {
-    race.instances <- .irace$next.instance : max.instances
   } else {
-    # This may happen if the scenario is deterministic and we would need
-    # more instances than what we have.
-    irace.assert(scenario$deterministic)
-    race.instances <- 1 : max.instances
+    race.instances <- race.init.instances(deterministic, max.instances)
   }
-  no.tasks      <- length(race.instances)
-  no.configurations <- nrow(configurations)
+  return(race.instances)
+}
 
-  interactive <- TRUE
-
-  if (maxExp && no.configurations > maxExp)
-    irace.error("Max number of experiments is smaller than number of configurations")
-
-  if (no.configurations <= minSurvival) {
-    irace.error("Not enough configurations (", no.configurations,
-                ") for a race (minSurvival=", minSurvival, ")")
-  }
-  
-  # Initialize some variables...
-  if (is.null(elite.data)) {
-    Results <- matrix(nrow = 0, ncol = no.configurations,
-                      dimnames = list(NULL, as.character(configurations[, ".ID."])))
-  } else {
-    Results <- matrix(NA, 
-                      nrow = elitistNewInstances + nrow(elite.data), 
-                      ncol = no.configurations, 
-                      dimnames = list(as.character(race.instances[
-                        1:(elitistNewInstances + nrow(elite.data))]),
-                        as.character(configurations[, ".ID."])) )
-    Results[rownames(elite.data), colnames(elite.data)] <- elite.data
-    is.elite <- colSums(!is.na(Results))
-  }
-
-  # Elitist irace needed info
-  if (elitist) {
-    if (is.null(elite.data)) {
-      elite.safe <- first.test
-    } else {
-      elite.safe <- elitistNewInstances + nrow(elite.data)
-    }
-  }
-
-
-  experimentLog <- matrix(nrow = 0, ncol = 3,
-                          dimnames = list(NULL, c("instance", "configuration", "time")))
-  alive <- rep(TRUE, no.configurations)
-  best <- 0
-  race.ranks <- c()
-  no.experiments.sofar <- 0
-
-  if (interactive)
-    cat(sep = "", "  Markers:
+race.print.header <- function()
+{
+  cat(sep = "", "  Markers:
      x No test is performed.
      - The test is performed and some configurations are discarded.
      = The test is performed but no configuration is discarded.
@@ -349,28 +278,144 @@ race <- function(maxExp = 0,
 | |   Instance|      Alive|       Best|      Mean best| Exp so far|  W time|  rho|KenW|  Qvar|
 +-+-----------+-----------+-----------+---------------+-----------+--------+-----+----+------+
 ")
+}
 
+race.print.task <- function(Results,
+                            instance,
+                            current.task,
+                            alive,
+                            id.best,
+                            mean.best,
+                            experimentsUsed,
+                            start.time)
+{
+  time.diff <- difftime(Sys.time(), start.time, units = "secs")
+  cat(sprintf("%11d|%11d|%11d|%#15.10g|%11d|%s",
+              instance,
+              sum(alive),
+              id.best,
+              mean.best,
+              experimentsUsed,
+              # FIXME: Maybe better and faster if we only print seconds?
+              format(.POSIXct(time.diff, tz="GMT"), "%H:%M:%S")))
+  if (current.task > 1 && sum(alive) > 1) {
+    conc <- concordance(Results[1:current.task, alive])
+    qvar <- dataVariance(Results[1:current.task, alive])
+    cat(sprintf("|%+#4.2f|%.2f|%.4f|\n", conc$spearman.rho, conc$kendall.w, qvar))
+  } else {
+    cat("|   NA|  NA|    NA|\n")
+  }
+}
+
+race.print.footer <- function(bestconf, mean.best, break.msg, debug.level)
+{
+  cat(sep = "",
+      "+-+-----------+-----------+-----------+---------------+-----------+--------+-----+----+------+\n",
+      if (debug.level >= 1) paste0("# Stopped because ", break.msg, "\n"),
+      sprintf("Best configuration: %11d", bestconf[1, ".ID."]),
+      sprintf("    mean value: %#15.10g", mean.best), "\n",
+      "Description of the best configuration:\n")
+  print(bestconf)
+  cat("\n")
+}
+
+race <- function(maxExp = 0,
+                 minSurvival = 1,
+                 elite.data = NULL,
+                 configurations,
+                 parameters,
+                 scenario,
+                 elitistNewInstances)
+{
+  race.env <- new.env()
+  # FIXME: We should take this from scenario. However, this value should be
+  # zero for the first iteration.
+  ## FIXME2: Probably, instead of this, we should keep elite.safe in the race.env.
+  race.env$elitistNewInstances <- elitistNewInstances
+  stat.test <- scenario$testType
+  conf.level <- scenario$confidence
+  first.test <- scenario$firstTest
+  each.test <- scenario$eachTest
+  elitist <- scenario$elitist
+  no.configurations <- nrow(configurations)
+  experimentLog <- matrix(nrow = 0, ncol = 3,
+                          dimnames = list(NULL, c("instance", "configuration", "time")))
+  alive <- rep(TRUE, no.configurations)
+  
+  ## FIXME: Remove argument checking. This must have been done by the caller.
+  # Check argument: maxExp
+  if (!missing(maxExp) &&
+      (!is.numeric(maxExp) ||
+       length(maxExp)!=1 ||
+       !is.finite(maxExp)))
+    stop("maxExp must be an single number")
+  maxExp <- ifelse(maxExp>0,maxExp,0)
+  maxExp <- floor(maxExp)
+  if (maxExp && no.configurations > maxExp)
+    irace.error("Max number of experiments is smaller than number of configurations")
+
+  if (no.configurations <= minSurvival) {
+    irace.error("Not enough configurations (", no.configurations,
+                ") for a race (minSurvival=", minSurvival, ")")
+  }
+
+  # Check argument: conf.level
+  if (!missing(conf.level) &&
+      (!is.numeric(conf.level) || length(conf.level)!=1 ||
+       !is.finite(conf.level) || conf.level<0 || conf.level>1)) 
+    stop("conf.level must be a single number between 0 and 1")
+
+  # Create the instance list according to the algorithm selected
+  if (elitist)
+    race.instances <- elitrace.init.instances(race.env,
+                                              scenario$deterministic,
+                                              max.instances = nrow(.irace$instancesList))
+  else
+    race.instances <- race.init.instances(scenario$deterministic,
+                                          max.instances = nrow(.irace$instancesList))
+  no.tasks <- length(race.instances)
+
+  # Initialize some variables...
+  if (is.null(elite.data)) {
+    if (elitist) elite.safe <- first.test
+    Results <- matrix(nrow = 0, ncol = no.configurations,
+                      dimnames = list(NULL, as.character(configurations[, ".ID."])))
+  } else {
+    elite.safe <- race.env$elitistNewInstances + nrow(elite.data)
+    Results <- matrix(NA, 
+                      nrow = elite.safe,
+                      ncol = no.configurations, 
+                      dimnames = list(as.character(race.instances[1:elite.safe]),
+                                      as.character(configurations[, ".ID."])))
+    Results[rownames(elite.data), colnames(elite.data)] <- elite.data
+    is.elite <- colSums(!is.na(Results))
+  }
+
+  best <- 0
+  race.ranks <- c()
+  experimentsUsed <- 0
   no.elimination <- 0 # number of tasks without elimination
+
+  race.print.header()
+
   # Start main loop
-  break.msg <- paste0("all instances (", no.tasks, ") evaluated")
+  break.msg <- NULL
   for (current.task in seq_len (no.tasks)) {
     which.alive <- which(alive)
     nbAlive     <- length(which.alive)
     which.exe   <- which.alive
 
-    if (elitist) {  
-      # Filter configurations that do not need to be executed (elites).
-      # This is valid only for previous iteration instances.
-      if (!is.null(elite.data) && elitistNewInstances < current.task
-          && current.task <= elite.safe ) {
-        # Execute everything that is alive and not yet executed.
-        not.executed <- is.na(Results[current.task, ])
-        irace.assert(length(not.executed) == length(alive))
-        which.exe <- which(alive & not.executed)
-        # Remove one elite count from every configuration already executed.
-        is.elite <- is.elite - (!not.executed)
-        irace.assert (all(is.elite >= 0))
-      }
+    if (elitist
+        # Filter configurations that do not need to be executed (elites).
+        # This is valid only for previous iteration instances.
+        && !is.null(elite.data) && current.task <= elite.safe) {
+      # Execute everything that is alive and not yet executed.
+      not.executed <- is.na(Results[current.task, ])
+      irace.assert(length(not.executed) == length(alive))
+      which.exe <- which(alive & not.executed)
+      # Remove one elite count from every configuration already executed.
+      is.elite <- is.elite - (!not.executed)
+      irace.assert (all(is.elite >= 0))
     }
 
     if (current.task > first.test) {
@@ -386,13 +431,18 @@ race <- function(maxExp = 0,
       # If we just did a test, check that we have enough budget to reach the
       # next test.
       if (maxExp && ( (current.task - 1) %% each.test) == 0
-          && no.experiments.sofar + length(which.exe) * each.test > maxExp) {
+          && experimentsUsed + length(which.exe) * each.test > maxExp) {
         break.msg <- paste0("experiments for next test (",
-                            no.experiments.sofar + length(which.exe) * each.test,
+                            experimentsUsed + length(which.exe) * each.test,
                             ") > max experiments (", maxExp, ")")
         break
       }
     }
+    irace.assert(nbAlive > 1)
+    ## if (nbAlive == 1) {
+    ##   break.msg <- "only one alive configuration"
+    ##   break
+    ## }
 
     if (elitist) {
       if (scenario$elitistLimit != 0 && current.task > elite.safe
@@ -413,14 +463,11 @@ race <- function(maxExp = 0,
 #      }
     }
 
-    if (nbAlive == 1) {
-      break.msg <- "only one alive configuration"
-      break
-    }
 
     start.time <- Sys.time()
     # Execute experiments
-    output <- race.wrapper (configurations = configurations, instance.idx = race.instances[current.task],
+    output <- race.wrapper (configurations = configurations,
+                            instance.idx = race.instances[current.task],
                             which.alive = which.alive, which.exe = which.exe,
                             parameters = parameters, scenario = scenario)
                             
@@ -448,9 +495,9 @@ race <- function(maxExp = 0,
                            cbind(race.instances[current.task],
                                  configurations[which.exe, ".ID."],
                                  vtimes))
-
-    no.experiments.sofar <- no.experiments.sofar + length(which.exe)
-
+    
+    experimentsUsed <- experimentsUsed + length(which.exe)
+    
     ## Drop bad configurations.
     # We assume that first.test is a multiple of each.test.  In any
     # case, this will only do the first test after the first multiple
@@ -476,17 +523,15 @@ race <- function(maxExp = 0,
         irace.assert (all(is.elite >= 0))
         alive <- alive | (is.elite > 0)
       }
-
-      if (interactive) {
-        if (test.res$dropped.any) {
-          if (aux.alive != sum(alive)) cat("|!|") else cat("|-|") 
-        } else { 
-          cat("|=|") 
-        }
+      
+      if (test.res$dropped.any) {
+        if (aux.alive != sum(alive)) cat("|!|") else cat("|-|") 
+      } else { 
+        cat("|=|") 
       }
       
     } else {
-      if (interactive) cat("|x|")
+      cat("|x|")
       # LESLIE : Not sure this is needed, but just in case.
       if (length(which.alive) == 1) {
         race.ranks <- 1
@@ -515,25 +560,15 @@ race <- function(maxExp = 0,
     # the sum of ranks in the case of test == friedman?
     mean.best <- mean(Results[1:current.task, best])
 
-    if (interactive) {
-      time.diff <- difftime(Sys.time(), start.time, units = "secs")
-      cat(sprintf("%11d|%11d|%11d|%#15.10g|%11d|%s",
-                  race.instances[current.task],
-                  sum(alive),
-                  configurations[best, ".ID."],
-                  mean.best,
-                  no.experiments.sofar,
-                  # FIXME: Maybe better and faster if we only print seconds?
-                  format(.POSIXct(time.diff, tz="GMT"), "%H:%M:%S")))
-      if (current.task > 1 && sum(alive) > 1) {
-        conc <- concordance(Results[1:current.task, alive])
-        qvar <- dataVariance(Results[1:current.task, alive])
-        cat(sprintf("|%+#4.2f|%.2f|%.4f|\n", conc$spearman.rho, conc$kendall.w,
-                    qvar))
-      } else {
-        cat("|   NA|  NA|    NA|\n")
-      }
-    }
+    race.print.task(Results,
+                    race.instances[current.task],
+                    current.task,
+                    alive,
+                    configurations[best, ".ID."],
+                    mean.best,
+                    experimentsUsed,
+                    start.time)
+
     prev.alive  <- which.alive
     which.alive <- which(alive)
 
@@ -551,19 +586,13 @@ race <- function(maxExp = 0,
     } 
   }
 
-  description.best <- configurations[best, , drop = FALSE]
-  
-  if (interactive) {
-    cat(sep = "",
-        "+-+-----------+-----------+-----------+---------------+-----------+--------+-----+----+------+\n",
-        if (scenario$debugLevel >= 1) paste0("# Stopped because ", break.msg, "\n"),
-        sprintf("Best configuration: %11d", description.best[1, ".ID."]),
-        sprintf("    mean value: %#15.10g", mean.best), "\n",
-        "Description of the best configuration:\n")
-    print(description.best)
-    cat("\n")
-  }
+  if (is.null(break.msg))
+    break.msg <- paste0("all instances (", no.tasks, ") evaluated")
 
+  race.print.footer(bestconf = configurations[best, , drop = FALSE],
+                    mean.best = mean.best,
+                    break.msg = break.msg, debug.level = scenario$debugLevel)
+  
   nbAlive <- sum(alive)
   configurations$.ALIVE. <- as.logical(alive)
   # Assign the proper ranks in the configurations data.frame.
@@ -582,10 +611,11 @@ race <- function(maxExp = 0,
   }
 
   # nrow(Results) may be smaller, equal or larger than current.task.
+  irace.assert(nrow(experimentLog) == experimentsUsed)
+  
   return(list(experiments = Results,
               experimentLog = experimentLog,
-              # FIXME: Rename this to experimentsUsed for consistency
-              experimentsUsed = no.experiments.sofar,
+              experimentsUsed = experimentsUsed,
               nbAlive = nbAlive,
               configurations = configurations))
 }

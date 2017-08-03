@@ -60,40 +60,48 @@ recoverFromFile <- function(filename)
 ##
 ## Numerical configurations similarity function
 ##
+# FIXME: This function is too slow and it shows up in profiles.
 numeric.configurations.equal <- function(x, configurations, parameters, threshold, param.names)
 {
   d <- rep(0.0, nrow(configurations))
-  bmat <- matrix(TRUE, nrow=nrow(configurations),ncol=length(param.names))
+  isSimilar.mat <- matrix(TRUE, nrow = nrow(configurations), ncol = length(param.names))
   selected <- 1:nrow(configurations)
   for (i in seq_along(param.names)) {
     param <- param.names[i]
-    lower <- paramLowerBound(param, parameters)
-    upper <- paramUpperBound(param, parameters)
+    lower <- parameters$domain[[param]][1]
+    upper <- parameters$domain[[param]][2]
  
     X <- x[[param]]
+    # FIXME: Since at the end we select a subset of configurations, we could use selected here.
     y <- configurations[, param]
-    for (j in seq_len(nrow(bmat))) { # Configurations loop
+    ## FIXME: This can probably done much faster by doing a matrix operation that updates
+    ## isSimilar.mat[, i] in one step instead of the for-loop.
+    ## We would need to handle the NAs first.
+    for (j in seq_len(nrow(isSimilar.mat))) { # Configurations loop
       Y <- y[selected[j]]
       if (is.na (X) && is.na(Y)) { # Both NA, just ignore this param
         next
       } else if (xor(is.na (X), is.na(Y))) { # Distance is 1.0, so not equal
-        bmat[j,i] <- FALSE 
+        isSimilar.mat[j,i] <- FALSE 
       } else {
+        # FIXME: Why is this updating d[j]? It seems that if the difference is
+        # large for one configuration, then it will be assumed to be large for
+        # the rest.
         d[j] <- max(d[j], abs((as.numeric(X) - as.numeric(Y)) / (upper - lower)))
-        if (d[j] > threshold) bmat[j,i] <- FALSE
+        if (d[j] > threshold) isSimilar.mat[j,i] <- FALSE
       }
     }
-    index <- which(apply(bmat,1,all))
-    bmat <- bmat[index, , drop=FALSE]
+    index <- which(apply(isSimilar.mat,1,all))
+    isSimilar.mat <- isSimilar.mat[index, , drop=FALSE]
     d <- d[index]
     selected  <- selected[index]
-    if (nrow(bmat) == 0) break
+    if (nrow(isSimilar.mat) == 0) break
   }
   
   similar <- c()
   if (length(selected) != 0)
     similar <- c(x[[".ID."]], configurations[selected,".ID."])
-  
+
   return(similar)
 }
 
@@ -186,8 +194,16 @@ similarConfigurations <- function(configurations, parameters, threshold)
         if (debug.level >= 1) cat(".")
       }
     }
+    # FIXME: We have to use unique because we return the same configuration
+    # more than once in different calls to numeric.configurations.equal.
+    # Currently, we compare each configuration k=1...n with every configuration
+    # k+1...n. Instead, we should compare k=1...n with ((k+1...n) notin
+    # similar).  It may happen that A ~ B and A ~ C and B /= C, but this is OK
+    # because we still return A, B and C. It may also happen that A ~ B, B ~ C
+    # and A /= C, but this is also OK because we will compare A with B,C then B
+    # with C.
     similar <- unique(similar)
-    configurations <- configurations[configurations[, ".ID."] %in% similar,]   
+    configurations <- configurations[configurations[, ".ID."] %in% similar, ]
   }
   
   if (debug.level >= 1) cat(" DONE\n")
@@ -838,7 +854,7 @@ irace <- function(scenario, parameters)
         }
         
       }
-      testConfigurations <- allConfigurations[1:nbConfigurations,]
+      raceConfigurations <- allConfigurations[1:nbConfigurations,]
     } else {
       # How many new configurations should be sampled?
       nbNewConfigurations <- nbConfigurations - nrow(eliteConfigurations)
@@ -863,19 +879,19 @@ irace <- function(scenario, parameters)
       # Set ID of the new configurations.
       newConfigurations <- cbind (.ID. = max(0, allConfigurations$.ID.) +
                               1:nrow(newConfigurations), newConfigurations)
-      testConfigurations <- rbind(eliteConfigurations[, 1:ncol(allConfigurations)],
+      raceConfigurations <- rbind(eliteConfigurations[, 1:ncol(allConfigurations)],
                               newConfigurations)
-      rownames(testConfigurations) <- testConfigurations$.ID.
+      rownames(raceConfigurations) <- raceConfigurations$.ID.
 
       if (scenario$softRestart) {
         #          Rprof("profile.out")
-        tmp.ids <- similarConfigurations (testConfigurations, parameters,
+        tmp.ids <- similarConfigurations (raceConfigurations, parameters,
                                       threshold = scenario$softRestartThreshold)
         #          Rprof(NULL)
         if (!is.null(tmp.ids)) {
           if (debugLevel >= 1)
             irace.note("Soft restart: ", paste(collapse = " ", tmp.ids), " !\n")
-          model <- restartConfigurations (testConfigurations, tmp.ids, model,
+          model <- restartConfigurations (raceConfigurations, tmp.ids, model,
                                       parameters, nbNewConfigurations)
           iraceResults$softRestart[indexIteration] <- TRUE
           iraceResults$model$afterSR[[indexIteration]] <- model
@@ -891,9 +907,9 @@ irace <- function(scenario, parameters)
           # Set ID of the new configurations.
           newConfigurations <- cbind (.ID. = max(0, allConfigurations$.ID.) + 
                                   1:nrow(newConfigurations), newConfigurations)
-          testConfigurations <- rbind(eliteConfigurations[, 1:ncol(allConfigurations)],
+          raceConfigurations <- rbind(eliteConfigurations[, 1:ncol(allConfigurations)],
                                       newConfigurations)
-          rownames(testConfigurations) <- testConfigurations$.ID.
+          rownames(raceConfigurations) <- raceConfigurations$.ID.
         }
       }
 
@@ -903,8 +919,9 @@ irace <- function(scenario, parameters)
     }
 
     if (debugLevel >= 2) {
-      irace.note("Configurations for the race n ", indexIteration, ":\n")
-      configurations.print(testConfigurations, metadata = TRUE)
+      irace.note("Configurations for the race n ", indexIteration,
+                 " (elite configurations listed first, then new configurations):\n")
+      configurations.print(raceConfigurations, metadata = TRUE)
     }
 
     # Get data from previous elite tests 
@@ -925,7 +942,7 @@ irace <- function(scenario, parameters)
 
     if (debugLevel >= 1) irace.note("Launch race\n")
     raceResults <- race (scenario = scenario,
-                         configurations = testConfigurations,
+                         configurations = raceConfigurations,
                          parameters = parameters, 
                          maxExp = currentBudget, 
                          minSurvival = minSurvival,
@@ -958,8 +975,10 @@ irace <- function(scenario, parameters)
     }
 
     if (debugLevel >= 3) {
-      irace.note("Results for the race of iteration ", indexIteration, ":\n")
-      configurations.print (raceResults$configurations, metadata=TRUE)
+      irace.note("Results for the race of iteration ", indexIteration,
+                 " (from best to worst, according to the ",
+                 test.type.order.str(scenario$testType), "):\n")
+      configurations.print (raceResults$configurations, metadata = TRUE)
     }
 
     if (debugLevel >= 1) { irace.note("Extracting elites\n") }
@@ -968,7 +987,9 @@ irace <- function(scenario, parameters)
     # would reduce overhead.
     eliteConfigurations <- extractElites(raceResults$configurations,
                                          min(raceResults$nbAlive, minSurvival))
-    irace.note("Elite configurations (first number is the configuration ID):\n")
+    irace.note("Elite configurations (first number is the configuration ID;",
+               " listed from best to worst according to the ",
+               test.type.order.str(scenario$testType), "):\n")
     configurations.print(eliteConfigurations, metadata = debugLevel >= 1)
     iraceResults$iterationElites <- c(iraceResults$iterationElites, eliteConfigurations$.ID.[1])
     iraceResults$allElites[[indexIteration]] <- eliteConfigurations$.ID.
@@ -983,7 +1004,7 @@ irace <- function(scenario, parameters)
     }
 
     if (debugLevel >= 3) {
-      irace.note("All configurations:\n")
+      irace.note("All configurations (sampling order):\n")
       configurations.print(allConfigurations, metadata = TRUE)
     }
 

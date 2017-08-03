@@ -8,21 +8,21 @@ conditionsSatisfied <- function (parameters, partialConfiguration, paramName)
 {
   condition <- parameters$conditions[[paramName]]
   # If there is no condition, do not waste time evaluating it.
-  if (!length(all.vars(condition, max.names = 1L))) return(TRUE)
+  if (isTRUE(condition)) return(TRUE)
 
   v <- eval(condition, as.list(partialConfiguration))
   # Return TRUE if TRUE, FALSE if FALSE or NA
-  v <- !is.na(v) && v 
+  ## FIXME: If we byte-compile the condition, then we should incorporate the
+  ## following into the condition directly. See readForbiddenFile.
+  v <- !is.na(v) && v
   return(v)
 }
 
 new.empty.configuration <- function(parameters)
 {
-  namesParameters <- names(parameters$conditions)
-  newConfigurationsColnames <- c(namesParameters, ".PARENT.")
-  empty.configuration <- as.list(rep(NA, length(newConfigurationsColnames)))
-  names(empty.configuration) <- newConfigurationsColnames
-  return(empty.configuration)
+  newConfigurationsColnames <- c(names(parameters$conditions), ".PARENT.")
+  return(setNames(as.list(rep(NA, length(newConfigurationsColnames))),
+                  newConfigurationsColnames))
 }
 
 get.fixed.value <- function(param, parameters)

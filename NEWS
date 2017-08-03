@@ -1,13 +1,41 @@
+2.4
+
+ * The output of irace now specifies in which order, if any, configurations are
+   printed.
+                              (Manuel López-Ibáñez, suggested by Markus Wagner)
+ 
+ * Several fixes for handling paths in Windows.
+                                                     (Manuel López-Ibáñez)
+                                                     
+ * readConfigurationsFile() now has a text= argument, which allows reading
+   configurations from a string.
+                                                     (Manuel López-Ibáñez)
+
+ * User-provided functions (targetRunner, targetEvaluator and
+   repairConfiguration) and user-provided conditions for forbidden
+   configurations are now byte-compiled when read, which should make their
+   evaluation noticeably faster.
+                                                      (Manuel López-Ibáñez)
+
+ * The argument 'experiment' passed to the R function targetRunner does not
+   contain anymore an element 'extra.params'. Similarly, the 'scenario'
+   structure does not contain anymore the elements 'instances.extra.params' and
+   'testInstances.extra.params'. Any instance-specific parameters values now
+   form part of the character string that defines an instance and it is up to
+   the user-defined targetRunner to parse them appropriately. These changes
+   make no difference when targetRunner is an external script, or when
+   instances and instance-specific parameter values are read from a file.
+                                                        (Manuel López-Ibáñez)
+
 2.3
 
  * Fix bug that will cause iraceResults$experimentLog to count calls to
    targetEvaluator as experiments, even if no call to targetRunner was
    performed. This does not affect the computation of the budget consumed and,
    thus, it does not affect the termination criteria of irace. The bug triggers
-   an assertion that terminates irace, thus no successful run with version 2.2
-   is affected.
+   an assertion that terminates irace, thus no run that was successful with
+   version 2.2 is affected.
                                                      (Manuel López-Ibáñez)
-
 
 2.2
 

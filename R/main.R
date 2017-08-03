@@ -25,7 +25,7 @@
 #  or by writing to the  Free Software Foundation, Inc., 59 Temple Place,
 #                  Suite 330, Boston, MA 02111-1307 USA
 # -------------------------------------------------------------------------
-# $Revision: 1738 $
+# $Revision: 1841 $
 # =========================================================================
 
 ## __VERSION__ below will be replaced by the version defined in R/version.R
@@ -34,9 +34,9 @@ irace.license <-
 '*******************************************************************************
 * irace: An implementation in R of Iterated Race
 * Version: __VERSION__
-* Copyright (C) 2010-2016
+* Copyright (C) 2010-2017
 * Manuel Lopez-Ibanez     <manuel.lopez-ibanez@manchester.ac.uk>
-* Jeremie Dubois-Lacoste  <jeremie.dubois-lacoste@ulb.ac.be>
+* Jeremie Dubois-Lacoste  
 * Leslie Perez Caceres    <leslie.perez.caceres@ulb.ac.be>
 *
 * This is free software, and you are welcome to redistribute it under certain
@@ -82,7 +82,6 @@ execDir                    p    ""     "--exec-dir"                   "./"      
 logFile                    p    "-l"   "--log-file"                   "./irace.Rdata"    "File to save tuning results as an R dataset, either absolute path or relative to execDir." 
 recoveryFile               p    ""     "--recovery-file"              ""                 "Previously saved log file to recover the execution of irace, either absolute path or relative to the current directory.  If empty or NULL, recovery is not performed."
 instances                  s    ""     ""                             ""                 ""
-instances.extra.params     s    ""     ""                             ""                 ""
 trainInstancesDir          p    ""     "--train-instances-dir"        "./Instances"      "Directory where tuning instances are located; either absolute path or relative to current directory." 
 trainInstancesFile         p    ""     "--train-instances-file"       ""                 "File containing a list of instances and optionally additional parameters for them." 
 configurationsFile         p    ""     "--configurations-file"        ""                 "File containing a list of initial configurations. If empty or NULL do not use a file."
@@ -119,7 +118,6 @@ softRestartThreshold       r    ""     "--soft-restart-threshold"     NA        
 testInstancesDir           p    ""     "--test-instances-dir"         ""                 "Directory where testing instances are located, either absolute or relative to current directory."
 testInstancesFile          p    ""     "--test-instances-file"        ""                 "File containing a list of test instances and optionally additional parameters for them."
 testInstances              x    ""     ""                             ""                 ""
-testInstances.extra.params x    ""     ""                             ""                 ""
 testNbElites               i    ""     "--test-num-elites"            1                  "Number of elite configurations returned by irace that will be tested if test instances are provided."
 testIterationElites        b    ""     "--test-iteration-elites"      0                  "Enable/disable testing the elite configurations found at each iteration."
 elitist                    b    "-e"   "--elitist"                    1                  "Enable/disable elitist irace."
@@ -131,8 +129,7 @@ repairConfiguration        x    ""     ""                             ""        
 rownames (.irace.params.def) <- .irace.params.def[,"name"]
 .irace.params.names <- rownames(.irace.params.def)[substring(rownames(.irace.params.def), 1, 1) != "."]
 ## FIXME: If these values are special perhaps they should be saved in $state ?
-.irace.params.recover <- c("instances", "instances.extra.params", "seed",
-                           "testInstances", "testInstances.extra.params",
+.irace.params.recover <- c("instances", "seed", "testInstances",
                            # We need this because this data may mutate
                            "targetRunnerData", "elitist", "deterministic")
 
@@ -180,10 +177,12 @@ irace.main <- function(scenario = defaultScenario(), output.width = 9999)
   
   eliteConfigurations <- irace (scenario = scenario, parameters = parameters)
   
-  cat("# Best configurations (first number is the configuration ID)\n")
+  cat("# Best configurations (first number is the configuration ID;",
+      " listed from best to worst according to the ",
+      test.type.order.str(scenario$testType), "):\n", sep = "")
   configurations.print(eliteConfigurations)
   
-  cat("# Best configurations as commandlines (first number is the configuration ID)\n")
+  cat("# Best configurations as commandlines (first number is the configuration ID; same order as above):\n")
   configurations.print.command (eliteConfigurations, parameters)
   
   if (length(eliteConfigurations) > 0 &&
@@ -222,7 +221,7 @@ testing.main <- function(logFile)
   configurations <- iraceResults$allConfigurations[testing.id, , drop=FALSE]
 
   cat(" \n\n")
-  irace.note ("Testing configurations: ", paste(testing.id, collapse=" "), "\n")
+  irace.note ("Testing configurations (in no particular order): ", paste(testing.id, collapse=" "), "\n")
   configurations.print(configurations)  
   cat("# Testing of elite configurations:", scenario$testNbElites, 
       "\n# Testing iteration configurations:", scenario$testIterationElites,"\n")
@@ -230,7 +229,7 @@ testing.main <- function(logFile)
   iraceResults$testing <- testConfigurations(configurations, scenario, parameters)
 
   # FIXME : We should print the seeds also. As an additional column?
-  irace.note ("Testing results (column number is configuration ID):\n")
+  irace.note ("Testing results (column number is configuration ID in no particular order):\n")
   print(iraceResults$testing$experiments)
   
   cwd <- setwd(scenario$execDir)
@@ -269,12 +268,12 @@ testing.cmdline <- function(filename, scenario)
   iraceResults$parameters <- parameters
   iraceResults$allConfigurations <- allConfigurations
   
-  irace.note ("Testing configurations: \n")
+  irace.note ("Testing configurations (in the order given as input): \n")
   configurations.print(allConfigurations)  
   iraceResults$testing <- testConfigurations(allConfigurations, scenario, parameters)
 
   # FIXME : We should print the seeds also. As an additional column?
-  irace.note ("Testing results (column number is configuration ID):\n")
+  irace.note ("Testing results (column number is configuration ID in no particular order):\n")
   print(iraceResults$testing$experiments)
   if (!is.null.or.empty(scenario$logFile)) {
     cwd <- setwd(scenario$execDir)

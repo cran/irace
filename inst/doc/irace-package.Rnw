@@ -127,7 +127,7 @@
 \newcommand{\race}{\pkg{race}\xspace}
 \newcommand{\FRACE}{\text{F-Race}\xspace}
 \newcommand{\IFRACE}{\text{I/F-Race}\xspace}
-\newcommand{\iraceversion}{2.3}
+\newcommand{\iraceversion}{2.4}
 
 \newcommand{\Niter}{\ensuremath{N^\text{iter}}\xspace}
 \newcommand{\Nparam}{\ensuremath{{N^\text{param}}}\xspace}
@@ -844,6 +844,7 @@ irace(scenario = scenario, parameters = parameters)
 
 \end{enumerate}
 
+
 \section{Defining a configuration scenario}
 \subsection{Target algorithm parameters} \label{sec:target parameters}
 
@@ -1040,7 +1041,7 @@ When \parameter{targetRunner} is an auxiliary executable program, it
 is invoked for each candidate configuration, passing as arguments:
 %
 \begin{center}
-\small\code{<id.configuration>\ <id.instance>\ <seed>\ <instance>\ [<extra.params>]\ <configuration>}
+\small\code{<id.configuration>\ <id.instance>\ <seed>\ <instance>\ <configuration>}
 \end{center}
 %
 \begin{center}
@@ -1050,7 +1051,6 @@ is invoked for each candidate configuration, passing as arguments:
     \code{id.instance} & an alphanumeric string that uniquely identifies a pair \code{(instance, seed)};\\
     \code{seed} & seed for the random number generator to be used for this evaluation, ignore the seed for deterministic algorithms;\\
     \code{instance} & string giving the instance to be used for this evaluation;\\
-    \code{extra.params} & user-defined parameters associated to the instance;\\
     \code{configuration} & the pairs parameter label-value that
     describe this candidate configuration. Typically given as command-line
     switches to be passed to the executable program.\\
@@ -1099,7 +1099,6 @@ list. The structure of the \code{experiment} list is as follows:
    \code{id.instance} & an alphanumeric string that uniquely identifies a pair \code{(instance, seed)};\\
    \code{seed} & seed to be used for this evaluation;\\
    \code{instance} & string giving the instance to be used for this evaluation;\\
-   \code{extra.params} & user-defined parameters associated to the instance;\\
    \code{configuration}    & 1-row data frame with a column per parameter name;\\
    \code{switches}         & vector of parameter switches (labels) in the order of parameters used in \code{configuration}.\\
 
@@ -1244,10 +1243,7 @@ specify where to find the training instances.
 By default, the value of \parameter{trainInstancesFile} is empty. This means that \irace will consider all files within the directory given by \parameter{trainInstancesDir} (by default \path{./Instances}) as training instances. 
 
 Otherwise, the value of \parameter{trainInstancesFile} may specify a text
-file. The format of this file is one instance per line, and the first
-alphanumeric string of each line corresponds to the instance filename. The
-remainder text within each line are considered as extra parameters to be
-supplied to \parameter{targetRunner} for this specific instance.
+file. The format of this file is one instance per line. Within each line, elements separated by white-space will be parsed as separate arguments to be supplied to \parameter{targetRunner}. This allows defining instance-specific parameter settings. Quoted strings will be parsed as a single argument.
 %
 The following example shows a training instance file for the \ACOTSP scenario:
 
@@ -1277,11 +1273,7 @@ target-runner 1 113 734718 ./Instances/100/100-1_100-2.tsp --time 1 \
 %@
 
 
-Training instances do not need to be files, \irace just passes their names
-to \parameter{targetRunner}, thus the names can denote benchmark functions or
-descriptive labels that the target algorithm understands. The extra instance
-parameters could actually be the definition of the instance. In that case, 
-\parameter{trainInstancesDir} is usually set to the empty string (\code{--train-instances-dir=""}). For example,
+Training instances do not need to be files, \irace just passes the elements of each line as arguments to \parameter{targetRunner}, thus each line may denote the name of a benchmark function or a label, plus instance-specific settings, that the target algorithm understands. Each line may even be the command-line parameters required to call an instance generator within \parameter{targetRunner}. When the instances do not represent actual files, then \parameter{trainInstancesDir} is usually set to the empty string (\code{--train-instances-dir=""}). For example,
 
 \begin{center}
   \begin{minipage}{0.4\linewidth}
@@ -1297,14 +1289,13 @@ rastrigin_30 --function=15 --nvar 30
 %\caption{Example of training instances file where instances do not correspond to files.}\label{fig:nofile_training}
 %\end{figure}
 
-Optionally, when executing \irace from the \aR console, the list of instances and their specific parameters might be provided explicitly by means of the variables \code{scenario$instances} and \code{scenario$instances.extra.params}, respectively. Thus, the previous example would be equivalent to:
+Optionally, when executing \irace from the \aR console, the list of instances might be provided explicitly by means of the variable \code{scenario$instances}. Thus, the previous example would be equivalent to:
 
 <<instance1, prompt=FALSE, eval=FALSE>>=
-scenario$instances <- c("rosenbrock_20", "rosenbrock_40",
-                        "rastrigin_20", "rastrigin_40")
-scenario$instances.extra.params <-
-  c("--function=12 --nvar 20", "--function=12 --nvar 30",
-    "--function=15 --nvar 20", "--function=15 --nvar 30")
+scenario$instances <- c("rosenbrock_20 --function=12 --nvar 20",
+                        "rosenbrock_40 --function=12 --nvar 30",
+                        "rastrigin_20 --function=15 --nvar 20",
+                        "rastrigin_40 --function=15 --nvar 30")
 @
 
 By default, \irace assumes that the target algorithm is stochastic (the value
@@ -1451,21 +1442,34 @@ variable \parameter{digits}. An example that makes all real-valued parameters
 sum up to one would be:
 %
 <<repairEx,prompt=FALSE, eval=FALSE>>=
-repairConfiguration <- function (configuration, parameters, digits)
+repairConfiguration = function (configuration, parameters, digits)
 {
   isreal <- parameters$type[colnames(configuration)] %in% "r"
   configuration[isreal] <- configuration[isreal] / sum(configuration[isreal])
   return(configuration)
 }
 @
+The following example forces  three specific parameters to be in increasing order:
+%
+<<repairEx2,prompt=FALSE, eval=FALSE>>=
+repairConfiguration = function (configuration, parameters, digits)
+{
+ columns <- c("p1","p2","p3")
+ # cat("Before"); print(configuration)
+ configuration[columns] <- sort(configuration[columns])
+ # cat("After"); print(configuration)
+ return(configuration)
+}
+@
 
+The above code can be specified directly in the \parameter{scenarioFile}, by default \code{scenario.txt}.
 
 \section{Parallelization}\label{sec:parallel}
 A single run of \irace can be done much faster by executing the calls
 to \parameter{targetRunner} (the runs of the target algorithm) in
 parallel. There are four ways to parallelize a single run of \irace:
 
-\begin{itemize}
+\begin{enumerate}
 \item \textbf{Parallel processes}: The option \parameter{parallel} allows
   executing in parallel, within a single computer, the calls
   to \parameter{targetRunner}, by means of the \pkg{parallel} \aR package. For
@@ -1483,7 +1487,7 @@ parallel. There are four ways to parallelize a single run of \irace:
    The user is responsible for setting up the required MPI environment.  MPI is
    commonly available in computing clusters and requires launching \irace in
    some particular way. An example script for using MPI mode in a SGE cluster
-   is given at \IRACEHOME{/examples/mpi/}.
+   is given at \IRACEHOME{/bin/parallel-irace-mpi}.
 
  \item \textbf{Batch jobs clusters}: Some computing clusters work by submitting
    jobs to a batch queue and waiting for the jobs to finish. With the
@@ -1550,8 +1554,8 @@ parallel. There are four ways to parallelize a single run of \irace:
    @
    %
 
+ \end{enumerate}
 
-\end{itemize}
 
 \section{Testing of configurations}\label{sec:testing}
 
@@ -1907,7 +1911,7 @@ configuration corresponds to the first ID. To obtain the values of the
 parameters of all elite configurations found by \irace use:
 
 <<get_elites, prompt=TRUE, eval=TRUE, comment="">>=
-getFinalElites(irace.logFile = "irace-output.Rdata", n = 0)
+getFinalElites(logFile = "irace-output.Rdata", n = 0)
 @
 
 \item \code{iterationElites}: A vector containing the best candidate configuration ID of each iteration. The best configuration found corresponds to the last one
@@ -1921,7 +1925,7 @@ One can obtain the full configuration with:
 <<get_elite, prompt=TRUE, eval=TRUE, comment="">>=
 last <- length(iraceResults$iterationElites)
 id <- iraceResults$iterationElites[last]
-getConfigurationById(irace.logFile = "irace-output.Rdata", ids = id)
+getConfigurationById(logFile = "irace-output.Rdata", ids = id)
 @
 
 \item \code{experiments}: A matrix with configurations as columns and instances
@@ -2018,7 +2022,7 @@ If testing is performed, you can further analyze the resulting best
 configurations by performing statistical tests in \aR or just plotting the
 results:
 
-<<plot_test, fig.pos="H", fig.align="center", out.width='0.75\\textwidth', fig.cap="Boxplot of the testing results of the best configurations.", prompt=TRUE, eval=TRUE, comment="">>=
+<<plot_test, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Boxplot of the testing results of the best configurations.", prompt=TRUE, eval=TRUE, comment="">>=
 results <- iraceResults$testing$experiments
 # Wilcoxon paired test
 conf <- gl(ncol(results), # number of configurations
@@ -2052,7 +2056,7 @@ frequency of the sampling of a set of configurations. For more information on th
 \aR console: \code{?parameterFrequency}. The following example
 plots the frequency of the parameters sampled during one \irace run:
 
-<<freq, fig.pos="H", fig.cap="Parameters sampling frequency.", prompt=TRUE, eval=TRUE, comment="">>=
+<<freq, fig.pos="tbp", fig.cap="Parameters sampling frequency.", prompt=TRUE, eval=TRUE, comment="">>=
 parameterFrequency(iraceResults$allConfigurations, iraceResults$parameters)
 @
 
@@ -2062,16 +2066,55 @@ in the \aR console: (\code{?parallelCoordinatesPlot}).
  The following example shows how to create a parallel
 coordinate plot of the configurations in the last two iterations of \irace.
 
-<<parcord, fig.pos="H", fig.align="center", out.width='0.75\\textwidth', fig.cap="Parallel coordinate plots of the parameters of the configurations in the last two iterations of a run of \\irace.", prompt=FALSE, eval=TRUE, comment="">>=
+<<parcord, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Parallel coordinate plots of the parameters of the configurations in the last two iterations of a run of \\irace.", prompt=FALSE, eval=TRUE, comment="">>=
 # Get last iteration number
 last <- length(iraceResults$iterationElites)
 # Get configurations in the last two iterations
 conf <- getConfigurationByIteration(iraceResults = iraceResults,
                                     iterations = c(last - 1, last))
 parallelCoordinatesPlot (conf, iraceResults$parameters,
-                         param_names = c("algorithm", "alpha",
-                                         "beta", "rho", "q0"),
+                         param_names = c("algorithm", "alpha", "beta", "rho", "q0"),
                          hierarchy = FALSE)
+@
+
+
+It is also possible to plot the performance evolution of the best-so-far configuration over the number of experiments as follows:
+<<trainEvo, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Training set performance of the best-so-far configuration over number of experiments.", prompt=FALSE, eval=TRUE, comment="">>=
+# Get number of iterations
+iters <- unique(iraceResults$experimentLog[, "iteration"])
+# Get number of experiments (function evaluations) up to each iteration
+fes <- cumsum(sapply(iters, function(k)
+  sum(iraceResults$experimentLog[, "iteration"] == k)))
+# Get the mean value of all experiments executed up to each iteration
+# for the best configuration of that iteration.
+values <- sapply(iters, function(k) {
+  instances <- as.character(
+    unique(iraceResults$experimentLog[
+                          iraceResults$experimentLog[, "iteration"] == k,
+                          "instance"]))
+  return(mean(iraceResults$experiments[
+                             instances,
+                             as.character(iraceResults$iterationElites[k])]))})
+plot(fes, values, type="s", xlab = "Function evaluations",
+     ylab = "Estimated mean value over training set")
+points(fes, values)
+@
+
+We can do the same, but using the performance on the test set:
+<<testEvo, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Testing set performance of the best-so-far configuration over number of experiments.", prompt=FALSE, eval=TRUE, comment="">>=
+# Get number of iterations
+iters <- unique(iraceResults$experimentLog[, "iteration"])
+# Get number of experiments (function evaluations) up to each iteration
+fes <- cumsum(sapply(iters, function(k)
+  sum(iraceResults$experimentLog[, "iteration"] == k)))
+# Get the mean value of all experiments executed up to each iteration
+# for the best configuration of that iteration.
+values <- sapply(iters, function(k) 
+  mean(iraceResults$testing$experiments[
+                            , as.character(iraceResults$iterationElites[k])]))
+plot(fes, values, type = "s",
+     xlab = "Function evaluations", ylab = "Mean value over testing set")
+points(fes, values)
 @
 
 
@@ -2323,6 +2366,11 @@ $\texttt{m}\cdot 10^\texttt{e}$ for another parameter
 \code{-m} and \code{-e}, computing the strength value and passing the parameter
 \code{--strength} together with its value to the target algorithm.
 
+More complex parameter space constraints may be implemented by means of
+the \parameter{repairConfiguration} function
+(\autoref{sec:repairconf})
+
+
 \subsection{Unreliable target algorithms}
 
 There are some situations in which the target algorithm may fail to execute
@@ -2361,16 +2409,27 @@ Most \irace options can be specified in the command line using a flag or in the
 package). This section describes the various \irace options that can be
 specified by the user in this way.
 
+\begin{xwarningbox}
+  Relative file-system paths (e.g., \path{../scenario/}) given in the
+  command-line are relative to the current working directory (the directory at
+  which \irace is invoked). However, paths given in
+  the scenario file are relative to the directory containing
+  the scenario file. See also Table~\ref{tab:paths}.
+\end{xwarningbox}
+
+
+
 \subsection{General options}
 \begin{description}
-\defparameter[s]{scenarioFile}{scenario}{./scenario.txt} %
-  File that contains the scenario setup and other irace options. All options listed in this section
-  can be included in this file. See \IRACEHOME{/templates/} for an example.
+  \defparameter[s]{scenarioFile}{scenario}{./scenario.txt} %
+  File that contains the scenario setup and other irace options. All options
+  listed in this section can be included in this file. See
+  \IRACEHOME{/templates/} for an example. Relative file-system paths specified
+  in the scenario file are relative to the scenario file itself.
 
 \defparameter{debugLevel}{debug-level}{0} %
   Level of information to display in the text output of \irace. A value of 0 silences all debug messages.
-  Higher values provide more verbose debug messages. To see details about the text output of \irace, see
-  \autoref{sec:output text}.
+  Higher values provide more verbose debug messages. Details about the text output of \irace are given in \autoref{sec:output text}.
 
 \defparameter{seed}{seed}{NA} %
   Seed to initiallize the random number generator. The seed must be a positive integer. If the seed is
@@ -2386,7 +2445,7 @@ specified by the user in this way.
 \defparameter[l]{logFile}{log-file}{./irace.Rdata} %
   File to save tuning results as an \aR dataset. The provided path must be either an absolute path
   or relative to \parameter{execDir}. See \autoref{sec:output r} for details on the format of the
-  R dataset.
+  \aR dataset.
 
 \defparameter{repairConfiguration}{}{NULL} %
 User-defined \aR function that takes a configuration generated by irace and repairs it. See \autoref{sec:repairconf} for details.
@@ -2435,7 +2494,7 @@ User-defined \aR function that takes a configuration generated by irace and repa
 
   Maximum number of statistical tests performed without successful elimination
   after all instances from the previous race have been evaluated. If the limit
-  is reached, the current race is stopped. Only valid for elitist \irace. Use 0
+  is reached, the current race is stopped. Only valid for elitist \irace. Use \code{0}
   to disable the limit.
 \end{description}
 
@@ -2574,7 +2633,7 @@ Optional data passed to \parameter{targetRunner}. This is ignored by the default
 
 \defparameter{batchmode}{batchmode}{0} %
   Specify how irace waits for jobs to finish when \parameter{targetRunner} submits jobs to
-  a batch cluster: sge, pbs, torque or slurm (\parameter{targetRunner} must
+  a batch cluster: \code{sge}, \code{pbs}, \code{torque} or \code{slurm} (\parameter{targetRunner} must
   submit jobs to the cluster using. for example, \code{qsub}). See
   \autoref{sec:parallel}.
 
@@ -2602,7 +2661,7 @@ Optional data passed to \parameter{targetRunner}. This is ignored by the default
 \defparameter{trainInstancesFile}{train-instances-file}{} %
   File containing a list of instances and optionally additional parameters for them. See \autoref{sec:training}.
   \begin{xwarningbox}
-  If \parameter{trainInstancesDir} is specified, the path contained in \parameter{trainInstancesFile} must be relative to the directory. When using an absolute path or for defining instances that are not files, set \code{trainInstancesDir=""}.
+    The list of instances in \parameter{trainInstancesFile} is interpreted as file-system paths  relative to \parameter{trainInstancesDir}. When using an absolute path or instances that are not files, set \code{trainInstancesDir=""}.
 \end{xwarningbox}
 \end{description}
 
@@ -2669,18 +2728,18 @@ Optional data passed to \parameter{targetRunner}. This is ignored by the default
 \defparameter{testIterationElites}{test-iteration-elites}{0} %
   Enable/disable testing the elite configurations found at each iteration.
 
-\defparameter{testInstancesDir}{test-instance-dir}{} %
+\defparameter{testInstancesDir}{test-instances-dir}{} %
   Directory where testing instances are located, either absolute or relative to the current directory.
 
-\defparameter{testInstancesFile}{test-instance-file}{} %
+\defparameter{testInstancesFile}{test-instances-file}{} %
   File containing a list of test instances and, optionally, additional parameters for them.
   
 \defparameter{-{}-only-test}{}{} %
-Run the configurations provided in the file argument on the test instances. See \autoref{sec:testing}.
+Run the configurations contained in the file provided as argument on the test instances. See \autoref{sec:testing}.
   
 \end{description}
 
-\section{FAQ}
+\section{FAQ (Frequently Asked Questions)}
 
 \subsection{Is \irace minimizing or maximizing the output of my algorithm?}
 
@@ -2778,7 +2837,32 @@ If the path is set correctly and the problem persists, please check these instru
 
 This is a bug in \aR 3.2.0 on Windows. The solution is to update your version of
 \aR.
-     
+
+\subsection{How are relative file-system paths interpreted by \irace?}\label{faq:relpaths}
+
+The answer depends on where the path appears. Relative paths may appear as the
+argument of command-line options, as the value of options given in the scenario
+file, or within various scripts, functions or instance files. Table
+\ref{tab:paths} summarizes how paths are translated from relative to absolute.
+
+\begin{table}[h!]
+  \centering
+  \caption{Translation of relative to absolute file-system paths.}
+  \label{tab:paths}
+  \begin{tabular}{rl}
+    \toprule
+\bf    Relative path appears as \ldots  & \bf\ldots is relative to \ldots \\
+    \midrule
+    the value of \parameter{logFile} or \code{--log-file} & \parameter{execDir}\\
+    the value of other options in the scenario file  &  directory containing the scenario file\\
+    the value of other command-line options & invocation (working) directory of \irace\\
+    code within \parameter{targetRunner} or \parameter{targetEvaluator} & \parameter{execDir}\\
+    a string within \parameter{trainInstancesFile} & \parameter{trainInstancesDir}\\
+    a string within \parameter{testInstancesFile} & \parameter{testInstancesDir}\\
+\bottomrule    
+  \end{tabular}
+\end{table}
+
 %FIXME: complete this section
 %\section{Known problems}
 
@@ -2887,7 +2971,7 @@ indefinitely (see FAQ in \autoref{faq:timeout}).  If you are using temporary
 files to redirect the output of your algorithm, check that these files are
 properly created. We recommend to follow the structure of the example file
 (\code{target-runner}) provided in \IRACEHOME{/templates}. The following
-error examples are based on a file with those characteristics.
+error examples are based on that example file.
 
 In case of failure of \parameter{targetRunner}, \irace will print an error on
 its output describing which execution of \parameter{targetRunner} was not
@@ -3062,6 +3146,25 @@ to see the output that your algorithm produces.
   
 \end{enumerate}
 
+\section{targetEvaluator troubleshooting checklist} \label{sec:evaluator check list}
+
+Even if \parameter{targetRunner} appears to work, the use of \parameter{targetEvaluator} may lead to other problems. We list here the most common encountered by users.
+
+\begin{itemize}
+\item If \parameter{targetEvaluator} fails only in the second or later
+  iteration, this may because output files or data generated by a previous call
+  to \parameter{targetRunner} are missing. Elite configurations are never
+  re-executed on the same instance and seed pair, that is, \irace will call
+  only once \parameter{targetRunner} for each pair of configuration ID and
+  instance ID. However, \parameter{targetEvaluator} is always re-executed,
+  which takes into account any updated information (normalization bounds,
+  reference sets/points, best-known values, etc.). Thus, any files or data
+  generated by \parameter{targetRunner} for a given configuration must remain
+  available to \parameter{targetEvaluator} as long as that configuration is
+  alive. The list of alive configurations is passed
+  to \parameter{targetEvaluator}, which may decide then which data to keep or
+  remove.
+\end{itemize}
 
 \section{Glossary}
 

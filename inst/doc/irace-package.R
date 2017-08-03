@@ -85,18 +85,27 @@ print(experiment)
 #                  scenario, target.runner.call)
 
 ## ----instance1, prompt=FALSE, eval=FALSE------------------
-#  scenario$instances <- c("rosenbrock_20", "rosenbrock_40",
-#                          "rastrigin_20", "rastrigin_40")
-#  scenario$instances.extra.params <-
-#    c("--function=12 --nvar 20", "--function=12 --nvar 30",
-#      "--function=15 --nvar 20", "--function=15 --nvar 30")
+#  scenario$instances <- c("rosenbrock_20 --function=12 --nvar 20",
+#                          "rosenbrock_40 --function=12 --nvar 30",
+#                          "rastrigin_20 --function=15 --nvar 20",
+#                          "rastrigin_40 --function=15 --nvar 30")
 
 ## ----repairEx,prompt=FALSE, eval=FALSE--------------------
-#  repairConfiguration <- function (configuration, parameters, digits)
+#  repairConfiguration = function (configuration, parameters, digits)
 #  {
 #    isreal <- parameters$type[colnames(configuration)] %in% "r"
 #    configuration[isreal] <- configuration[isreal] / sum(configuration[isreal])
 #    return(configuration)
+#  }
+
+## ----repairEx2,prompt=FALSE, eval=FALSE-------------------
+#  repairConfiguration = function (configuration, parameters, digits)
+#  {
+#   columns <- c("p1","p2","p3")
+#   # cat("Before"); print(configuration)
+#   configuration[columns] <- sort(configuration[columns])
+#   # cat("After"); print(configuration)
+#   return(configuration)
 #  }
 
 ## ----targetRunnerParallel,prompt=FALSE, eval=FALSE--------
@@ -137,7 +146,7 @@ head(iraceResults$allConfigurations)
 print(iraceResults$allElites)
 
 ## ----get_elites, prompt=TRUE, eval=TRUE, comment=""-------
-getFinalElites(irace.logFile = "irace-output.Rdata", n = 0)
+getFinalElites(logFile = "irace-output.Rdata", n = 0)
 
 ## ----show_iditelites, prompt=TRUE, eval=TRUE, comment=""----
 print(iraceResults$iterationElites)
@@ -145,7 +154,7 @@ print(iraceResults$iterationElites)
 ## ----get_elite, prompt=TRUE, eval=TRUE, comment=""--------
 last <- length(iraceResults$iterationElites)
 id <- iraceResults$iterationElites[last]
-getConfigurationById(irace.logFile = "irace-output.Rdata", ids = id)
+getConfigurationById(logFile = "irace-output.Rdata", ids = id)
 
 ## ----get_experiments, prompt=TRUE, eval=TRUE, comment=""----
 # As an example, we use the best configuration found
@@ -182,7 +191,7 @@ iraceResults$testing$experiments
 # Get the experiments of the testing
 iraceResults$testing$seeds
 
-## ----plot_test, fig.pos="H", fig.align="center", out.width='0.75\\textwidth', fig.cap="Boxplot of the testing results of the best configurations.", prompt=TRUE, eval=TRUE, comment=""----
+## ----plot_test, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Boxplot of the testing results of the best configurations.", prompt=TRUE, eval=TRUE, comment=""----
 results <- iraceResults$testing$experiments
 # Wilcoxon paired test
 conf <- gl(ncol(results), # number of configurations
@@ -194,19 +203,53 @@ boxplot (iraceResults$testing$experiments,
          ylab = "Solution cost",
          xlab = "Configuration ID")
 
-## ----freq, fig.pos="H", fig.cap="Parameters sampling frequency.", prompt=TRUE, eval=TRUE, comment=""----
+## ----freq, fig.pos="tbp", fig.cap="Parameters sampling frequency.", prompt=TRUE, eval=TRUE, comment=""----
 parameterFrequency(iraceResults$allConfigurations, iraceResults$parameters)
 
-## ----parcord, fig.pos="H", fig.align="center", out.width='0.75\\textwidth', fig.cap="Parallel coordinate plots of the parameters of the configurations in the last two iterations of a run of \\irace.", prompt=FALSE, eval=TRUE, comment=""----
+## ----parcord, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Parallel coordinate plots of the parameters of the configurations in the last two iterations of a run of \\irace.", prompt=FALSE, eval=TRUE, comment=""----
 # Get last iteration number
 last <- length(iraceResults$iterationElites)
 # Get configurations in the last two iterations
 conf <- getConfigurationByIteration(iraceResults = iraceResults,
                                     iterations = c(last - 1, last))
 parallelCoordinatesPlot (conf, iraceResults$parameters,
-                         param_names = c("algorithm", "alpha",
-                                         "beta", "rho", "q0"),
+                         param_names = c("algorithm", "alpha", "beta", "rho", "q0"),
                          hierarchy = FALSE)
+
+## ----trainEvo, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Training set performance of the best-so-far configuration over number of experiments.", prompt=FALSE, eval=TRUE, comment=""----
+# Get number of iterations
+iters <- unique(iraceResults$experimentLog[, "iteration"])
+# Get number of experiments (function evaluations) up to each iteration
+fes <- cumsum(sapply(iters, function(k)
+  sum(iraceResults$experimentLog[, "iteration"] == k)))
+# Get the mean value of all experiments executed up to each iteration
+# for the best configuration of that iteration.
+values <- sapply(iters, function(k) {
+  instances <- as.character(
+    unique(iraceResults$experimentLog[
+                          iraceResults$experimentLog[, "iteration"] == k,
+                          "instance"]))
+  return(mean(iraceResults$experiments[
+                             instances,
+                             as.character(iraceResults$iterationElites[k])]))})
+plot(fes, values, type="s", xlab = "Function evaluations",
+     ylab = "Estimated mean value over training set")
+points(fes, values)
+
+## ----testEvo, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Testing set performance of the best-so-far configuration over number of experiments.", prompt=FALSE, eval=TRUE, comment=""----
+# Get number of iterations
+iters <- unique(iraceResults$experimentLog[, "iteration"])
+# Get number of experiments (function evaluations) up to each iteration
+fes <- cumsum(sapply(iters, function(k)
+  sum(iraceResults$experimentLog[, "iteration"] == k)))
+# Get the mean value of all experiments executed up to each iteration
+# for the best configuration of that iteration.
+values <- sapply(iters, function(k) 
+  mean(iraceResults$testing$experiments[
+                            , as.character(iraceResults$iterationElites[k])]))
+plot(fes, values, type = "s",
+     xlab = "Function evaluations", ylab = "Mean value over testing set")
+points(fes, values)
 
 ## ----faq3, eval=FALSE-------------------------------------
 #  library(Rmpi)

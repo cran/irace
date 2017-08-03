@@ -1,13 +1,7 @@
----
-title: "irace: Iterated Racing for Automatic Algorithm Configuration
-output:
-  html_document:
-    theme: journal
-    toc: true
-    toc_depth: 4
----
+**irace**: Iterated Racing for Automatic Algorithm Configuration
+================================================================
 
-[![CRAN version](http://www.r-pkg.org/badges/version-last-release/irace)](https://CRAN.R-project.org/package=irace)
+[![CRAN\_Status\_Badge](http://www.r-pkg.org/badges/version-last-release/irace)](https://CRAN.R-project.org/package=irace)
 [![CRAN Downloads](http://cranlogs.r-pkg.org/badges/grand-total/irace)](https://CRAN.R-project.org/package=irace)
 
 **Maintainers:** [Manuel López-Ibáñez](http://lopez-ibanez.eu), Leslie Pérez Cáceres
@@ -22,19 +16,22 @@ output:
 Introduction
 ============
 
-The irace package implements the Iterated Race method, which is a
+The **irace** package implements the Iterated Race method, which is a
 generalization of the Iterated F-race method for the automatic configuration of
 optimization algorithms, that is, the tuning of their parameters by finding the
 most appropriate settings given a set of instances of an optimization problem.
 It builds upon the race package by Birattari and it is implemented in R.
 
-**Keywords**: automatic configuration, offline tuning, parameter tuning, racing, F-race.
+**Keywords:** automatic configuration, offline tuning, parameter tuning, racing, F-race.
 
-Relevant literature:
+**Relevant literature:**
 
  1. M. López-Ibáñez, J. Dubois-Lacoste, L. Pérez Cáceres, T. Stützle, and
     M. Birattari. [The irace package: Iterated Racing for Automatic Algorithm Configuration.](http://dx.doi.org/10.1016/j.orp.2016.09.002).
-    *Operations Research Perspectives*, 2016.  doi:[10.1016/j.orp.2016.09.002](http://dx.doi.org/10.1016/j.orp.2016.09.002).
+    *Operations Research Perspectives*, 3:43–58, 2016.<br>
+    [ [bibtex](http://lopez-ibanez.eu/LopezIbanez_bib.html#LopDubPerStuBir2016irace) 
+    |
+    doi:[10.1016/j.orp.2016.09.002](http://dx.doi.org/10.1016/j.orp.2016.09.002) ]
 
  2. Manuel López-Ibáñez, Jérémie Dubois-Lacoste, Thomas Stützle, and Mauro
     Birattari. [The irace package, Iterated Race for Automatic Algorithm Configuration](http://iridia.ulb.ac.be/IridiaTrSeries/IridiaTr2011-004.pdf).
@@ -50,7 +47,7 @@ Relevant literature:
 
 
 Requisites
-----------
+==========
 
  * R (<https://www.r-project.org>) is required for running irace, but
    you don't need to know the R language to use it.
@@ -120,8 +117,8 @@ below.
 Installing the irace package
 ============================
 
-Install the [irace](http://iridia.ulb.ac.be/irace) R package on your
-computer. There are two methods:
+There are two methods for installing the [irace](http://iridia.ulb.ac.be/irace) R package on your
+computer:
 
 1. Install within R (automatic download):
 ```R
@@ -159,13 +156,13 @@ Once installed, test that it is working by doing:
     R> system.file(package="irace")
     [1] "~/R/irace"
 ```
+The last command tells you the installation directory of `irace`.
 
 GNU/Linux and OS X
 ------------------
 
-The last command tells you the installation directory of `irace`. Save
-that path to a variable, and add it to your `.bash_profile`, `.bashrc`
-or `.profile`:
+Save the installation directory of `irace` to a variable, and add it to your
+`.bash_profile`, `.bashrc` or `.profile`:
 
 ```bash
     export IRACE_HOME=~/R/irace/ # Path given by system.file(package="irace")
@@ -184,8 +181,14 @@ invoke `irace` as follows:
 Windows
 -------
 
-Unfortunately, the command-line wrapper does not work in Windows. To
-launch irace, you need to open the R console and execute:
+If the installation directory of `irace` is `C:/R/irace/`, you can invoke
+`irace` by opening a terminal (launch the program `cmd.exe`) and executing:
+
+```bash
+    C:\> C:\R\irace\bin\irace.bat --help
+```
+
+You can also launch irace by opening the R console and executing:
 
 ```R
     R> library(irace)
@@ -217,9 +220,9 @@ Usage
 3. For each template in your tuning directory, remove the `.tmpl`
    suffix, and modify them following the instructions in each file. In
    particular,
-    * The scripts `target-runner` and `targetEvaluator` (if you need it at all)
+    * The scripts `target-runner` and `target-evaluator` (if you need it at all)
       should be executable. The output of `target-runner` (or
-      `targetEvaluator` if you use a separate evaluation step) is minimized by
+      `target-evaluator` if you use a separate evaluation step) is minimized by
       default. If you wish to maximize it, just multiply the value by `-1`
       within the script.
     * In `scenario.txt`, uncomment and assign only the parameters for which
@@ -231,8 +234,8 @@ Usage
    create a file that specifies which instances from that directory
    should be run and which instance-specific parameters to use. See
    `scenario.txt.tmpl` and `instances-list.tmpl` for examples. The command
-   irace will not attempt to create the execution directory (execDir),
-   so it must exist before calling irace. The default execDir is the
+   irace will not attempt to create the execution directory (`execDir`),
+   so it must exist before calling irace. The default `execDir` is the
    current directory.
 
 5. Calling the command:
