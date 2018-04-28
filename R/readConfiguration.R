@@ -286,6 +286,17 @@ checkScenario <- function(scenario = defaultScenario())
       irace.error("'targetRunner' must be a function or an executable program")
     }
   }
+  
+  if (is.function.name(scenario$clusterStatus)) {
+    .irace$cluster.status <- bytecompile(scenario$clusterStatus)
+  } else if (is.character(scenario$clusterStatus)) {
+    scenario$clusterStatus <- path.rel2abs(scenario$clusterStatus)
+    file.check (scenario$clusterStatus, executable = TRUE,
+                text = "cluster status")
+    .irace$cluster.status <- cluster.status.default
+  } else {
+    irace.error("'clusterStatus' must be a function or an executable program")
+  }
 
   if (is.null.or.empty(scenario$targetEvaluator)) {
     scenario$targetEvaluator <- NULL
@@ -462,7 +473,7 @@ checkScenario <- function(scenario = defaultScenario())
   if (scenario$batchmode != 0) {
     scenario$batchmode <- tolower(scenario$batchmode)
     # FIXME: We should encode options in the large table in main.R
-    valid.batchmode <- c("sge", "pbs", "torque", "slurm")
+    valid.batchmode <- c("sge", "pbs", "torque", "slurm", "custom")
     if (!(scenario$batchmode %in% valid.batchmode)) {
       irace.error ("Invalid value '", scenario$batchmode,
                    "' of ", quote.param("batchmode"),

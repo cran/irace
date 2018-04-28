@@ -1,19 +1,19 @@
 ### Submit/wait for jobs in batch clusters.
-sge.job.finished <- function(jobid)
+sge.job.finished <- function(jobid, experiment, scenario)
 {
   return(system (paste0("qstat -j ", jobid),
                  ignore.stdout = TRUE, ignore.stderr = TRUE,
                  intern = FALSE, wait = TRUE))
 }
 
-pbs.job.finished <- function(jobid)
+pbs.job.finished <- function(jobid, experiment, scenario)
 {
   return(system (paste0("qstat ", jobid),
                  ignore.stdout = TRUE, ignore.stderr = TRUE,
                  intern = FALSE, wait = TRUE))
 }
 
-torque.job.finished <- function(jobid)
+torque.job.finished <- function(jobid, experiment, scenario)
 {
   output <- suppressWarnings(system2("qstat", jobid, stdout = TRUE, stderr = TRUE))
   ## 1. If the return code of qstat in not 0, then no such job is in the queue
@@ -35,7 +35,7 @@ torque.job.finished <- function(jobid)
   return(any(grepl(paste0(jobid, ".*\\sC\\s"), output)))
 }
 
-slurm.job.finished <- function(jobid)
+slurm.job.finished <- function(jobid, experiment, scenario)
 {
   output <- suppressWarnings(system2("squeue", c("-j", jobid, "--noheader"),
                                      stdout = TRUE, stderr = TRUE))
@@ -45,6 +45,99 @@ slurm.job.finished <- function(jobid)
   # If may return zero, but the job is not in the system anymore because it
   # completed. This is different from the Torque case.
   return (!any(grepl(paste0("\\s", jobid, "\\s"), output)))
+}
+
+cluster.status.error <- function(err.msg, output, scenario, cluster.status.call)
+{
+  if (!is.null(cluster.status.call)) {
+    err.msg <- paste0(err.msg, "\n", .irace.prefix,
+                      "The call to clusterStatus was:\n", cluster.status.call)
+  }
+  if (is.null(output$outputRaw)) {
+    # Message for a function call.
+    # FIXME: Ideally, we should print the list as R would print it.
+    output$outputRaw <- toString(output)
+    advice.txt <- paste0(
+      "This is not a bug in irace, but means that something failed in ",
+      "a call to the clusterStatus functions provided by the user.",
+      " Please check those functions carefully.")
+  } else {
+    # Message for an external script.
+    advice.txt <- paste0(
+      "This is not a bug in irace, but means that something failed when",
+      " running the command(s) above or they were terminated before completion.",
+      " Try to run the command(s) above from the execution directory '",
+      scenario$execDir, "' to investigate the issue.")
+  }
+  irace.error(err.msg, "\n", .irace.prefix,
+              "The output was:\n", paste(output$outputRaw, collapse = "\n"),
+              "\n", .irace.prefix, advice.txt)
+}
+
+check.output.cluster.status <- function (output, scenario)
+{
+  if (!is.list(output)) {
+    output <- list()
+    err.msg <- paste0("The output of clusterStatus must be a list")
+    cluster.status.error (err.msg, output, scenario, cluster.status.call = NULL)
+    return(output)
+  }
+  
+  err.msg <- output$error
+  if (is.null(err.msg)) {
+    if (is.null.or.na(output$jobStatus))
+      output$jobStatus <- NULL
+    
+    if (is.null(output$jobStatus)) {
+      err.msg <- paste0("The output of clusterStatus must be DONE for terminated jobs and a non-empty string otherwise.")
+    }
+    
+  }
+  if (!is.null(err.msg)) {
+    cluster.status.error (err.msg, output, scenario, cluster.status.call = output$call)
+  }
+  return (output)
+}
+
+exec.cluster.status <- function(jobid, experiment, scenario,
+                                cluster.status = .irace$cluster.status)
+{
+  x <- cluster.status(jobid, experiment, scenario)
+  return (check.output.target.runner (x, scenario))
+}
+
+cluster.status.default <- function(jobid, experiment, scenario)
+{
+  debugLevel       <- scenario$debugLevel
+  configuration.id <- experiment$id.configuration
+  clusterStatus    <- scenario$clusterStatus
+  
+  if (as.logical(file.access(clusterStatus, mode = 1))) {
+    irace.error ("clusterStatus ", shQuote(clusterStatus), " cannot be found or is not an executable!\n")
+  }
+  
+  output <- runcommand(clusterStatus, jobid, configuration.id, debugLevel)
+  
+  if (!is.null(attr(output, "status"))) return(TRUE)
+  
+  outputRaw <- output$output
+  err.msg <- output$error
+  jobStatus <- NULL
+  if (is.null(err.msg)) {
+    # We cannot use parse.output because that tries to convert to numeric.
+    if (scenario$debugLevel >= 2) { cat (outputRaw, sep = "\n") }
+    # Initialize output as raw. If it is empty stays like this.
+    # strsplit crashes if outputRaw == character(0)
+    if (length(outputRaw) > 0) {
+      jobStatus <- strsplit(trim(outputRaw), "[[:space:]]+")[[1]]
+    }
+    if (length(jobStatus) != 1) {
+      err.msg <- paste0("The output of clusterStatus should be DONE if the job terminated and a non-empty string otherwise!")
+      jobStatus <- NULL
+    }
+  }
+  
+  return(jobStatus == "DONE")
 }
 
 ## Launch a job with qsub and return its jobID. This function does not
@@ -65,7 +158,7 @@ target.runner.qsub <- function(experiment, scenario)
     irace.error ("targetRunner ", shQuote(targetRunner), " cannot be found or is not executable!\n")
   }
 
-  args <- paste(configuration.id, instance.id, seed, instance,
+  args <- paste(configuration.id, instance.id, seed, shQuote(instance),
                 buildCommandLine(configuration, switches))
   output <- runcommand(targetRunner, args, configuration.id, debugLevel)
 
@@ -99,6 +192,7 @@ cluster.lapply <- function(X, scenario, poll.time = 2)
            pbs = pbs.job.finished,
            torque = torque.job.finished,
            slurm = slurm.job.finished,
+           custom = exec.cluster.status,
            irace.error ("Invalid value of scenario$batchmode = ", scenario$batchmode))
 
   # Parallel controls how many jobs we send at once. Some clusters have low
@@ -121,7 +215,7 @@ cluster.lapply <- function(X, scenario, poll.time = 2)
       irace.note("Waiting for jobs ('.' == ", poll.time, " s) ")
     }
     for (jobID in jobIDs) {
-      while (!cluster.job.finished(jobID)) {
+      while (!cluster.job.finished(jobID, experiment, scenario)) {
         if (debugLevel >= 1) { cat(".") }
         Sys.sleep(poll.time)
       }
