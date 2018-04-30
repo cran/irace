@@ -591,15 +591,29 @@ runcommand <- function(command, args, id, debugLevel)
     elapsed <- proc.time()["elapsed"]
   }
   err <- NULL
-  output <- withCallingHandlers(
-    tryCatch(system2(command, args, stdout = TRUE, stderr = TRUE),
-             error = function(e) {
-               err <<- c(err, paste(conditionMessage(e), collapse="\n"))
-               NULL
-             }), warning = function(w) {
-               err <<- c(err, paste(conditionMessage(w), collapse="\n"))
-               invokeRestart("muffleWarning")
-             })
+  if (Sys.info()[['sysname']] == "Windows") {
+    output <- withCallingHandlers(
+      tryCatch(shell(paste("\"", shQuote(command), args, "\""), intern = TRUE,
+                     ignore.stdout = FALSE, ignore.stderr = FALSE,
+                     wait = TRUE),
+               error = function(e) {
+                 err <<- c(err, paste(conditionMessage(e), collapse="\n"))
+                 NULL
+               }), warning = function(w) {
+                 err <<- c(err, paste(conditionMessage(w), collapse="\n"))
+                 invokeRestart("muffleWarning")
+               })
+  } else {
+    output <- withCallingHandlers(
+      tryCatch(system2(command, args, stdout = TRUE, stderr = TRUE),
+               error = function(e) {
+                 err <<- c(err, paste(conditionMessage(e), collapse="\n"))
+                 NULL
+               }), warning = function(w) {
+                 err <<- c(err, paste(conditionMessage(w), collapse="\n"))
+                 invokeRestart("muffleWarning")
+               })
+  }
   # If the command could not be run an R error is generated.  If ‘command’
   # runs but gives a non-zero exit status this will be reported with a
   # warning and in the attribute ‘"status"’ of the result: an attribute

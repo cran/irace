@@ -1,19 +1,19 @@
 ### Submit/wait for jobs in batch clusters.
-sge.job.finished <- function(jobid)
+sge.job.finished <- function(jobid, experiment, scenario)
 {
   return(system (paste0("qstat -j ", jobid),
                  ignore.stdout = TRUE, ignore.stderr = TRUE,
                  intern = FALSE, wait = TRUE))
 }
 
-pbs.job.finished <- function(jobid)
+pbs.job.finished <- function(jobid, experiment, scenario)
 {
   return(system (paste0("qstat ", jobid),
                  ignore.stdout = TRUE, ignore.stderr = TRUE,
                  intern = FALSE, wait = TRUE))
 }
 
-torque.job.finished <- function(jobid)
+torque.job.finished <- function(jobid, experiment, scenario)
 {
   output <- suppressWarnings(system2("qstat", jobid, stdout = TRUE, stderr = TRUE))
   ## 1. If the return code of qstat in not 0, then no such job is in the queue
@@ -35,7 +35,7 @@ torque.job.finished <- function(jobid)
   return(any(grepl(paste0(jobid, ".*\\sC\\s"), output)))
 }
 
-slurm.job.finished <- function(jobid)
+slurm.job.finished <- function(jobid, experiment, scenario)
 {
   output <- suppressWarnings(system2("squeue", c("-j", jobid, "--noheader"),
                                      stdout = TRUE, stderr = TRUE))
@@ -45,6 +45,42 @@ slurm.job.finished <- function(jobid)
   # If may return zero, but the job is not in the system anymore because it
   # completed. This is different from the Torque case.
   return (!any(grepl(paste0("\\s", jobid, "\\s"), output)))
+}
+
+exec.cluster.status <- function(jobid, experiment, scenario,
+                                cluster.status = .irace$cluster.status)
+{
+  return(cluster.status(jobid, experiment, scenario))
+}
+
+cluster.status.default <- function(jobid, experiment, scenario)
+{
+  debugLevel       <- scenario$debugLevel
+  configuration.id <- experiment$id.configuration
+  clusterStatus    <- scenario$clusterStatus
+  
+  if (as.logical(file.access(clusterStatus, mode = 1))) {
+    irace.error ("clusterStatus ", shQuote(clusterStatus), " cannot be found or is not an executable!\n")
+  }
+  
+  output <- runcommand(clusterStatus, jobid, configuration.id, debugLevel)
+  
+  if (!is.null(attr(output, "status"))) return(TRUE)
+  
+  outputRaw <- output$output
+  err.msg <- output$error
+  jobStatus <- "DONE" # In case of error we abort
+  if (is.null(err.msg)) {
+    # We cannot use parse.output because that tries to convert to numeric.
+    if (scenario$debugLevel >= 2) { cat (outputRaw, sep = "\n") }
+    # Initialize output as raw. If it is empty stays like this.
+    # strsplit crashes if outputRaw == character(0)
+    if (length(outputRaw) > 0) {
+      jobStatus <- strsplit(trim(outputRaw), "[[:space:]]+")[[1]]
+    }
+  }
+  
+  return(jobStatus == "DONE")
 }
 
 ## Launch a job with qsub and return its jobID. This function does not
@@ -65,7 +101,7 @@ target.runner.qsub <- function(experiment, scenario)
     irace.error ("targetRunner ", shQuote(targetRunner), " cannot be found or is not executable!\n")
   }
 
-  args <- paste(configuration.id, instance.id, seed, instance,
+  args <- paste(configuration.id, instance.id, seed, shQuote(instance),
                 buildCommandLine(configuration, switches))
   output <- runcommand(targetRunner, args, configuration.id, debugLevel)
 
@@ -99,6 +135,7 @@ cluster.lapply <- function(X, scenario, poll.time = 2)
            pbs = pbs.job.finished,
            torque = torque.job.finished,
            slurm = slurm.job.finished,
+           custom = exec.cluster.status,
            irace.error ("Invalid value of scenario$batchmode = ", scenario$batchmode))
 
   # Parallel controls how many jobs we send at once. Some clusters have low
@@ -121,7 +158,7 @@ cluster.lapply <- function(X, scenario, poll.time = 2)
       irace.note("Waiting for jobs ('.' == ", poll.time, " s) ")
     }
     for (jobID in jobIDs) {
-      while (!cluster.job.finished(jobID)) {
+      while (!cluster.job.finished(jobID, chunk, scenario)) {
         if (debugLevel >= 1) { cat(".") }
         Sys.sleep(poll.time)
       }
