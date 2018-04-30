@@ -124,7 +124,7 @@ target.evaluator.default <- function(experiment, num.configurations, all.conf.id
 
   cwd <- setwd (execDir)
   # FIXME: I think we don't even need to paste the args, since system2 handles this by itself.'
-  args <- paste(configuration.id, instance.id, seed, instance, num.configurations, all.conf.id)
+  args <- paste(configuration.id, instance.id, seed, shQuote(instance), num.configurations, all.conf.id)
   output <- runcommand(targetEvaluator, args, configuration.id, debugLevel)
   setwd (cwd)
 

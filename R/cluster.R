@@ -47,63 +47,10 @@ slurm.job.finished <- function(jobid, experiment, scenario)
   return (!any(grepl(paste0("\\s", jobid, "\\s"), output)))
 }
 
-cluster.status.error <- function(err.msg, output, scenario, cluster.status.call)
-{
-  if (!is.null(cluster.status.call)) {
-    err.msg <- paste0(err.msg, "\n", .irace.prefix,
-                      "The call to clusterStatus was:\n", cluster.status.call)
-  }
-  if (is.null(output$outputRaw)) {
-    # Message for a function call.
-    # FIXME: Ideally, we should print the list as R would print it.
-    output$outputRaw <- toString(output)
-    advice.txt <- paste0(
-      "This is not a bug in irace, but means that something failed in ",
-      "a call to the clusterStatus functions provided by the user.",
-      " Please check those functions carefully.")
-  } else {
-    # Message for an external script.
-    advice.txt <- paste0(
-      "This is not a bug in irace, but means that something failed when",
-      " running the command(s) above or they were terminated before completion.",
-      " Try to run the command(s) above from the execution directory '",
-      scenario$execDir, "' to investigate the issue.")
-  }
-  irace.error(err.msg, "\n", .irace.prefix,
-              "The output was:\n", paste(output$outputRaw, collapse = "\n"),
-              "\n", .irace.prefix, advice.txt)
-}
-
-check.output.cluster.status <- function (output, scenario)
-{
-  if (!is.list(output)) {
-    output <- list()
-    err.msg <- paste0("The output of clusterStatus must be a list")
-    cluster.status.error (err.msg, output, scenario, cluster.status.call = NULL)
-    return(output)
-  }
-  
-  err.msg <- output$error
-  if (is.null(err.msg)) {
-    if (is.null.or.na(output$jobStatus))
-      output$jobStatus <- NULL
-    
-    if (is.null(output$jobStatus)) {
-      err.msg <- paste0("The output of clusterStatus must be DONE for terminated jobs and a non-empty string otherwise.")
-    }
-    
-  }
-  if (!is.null(err.msg)) {
-    cluster.status.error (err.msg, output, scenario, cluster.status.call = output$call)
-  }
-  return (output)
-}
-
 exec.cluster.status <- function(jobid, experiment, scenario,
                                 cluster.status = .irace$cluster.status)
 {
-  x <- cluster.status(jobid, experiment, scenario)
-  return (check.output.target.runner (x, scenario))
+  return(cluster.status(jobid, experiment, scenario))
 }
 
 cluster.status.default <- function(jobid, experiment, scenario)
@@ -122,7 +69,7 @@ cluster.status.default <- function(jobid, experiment, scenario)
   
   outputRaw <- output$output
   err.msg <- output$error
-  jobStatus <- NULL
+  jobStatus <- "DONE" # In case of error we abort
   if (is.null(err.msg)) {
     # We cannot use parse.output because that tries to convert to numeric.
     if (scenario$debugLevel >= 2) { cat (outputRaw, sep = "\n") }
@@ -215,7 +162,7 @@ cluster.lapply <- function(X, scenario, poll.time = 2)
       irace.note("Waiting for jobs ('.' == ", poll.time, " s) ")
     }
     for (jobID in jobIDs) {
-      while (!cluster.job.finished(jobID, experiment, scenario)) {
+      while (!cluster.job.finished(jobID, chunk, scenario)) {
         if (debugLevel >= 1) { cat(".") }
         Sys.sleep(poll.time)
       }
