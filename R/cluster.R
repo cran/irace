@@ -78,10 +78,6 @@ cluster.status.default <- function(jobid, experiment, scenario)
     if (length(outputRaw) > 0) {
       jobStatus <- strsplit(trim(outputRaw), "[[:space:]]+")[[1]]
     }
-    if (length(jobStatus) != 1) {
-      err.msg <- paste0("The output of clusterStatus should be DONE if the job terminated and a non-empty string otherwise!")
-      jobStatus <- NULL
-    }
   }
   
   return(jobStatus == "DONE")
