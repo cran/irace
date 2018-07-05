@@ -12,30 +12,29 @@
 # RETURN VALUE:
 # This script should print a single numerical value (the value to be minimized).
 ###############################################################################
+error() {
+    echo "`TZ=UTC date`: $0: error: $@" >&2
+    exit 1
+}
+
 
 # Path to the ACOTSP software:
 EXE=~/bin/acotsp
 
 # Fixed parameters that should be always passed to ACOTSP.
-# The time to be used is always 5 seconds, and we want only one run:
-FIXED_PARAMS=" --tries 1 --quiet "
+# The time to be used is always 10 seconds, and we want only one run:
+FIXED_PARAMS=" --tries 1 --time 10 --quiet "
 
 CONFIG_ID="$1"
 INSTANCE_ID="$2"
 SEED="$3"
 INSTANCE="$4"
 # All other parameters are the candidate parameters to be passed to program
-shift 4 || error "Not enough parameters to $0"
+shift 4 || error "Not enough parameters"
 CONFIG_PARAMS=$*
 
-STDOUT=c${CONFIG_ID}-${INSTANCE_ID}.stdout
-STDERR=c${CONFIG_ID}-${INSTANCE_ID}.stderr
-
-# In case of error, we print the current time:
-error() {
-    echo "`TZ=UTC date`: error: $@" >&2
-    exit 1
-}
+STDOUT=c${CONFIG_ID}-${INSTANCE_ID}-${SEED}.stdout
+STDERR=c${CONFIG_ID}-${INSTANCE_ID}-${SEED}.stderr
 
 if [ ! -x "${EXE}" ]; then
     error "${EXE}: not found or not executable (pwd: $(pwd))"

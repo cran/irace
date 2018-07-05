@@ -1,6 +1,39 @@
-# configurations: configuration structure in irace results (iraceResults$allConfigurations)
-# parameters: parameter structure (iraceResults$parameters)
-
+#' Plot of histogram of parameter values
+#'
+#' \code{parameterFrequency} plots the frequency of the parameters values in a
+#'  set of target algorithm configurations. It generates plots showing the
+#'  frequency of parameter values for each parameter, with \code{rows} *
+#'  \code{cols} parameters being shown per plot.  If a filename is provided the
+#'  plots are saved in one or more files.
+#'   
+#' @param configurations Data frame containing target algorithms configurations 
+#'   in the format used by \pkg{irace}.
+#' @param parameters List of target algorithm parameters in the \pkg{irace} format.
+#' @param rows Number of plots per column.
+#' @param cols Number of plots per row.
+#' @param filename Filename prefix to generate the plots. If \code{NULL} the plot 
+#'   displayed but not saved.
+#' @param pdf.width Width for the pdf file generated.
+#' @param col Color of the bar plot.
+#' 
+#' @examples
+#' \donttest{
+#'  ## To use data obtained by irace
+#' 
+#'  # First, load the data produced by irace.
+#'  irace.logfile <- file.path(system.file(package="irace"), "exdata", "irace-acotsp.Rdata")
+#'  load(irace.logfile)
+#'  attach(iraceResults)
+#'  parameterFrequency(allConfigurations, parameters)
+#' }
+#'
+#' @seealso 
+#'  \code{\link{readParameters}} to obtain a valid parameter structure from a parameters file.
+#'  \code{\link{readConfigurationsFile}} to obtain a set of target algorithm configurations from 
+#'    a configurations file.
+#' 
+#' @author Manuel López-Ibáñez and Leslie Pérez Cáceres
+#' @export
 # TODO:
 # * change slightly background of conditional parameters
 #
@@ -13,6 +46,8 @@
 # * export this function and add an R manual page, perhaps with example.
 #
 # * how to resize the Window when filename == NULL to have a rows/cols aspect ratio.
+#
+# * use ggplot2 ?
 #
 # * add tests!
 #parameterFrequency(iraceResults$allConfigurations, iraceResults$parameters)
@@ -29,6 +64,7 @@ parameterFrequency <- function(configurations, parameters,
   ylab.num <- "Probability density"
   
   def.par <- par(no.readonly = TRUE) # save default, for resetting...
+  on.exit(par(def.par), add = TRUE)  #- reset to default
 
   configurations <- removeConfigurationsMetaData(configurations)
 
@@ -40,7 +76,10 @@ parameterFrequency <- function(configurations, parameters,
   nplot <- 1
   cplot <- 1
   if (!is.null(filename)) {
+    # Remove possible ".pdf" extension.
+    filename <- sub(".pdf", "", filename, fixed = TRUE)
     pdf(file = paste0(filename, "-", cplot, ".pdf"), onefile = TRUE, width = pdf.width)
+    on.exit(dev.off(), add = TRUE)
   }
   par(mfrow=c(rows,cols))
   
@@ -92,9 +131,6 @@ parameterFrequency <- function(configurations, parameters,
     }
     nplot <- nplot + 1
   }
-
-  if (!is.null(filename)) dev.off()
-  par(def.par)  #- reset to default
 }
 
 # Function parcoordlabel plots parallel coordinates for categorical and
@@ -167,6 +203,42 @@ parcoordlabel <- function (configurations, parameters, col = "green", lty = 1,
   invisible()
 }
 
+#' parallelCoordinatesPlot
+#'
+#' \code{parallelCoordinatesPlot}  plots a set of parameter configurations in 
+#'   parallel coordinates.
+#'   
+#' @param configurations Data frame containing target algorithms configurations 
+#'   in the format used by \pkg{irace}.
+#' @param parameters List of target algorithm parameters in the \pkg{irace} format.
+#' @param param_names Parameters names that should be included. Default: parameters$names.
+#' @param hierarchy If \code{TRUE} conditional parameters will be displayed in a different 
+#'   plot. Default \code{TRUE}.
+#' @param filename Filename prefix to generate the plots. If \code{NULL} the plot 
+#'   displayed but not saved.
+#' @param pdf.width Width for the pdf file generated.
+#' @param mar Margin to use for the plot. See \code{\link{par}}.
+#' 
+#' @return  A set of parallel coordinates plots showing the parameters values. 
+#'   If a filename is provided this plots are saved in one or more files.
+#'
+#' @examples
+#' \donttest{
+#'  ## To use data obtained by irace
+#'  # First, load the data produced by irace.
+#'  irace.logfile <- file.path(system.file(package="irace"), "exdata", "irace-acotsp.Rdata")
+#'  load(irace.logfile)
+#'  attach(iraceResults)
+#'  parallelCoordinatesPlot(allConfigurations, parameters, hierarchy = FALSE)
+#' }
+#'
+#' @seealso 
+#'  \code{\link{readParameters}} to obtain a valid parameter structure from a parameters file.
+#'  \code{\link{readConfigurationsFile}} to obtain a set of target algorithm configurations from 
+#'    a configurations file.
+#' 
+#' @author Manuel López-Ibáñez and Leslie Pérez Cáceres
+#' @export
 # TODO:
 # * add color scheme
 #
@@ -185,6 +257,8 @@ parallelCoordinatesPlot <-
     sdep <- list()
     independent <- c()
     for (param in param_names) {
+      ## FIXME: If we ever byte-compile conditions, we need to use
+      ## all.vars(.Internal(disassemble(condition))[[3]][[1]]
       constraint <- all.vars(parameters$conditions[[param]])
       if (length(constraint) < 1) {
         independent <- unique(c(independent, param))
@@ -255,6 +329,22 @@ parallelCoordinatesPlot <-
 
 }
 
+#' Return the elite configurations of the final iteration.
+#' 
+#' @param iraceResults Object created by \pkg{irace} and saved in \code{scenario$logFile}.
+#' @param logFile Log file created by \pkg{irace}, this file must contain the 
+#' \code{iraceResults} object.
+#' @param n Number of elite configurations to return, if \code{n} is larger than the 
+#' number of configurations, then only the existing ones are returned.
+#' @param drop.metadata Remove metadata, such the configuration ID and
+#' the ID of the parent, from the returned configurations. See
+#' \code{\link{removeConfigurationsMetaData}}.
+#' 
+#' @return A data frame containing the elite configurations required.
+#'
+#' 
+#' @author Manuel López-Ibáñez and Leslie Pérez Cáceres
+#' @export
 getFinalElites <- function(iraceResults = NULL, logFile = NULL, n = 0,
                            drop.metadata = FALSE)
 {
@@ -284,7 +374,20 @@ getFinalElites <- function(iraceResults = NULL, logFile = NULL, n = 0,
   return(configurations)
 }
 
-
+#' Returns the configurations selected by ID.
+#' 
+#' @param iraceResults Object created by \pkg{irace} and saved in \code{scenario$logFile}.
+#' @param logFile Log file created by \pkg{irace}, this file must contain the 
+#' \code{iraceResults} object.
+#' @param ids The id or a vector of ids of the candidates configurations to obtain.
+#' @param drop.metadata Remove metadata, such the configuration ID and
+#' the ID of the parent, from the returned configurations. See
+#' \code{\link{removeConfigurationsMetaData}}.
+#' 
+#' @return A data frame containing the elite configurations required.
+#'
+#' @author Manuel López-Ibáñez and Leslie Pérez Cáceres
+#' @export
 ## Get configuration(s) by the id(s).
 ## iraceResults: object created by irace and saved in scenario$logFile.
 ## iraceLog: log file created by irace, this file must contain the iraceResults object.
@@ -293,7 +396,8 @@ getFinalElites <- function(iraceResults = NULL, logFile = NULL, n = 0,
 ##    configurations data frame.
 ## * iraceResults or iraceLog must be provided, in case both are give iraceResults will be used.
 ## This function returns a data frame containing the selected candidate configurations 
-getConfigurationById <- function(iraceResults=NULL, logFile=NULL, ids, drop.metadata=FALSE)
+getConfigurationById <- function(iraceResults = NULL, logFile = NULL,
+                                 ids, drop.metadata = FALSE)
 {
   if (is.null(iraceResults)) {
     if (is.null(logFile))
@@ -308,14 +412,28 @@ getConfigurationById <- function(iraceResults=NULL, logFile=NULL, ids, drop.meta
   
   if (length(selection) < 1) stop("No configuration found with id", ids,".\n")
   
-  configurations <-iraceResults$allConfigurations[selection, , drop=FALSE]
+  configurations <-iraceResults$allConfigurations[selection, , drop = FALSE]
   
   if (drop.metadata)
     configurations <- removeConfigurationsMetaData(configurations)
   return(configurations)
 }
 
-
+#' Returns the configurations by the iteration in which they were executed.
+#'
+#' @param iraceResults (\code{NULL}) Object created by \pkg{irace} and saved in \code{scenario$logFile}.
+#' @param logFile (\code{NULL}) Log file created by \pkg{irace}, this file must contain the 
+#' \code{iraceResults} object.
+#' @param iterations The iteration number or a vector of iteration numbers from where 
+#'  the configurations should be obtained.
+#' @param drop.metadata (\code{FALSE}) Remove metadata, such the configuration ID and
+#' the ID of the parent, from the returned configurations. See
+#' \code{\link{removeConfigurationsMetaData}}.
+#' 
+#' @return A data frame containing the elite configurations required.
+#'
+#' @author Manuel López-Ibáñez and Leslie Pérez Cáceres
+#' @export
 ## Get configuration(s) by the iteration in which they were executed.
 ## iraceResults: object created by irace and saved in scenario$logFile.
 ## iraceLog: log file created by irace, this file must contain the iraceResults object.
@@ -334,20 +452,89 @@ getConfigurationByIteration <- function(iraceResults = NULL, logFile = NULL,
       load(logFile)
   }
   
-  if(length(iterations) < 1) stop("You must provide at least one configuration id.\n")
-  
-  iteration <-NULL
-  ids <- unique(subset(as.data.frame(iraceResults$experimentLog), iteration==iterations,  select=c("configuration"), drop=TRUE))
+  if (length(iterations) < 1)
+    stop("You must provide at least one configuration id.\n")
+
+  # To silence warning.
+  iteration <- NULL
+  ids <- unique(subset(as.data.frame(iraceResults$experimentLog),
+                       iteration %in% iterations,
+                       select=c("configuration"), drop=TRUE))
   
   selection <- iraceResults$allConfigurations[,".ID."] %in% ids
   
   if (length(selection) < 1) stop("No configuration found with id", ids,".\n")
   
-  configurations <-iraceResults$allConfigurations[selection, , drop=FALSE]
+  configurations <- iraceResults$allConfigurations[selection, , drop=FALSE]
   
   if (drop.metadata)
-    configurations <-  removeConfigurationsMetaData(configurations)
+    configurations <- removeConfigurationsMetaData(configurations)
   return(configurations)
 }
 
+#' Creates box plots of the quality of configurations.
+#'
+#' @param experiments Matrix of performance of configurations (columns) over a set of instances (rows).
+#' @param title (\code{NULL}) Title for the plot.
+#' @param xlabel Label for the x axis.
+#' @param ylabel Label for the y axis.
+#' @param filename (\code{NULL}) Filename prefix to create a pdf file with the plot.
+#' 
+#' @return Box plot of the performance of the configurations.
+#'
+#' @author Manuel López-Ibáñez and Leslie Pérez Cáceres
+#' @export
+configurationsBoxplot <- function(experiments, title = NULL, 
+                                  xlabel = "Configuration ID",
+                                  ylabel = "Configuration cost", 
+                                  filename = NULL)
+{
+  plot.jitter.points <- function(x, y, factor = 10 / x, pch = 20, ...)
+    points(jitter(rep(x, length(y)), factor = factor),
+           y, pch = pch, col = rgb(0,0,0,.2), ...)
+ 
+  if (any(colSums(is.na(experiments)) > 0)) 
+    cat("Warning: There are NA values in the experiment results provided.\n")
+  
+  data.labels <- colnames(experiments)
+  if (is.null(data.labels)) data.labels <- 1:ncol(experiments)
+  
+  # These parameters could be exposed to configurate the plot
+  
+  if (!is.null(filename)) {
+    filename <- paste0(filename, ".pdf.")
+    cat("Creating file", filename,"\n")
+    # MANUEL: Why cairo_pdf =
+    cairo_pdf(filename = filename, width=20, height=8)
+    on.exit(dev.off(), add = TRUE)
+    plot.mar <- c(7,11,4,1)
+    plot.lwd <- 5
+    cex.axis <- 3
+    cex.main <- 3
+    x.add <- 2
+  } else {
+    plot.mar <- c(2.5,9,4,1)
+    plot.lwd <- 2
+    cex.axis <- 1
+    cex.main <- 1
+    x.add <- 0
+  }
+  
+  if (is.null(title)) plot.mar[3] <- 1
+  
+  old.par <- par(las=1, mar=plot.mar, cex.axis=cex.axis, cex.main=cex.main, lwd=plot.lwd)
+  on.exit(old.par, add = TRUE)
+  
+  boxplot(experiments, main = title, xaxt = "n", outline = TRUE)
+  for (i in 1:ncol(experiments)) {
+    plot.jitter.points (i, experiments[,i], cex = 1.5 * cex.axis)
+  }
+  
+  # X axis
+  axis(1, at=c(1:length(data.labels)), labels=data.labels, line = -0.5 + x.add, 
+       tick=FALSE, las=1, cex.axis=cex.axis)
+  mtext(xlabel, side=1, line=1.5 + 2*x.add, cex=cex.axis, las=0)
+  # Y axis
+  mtext(ylabel, side=2, line=5+1.8*x.add, cex=cex.axis, las=0)
+}
 

@@ -1,5 +1,10 @@
 library(irace)
 
+# Reproducible results
+seed <- sample(2^30, 1)
+cat("Seed: ", seed, "\n")
+set.seed(seed)
+
 ## Functions ##########################################################
 f_rosenbrock <- function (x) {
   d  <- length(x)
@@ -38,7 +43,14 @@ target.runner <- function(experiment, scenario)
   return(result)
 }
 
-set.seed(2)
+## target runner ###########################################################
+target.runner.reject <- function(experiment, scenario)
+{
+  if (runif(1) <= 0.05) return (list(cost = -Inf, call = toString(experiment)))
+  return (target.runner(experiment, scenario))
+}
+
+
 weights <- rnorm(200, mean = 0.9, sd = 0.02)
 
 ## Run function ########################################################
@@ -54,7 +66,7 @@ sann.irace <- function(...)
 
   scenario <- list(targetRunner = target.runner,
                    maxExperiments = 1000, seed = 1234567)
-  scenario <- c(scenario, args)
+  scenario <- modifyList(scenario, args)
 
   scenario <- checkScenario (scenario)
 
@@ -65,9 +77,12 @@ sann.irace <- function(...)
                       best.conf))
 }
 
-sann.irace(instances = weights)
+sann.irace(instances = weights, parallel = 2, targetRunner = target.runner.reject)
+
+sann.irace(instances = weights, parallel = 2)
 
 sann.irace(deterministic = TRUE, instances = weights[1:7])
+
 
 test.path.rel2abs <- function()
 {
@@ -248,9 +263,9 @@ x.r                       N:/tmp  N:/tmp/x.r
 }
 testwindows.path.rel2abs()
 
-test.checkForbidden <- function()
+test.checkForbidden <- function(param.file)
 {
-  params <- irace:::readParameters("parameters.txt")
+  params <- irace:::readParameters(param.file)
   confs <- irace:::readConfigurationsFile("configurations.txt", params)
   forbidden <- irace:::readForbiddenFile("forbidden.txt")
   exp.confs <- irace:::readConfigurationsFile(text='
@@ -264,11 +279,14 @@ NA        NA   "x3"   4.5   "low"
   rownames(confs) <- rownames(exp.confs) <- NULL
   stopifnot(identical(confs, exp.confs))
 }
-test.checkForbidden()
+test.checkForbidden("parameters.txt")
+test.checkForbidden("logparameters.txt")
+
 
 test.instances <- function()
 {
-  scenario <- list(targetRunner = target.runner,
+  # Test that a function can be given as a string.
+  scenario <- list(targetRunner = "target.runner",
                    maxExperiments = 1000, seed = 1234567,
                    firstTest = 5,
                    deterministic = TRUE,
@@ -276,6 +294,7 @@ test.instances <- function()
   scenario <- checkScenario (scenario)
 }
 test.instances()
+
 
 test.similarConfigurations <- function()
 {

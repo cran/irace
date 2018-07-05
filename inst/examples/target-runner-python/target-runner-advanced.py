@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 ##############################################################################
 #                                                                            #
 # With this target-runner, you can:                                          #
@@ -24,12 +23,6 @@
 #                                                                            #
 ##############################################################################
 
-
-# ---------------------------- DO NOT CHANGE HERE ----------------------------
-#                     (unless you know what you are doing)
-# ---------------------- GO TO THE BOTTOM OF THIS FILE -----------------------
-
-
 import os
 import sys
 import time
@@ -38,29 +31,31 @@ import logging
 import tempfile
 import subprocess
 import threading
+import re
 
-
+# ---------------------------- DO NOT CHANGE HERE ----------------------------
+#                     (unless you know what you are doing)
+# ---------------------- Search for CHANGE BELOW! ----------------------------
 class Runner(object):
 
-    def __init__(self, executable, fixed_params, instanceid, instance, seed,
-                 parse_output, candidate, parameters, max_tests):
-        self.executable = executable
-        self.fixed_params = fixed_params
+    def __init__(self, executable, candidate, instanceid, seed, parameters,
+                 parse_output, max_tests, maximize = False, log_level = logging.ERROR):
+        self.executable = os.path.expanduser(executable)
         self.instanceid = instanceid
-        self.instance = instance
         self.seed = seed
         self.parse_output = parse_output
         self.candidate = candidate
         self.parameters = parameters
         self.max_tests = max_tests
+        self.filename_prefix = 'c' + str(candidate) + '-' + str(instanceid) + '-' + str(seed) 
 
         # default exec function
         self.execute = self.execute1
 
-        self.maximize = False
-
+        self.maximize = maximize
+        
         # logging (by default only errors are logged)
-        filename = 'c' + self.candidate + '-' + self.seed + '-' + str(instanceid) + '.' + socket.gethostname() + '_' + str(os.getpid())
+        filename = self.filename_prefix + '.' + socket.gethostname() + '_' + str(os.getpid())
         self.logger = logging.getLogger('target-runner')
         try :
             hdlr = logging.FileHandler(filename, delay=True)
@@ -70,21 +65,10 @@ class Runner(object):
         formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
         hdlr.setFormatter(formatter)
         self.logger.addHandler(hdlr)
-        self.logger.setLevel(logging.ERROR)
-
-
-    # when returning the cost multiply by -1 if maximizing
-    def set_maximize(self):
-        self.maximize = True
-
-
-    # changes the log level
-    def log_level(self, level):
-        self.logger.setLevel(level)
-
-
+        self.logger.setLevel(log_level)
+    
     # changes the way the child process is executed
-    def exec_mode(self, mode, max_time=3600):
+    def exec_mode(self, mode, max_time = 3600):
         self.execute = mode
         # self.max_time is used only in execute_timeout functions
         self.max_time = max_time
@@ -292,10 +276,9 @@ class Runner(object):
     # executing the program
     def run(self):
         test = 0
-        cost = None
+        cost = ""
         while test < self.max_tests:
-            command_list = [self.executable] + self.fixed_params.split() + \
-                           [self.instance] + self.parameters
+            command_list = [self.executable] + self.parameters
             (status, out, err) = self.execute(command_list)
             if status != 0:
                 test += 1
@@ -303,26 +286,38 @@ class Runner(object):
                                     str(test) + ' of ' + str(self.max_tests))
                 continue
             # parsing the output
-            cost = self.parse_output(out)
+            try: 
+                cost = self.parse_output(out)
+            except: 
+                test += 1
+                self.logger.warning('something failed in parse_output: *RETRYING* ' + \
+                                    str(test) + ' of ' + str(self.max_tests))
+                continue
+            
+            if cost is None:
+                cost = ""
+            
             try:
                 check = float(cost)
             except:
                 test += 1
-                self.logger.warning('cost was not a number *RETRYING* ' + \
+                self.logger.warning('return value of parse_output was not a number: *RETRYING* ' + \
                                     str(test) + ' of ' + str(self.max_tests))
                 continue
 
-            # convert to float and multiply by -1 if maximizing
-            cost = float(cost)
+            # If maximizing, simulate multiply by -1 if maximizing
             if self.maximize:
-                cost *= -1
-
+                if cost[0] == '-':
+                    cost = cost[1:]
+                else:
+                    cost = '-' + cost
+                    
             break
 
         # printing the result
         if test < self.max_tests:
-            self.logger.debug('returning cost: ' + str(cost))
-            sys.stdout.write(str(cost) + '\n')
+            self.logger.debug('returning cost: ' + cost)
+            sys.stdout.write(cost + '\n')
             # force to exit all possible threads except the main one (those
             # launched with execute_threaded_timeout) are run as daemons so
             # they should be terminated automatically when exiting, but just
@@ -333,10 +328,10 @@ class Runner(object):
             self.logger.error('something went wrong after ' + \
                               str(self.max_tests) + ' runs')
             self.logger.error('saving candidate stdout to ' + \
-                                  'c' + self.candidate + '-' + self.seed + '-' + str(instanceid) + '.stdout')
-            self.save('c' + self.candidate + '-' + self.seed + '-' + str(instanceid) + '.stdout', out)
-            self.save('c' + self.candidate + '-' + self.seed + '-' + str(instanceid) + '.stderr', err)
-            self.logger.error('returning cost: ' + str(cost))
+                              self.filename_prefix + '.stdout')
+            self.save(self.filename_prefix + '.stdout', out)
+            self.save(self.filename_prefix + '.stderr', err)
+            self.logger.error('return value of parse_output: ' + cost)
             self.logger.error('exit status is ' + str(status))
             sys.stdout.write('something went wrong for candidate ' + \
                              self.candidate + '\n')
@@ -344,76 +339,95 @@ class Runner(object):
                 sys.stdout.write('exit status: ' + str(status) + '\n')
                 sys.exit(status)
             else:
-                sys.stdout.write('could not cast to float the result: \'' + \
-                                 str(cost) + '\n')
+                sys.stdout.write('could not cast to float the return value of parse_output: "' + \
+                                 cost + '"\n')
                 sys.exit(1)
 
-
-# ------------------------------ CHANGE HERE! ------------------------------ #
-
-
-# parse here directly the stdout of your job (the 'out' parameter)
-# alternatively you can ignore it and read other files produced by
-# your job
-def parse_output(out):
-    # parsing last thing printed
-    return out.strip().split()[-1]
-
 def is_exe(fpath):
+    fpath = os.path.expanduser(fpath)
     return os.path.isfile(fpath) and os.access(fpath, os.X_OK) \
         and os.path.getsize(fpath) > 0
 
+def get_execdir():
+    return os.path.dirname(os.path.realpath(__file__))
+
+
+# ------------------------------- CHANGE BELOW! ------------------------------ #
+
+## This example is for the ACOTSP software. Compare it with
+## examples/acotsp/target-runner
+
+# Parse here directly the stdout of your job (the 'out' parameter).  Or you can
+# ignore the out parameter and read other files produced by your job. This
+# function must return a string containing a floating-point number. Everything
+# else will generate an error.
+def parse_output(out):
+    match = re.search(r'Best ([-+0-9.eE]+)', out.strip())
+    if match:
+        return match.group(1);
+    else:
+        return "No match"
+        
 if __name__=='__main__':
 
-    bindir = os.path.dirname(os.path.realpath(__file__))
+    if len(sys.argv) < 5:
+        print "\nUsage: " + __file__ + " <candidate_id> <instance_id> <seed> <instance_path_name> <list of parameters>\n"
+        sys.exit(1)
     
+    bindir = get_execdir()
+    # Path to the target-algorithm executable
+    executable = '~/bin/acotsp'
+    fixed_params = ' --tries 1 --time 1 --quiet '
+   
     # reading parameters and setting problem specific stuff
-    rootdir = bindir + "/../../../"
-    timeout = 180
-    candidate = sys.argv[1]
-    instanceid = sys.argv[2]
+    ## FIXME: Convert this to a class that takes sys.argv and sets the correct
+    ## variables.
+    candidate_id = sys.argv[1]
+    instance_id = sys.argv[2]
     seed = sys.argv[3]
     instance = sys.argv[4]
     parameters = sys.argv[5:]
 
-    executable = './' + candidate
-    fixed_params = 'grammars/PFSPWCT.xml None 20 0 ' + seed
-
+    # maximum timeout in case the target algorithm does not terminate on its own.
+    timeout = 180
     # maximum number of trials before giving up with the configuration
-    max_tests = 100
-    hr = Runner(executable, fixed_params, instanceid, instance, seed,
-                parse_output, candidate, parameters, max_tests)
+    max_tests = 5
 
-    # maximizing instead of minimizing
-    # hr.set_maximize()
+    # Extra whitespace around options is important!
+    parameters = [' -i ' + instance + ' --seed ' + seed + fixed_params ] + parameters
 
-    # write debug information (1 log per target-runner use sparely)
-    # hr.log_level(logging.DEBUG)
+    runner = Runner(executable, candidate_id, instance_id, seed,
+                    parameters, parse_output, max_tests,
+                    #log_level = logging.DEBUG,
+                    maximize = False)
 
+    ## FIXME: Convert this to flags with meaningful names like log_level
     # execute through pipes (this is the default)
-    # hr.exec_mode(hr.execute1)
+    # runner.exec_mode(runner.execute1)
 
+    ## FIXME: Convert this to flags with meaningful names
     # execute through temporary files (slightly more robust)
-    # hr.exec_mode(hr.execute2)
+    # runner.exec_mode(runner.execute2)
 
+    ## FIXME: Convert this to flags with meaningful names
     # execute through temporary files with timeout
     # after 5 minutes of *wallclock time* if we do not get the results we kill
     # the subprocess and try another time...
-    # hr.exec_mode(hr.execute_timeout1, 300)
+    # runner.exec_mode(runner.execute_timeout1, 300)
 
+    ## FIXME: Convert this to flags with meaningful names
     # python3 execute through pipes with timeout (slightly less robust)
-    # hr.exec_mode(hr.execute_timeout2, 300)
+    # runner.exec_mode(runner.execute_timeout2, 300)
 
+    ## FIXME: Convert this to flags with meaningful names
     # execute through temporary files with timeout
     # after 2 minutes of *CPU time* if we do not get the results we kill
     # the subprocess and try another time...
-    hr.exec_mode(hr.execute_threaded_timeout, timeout)
+    runner.exec_mode(runner.execute_threaded_timeout, timeout)
 
+    # Convert this to a parameter of the constructor.
     # environment variables that should be set for testing each configuration
-    hr.source_env(rootdir + 'configuration')
+    # runner.source_env(bindir + 'configuration')
 
     # run the target-runner
-    hr.run()
-
-
-# -------------------------------------------------------------------------- #
+    runner.run()

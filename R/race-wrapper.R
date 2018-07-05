@@ -5,8 +5,41 @@
 # FIXME: In fact, we should use this trick also in irace.R to avoid
 # pass-by-copy-on-write of huge matrices and data.frames and instead
 # pass-by-reference an environment containing those.
-.irace <- new.env()
+.irace <- new.env(parent = emptyenv())
 
+#' Generate a command-line representation of a configuration
+#'
+#' @description \code{buildCommandLine} receives two vectors, one containing
+#'   the values of the parameters, the other containing the switches of the
+#'   parameters. It builds a string with the switches and the values that can
+#'   be used as a command line to call the program to be tuned, thus generating
+#'   one candidate configuration.
+#'   
+#' 
+#' @param values A vector containing the value of each parameter for the
+#' candidate configuration.
+#' @param switches A vector containing the switches of each paramter (in an
+#'  order that corresponds to the values vector).
+#' 
+#' @return A string concatenating each element of \code{switches} and
+#'   \code{values} for all parameters with a space between each pair of
+#'   parameters (but none between the switches and the corresponding values).
+#'
+#' @examples
+#' switches <- c("--switch1 ", "--switch2 ")
+#' values <- c("value_1", "value_2")
+#' buildCommandLine (values, switches)
+#' ## Build a command-line from the results produced by a previous run of irace.
+#' # First, load the data produced by irace.
+#' irace.logfile <- file.path(system.file(package="irace"),
+#'                            "exdata", "irace-acotsp.Rdata")
+#' load(irace.logfile)
+#' attach(iraceResults)
+#' apply(allConfigurations[1:10, unlist(parameters$names)], 1, buildCommandLine,
+#'       unlist(parameters$switches))
+#' 
+#' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
+#' @export
 buildCommandLine <- function(values, switches)
 {
   irace.assert(length(values) == length(switches))
@@ -16,7 +49,7 @@ buildCommandLine <- function(values, switches)
   for (i in seq_along(values)) {
     value <- values[i]
     if (!is.na(value)) {
-      command <- paste0(command, " ", switches[i], value)
+        command <- paste0(command, " ", switches[i], format(value, scientific=FALSE))
     }
   }
   return(command)
@@ -82,11 +115,18 @@ check.output.target.evaluator <- function (output, scenario, target.runner.call 
   err.msg <- output$error
   if (is.null(err.msg)) {
     if (is.null(output$cost)) {
-      err.msg <- "The output of targetEvaluator must be one number 'cost'!"
-    } else if (is.na (output$cost)) {
+      err.msg <- "The output of targetEvaluator must contain 'cost'!"
+    } else if (is.na.nowarn (output$cost)) {
       err.msg <- "The output of targetEvaluator is not numeric!"
-    } else if (is.infinite(output$cost)) {
-      err.msg <- "The output of targetEvaluator is not finite!"
+    }
+    if (scenario$batchmode != 0 && scenario$maxTime > 0) {
+      if (is.null (output$time)) {
+        err.msg <- "When batchmode != 0 and maxTime > 0, the output of targetEvaluator must be two numbers 'cost time'!"
+      } else if (is.na.nowarn(output$time)) {
+        err.msg <- "The time returned by targetEvaluator is not numeric!"
+      } else if (is.infinite(output$time)) {
+        err.msg <- "The time returned by targetEvaluator is not finite!"
+      }
     }
   }
 
@@ -103,9 +143,56 @@ exec.target.evaluator <- function (experiment, num.configurations, all.conf.id,
   output <- .irace$target.evaluator(experiment, num.configurations, all.conf.id,
                                     scenario, target.runner.call)
   check.output.target.evaluator (output, scenario, target.runner.call = target.runner.call)
+  # Fix too small time.
+  output$time <- if (is.null(output$time)) NA else max(output$time, 0.01)
   return (output)
 }
 
+#' target.evaluator.default
+#'
+#' \code{target.evaluator.default} is the default \code{targetEvaluator} function that is
+#'  invoked if \code{targetEvaluator} is a string (by default
+#'  \code{targetEvaluator} is \code{NULL} and this function is not invoked). You can use it as
+#'  an advanced example of how to create your own \code{targetEvaluator} function.
+#'   
+#' @param experiment A list describing the experiment. It contains at least:
+#'    \itemize{
+#'     \item{id.configuration}{An alphanumeric string that uniquely identifies a configuration;}
+#'     \item{id.instance}{An alphanumeric string that uniquely identifies an instance;}
+#'      \item{seed}{Seed for the random number generator to be used for
+#'        this evaluation, ignore the seed for deterministic algorithms;}
+#'      \item{instance}{String giving the instance to be used for this evaluation;}
+#'      \item{bound}{(only when \code{capping} is enabled) Time bound for the execution;}
+#'      \item{configuration}{1-row data frame with a column per parameter
+#'        name;}
+#'      \item{switches}{Vector of parameter switches (labels) in the order
+#'        of parameters used in \code{configuration}.}
+#'    }
+#' @param num.configurations Number of  configurations alive in the race.
+#' @param all.conf.id Vector of configuration IDs of the alive configurations.
+#' @param scenario Options passed when invoking \pkg{irace}.
+#' @param target.runner.call String describing the call to \code{targetRunner} that
+#'    corresponds to this call to \code{targetEvaluator}. This is used for
+#'    providing extra information to the user, for example, in case
+#'    \code{targetEvaluator} fails.
+#' 
+#' @return The function \code{targetEvaluator} must return a list with one element
+#'  \code{"cost"}, the numerical value corresponding to the cost measure of the
+#'  given configuration on the given instance.
+#'    
+#'  The return list may also contain the following optional elements that are used
+#'  by \pkg{irace} for reporting errors in \code{targetEvaluator}:
+#'  \itemize{
+#'    \item{error}{is a string used to report an error;}
+#'    \item{outputRaw}{is a string used to report the raw output of calls to
+#'      an external program or function;}
+#'    \item{call}{is a string used to report how \code{targetRunner} called 
+#'      an external program or function.}
+#'  }
+#'
+#' 
+#' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
+#' @export
 target.evaluator.default <- function(experiment, num.configurations, all.conf.id,
                                      scenario, target.runner.call)
 {
@@ -123,23 +210,27 @@ target.evaluator.default <- function(experiment, num.configurations, all.conf.id
   }
 
   cwd <- setwd (execDir)
-  # FIXME: I think we don't even need to paste the args, since system2 handles this by itself.'
+  # FIXME: I think we don't even need to paste the args, since system2 handles this by itself.
   args <- paste(configuration.id, instance.id, seed, instance, num.configurations, all.conf.id)
   output <- runcommand(targetEvaluator, args, configuration.id, debugLevel)
   setwd (cwd)
 
   cost <- time <- NULL
   err.msg <- output$error
-  
   if (is.null(err.msg)) {
     v.output <- parse.output(output$output, verbose = (scenario$debugLevel >= 2))
-    if (length(v.output) != 1) {
-      err.msg <- paste0("The output of targetEvaluator must be one number 'cost'!")
-    } else {
+    if (length(v.output) > 2) {
+      err.msg <- paste0("The output of targetEvaluator should not be more than two numbers!")
+    } else if (length(v.output) == 0) {
+      err.msg <- paste0("The output of targetEvaluator must be at least one number 'cost'!")
+    } else if (length(v.output) == 1) {
       cost <- v.output[1]
+    } else if (length(v.output) == 2) {
+      cost <- v.output[1]
+      time <- v.output[2]
     }
   }
-  return(list(cost = cost,
+  return(list(cost = cost, time = time,
               error = err.msg, outputRaw = output$output,
               call = paste(targetEvaluator, args)))
 }
@@ -148,63 +239,63 @@ check.output.target.runner <- function (output, scenario)
 {
   if (!is.list(output)) {
     output <- list()
-    err.msg <- paste0("The output of targetRunner must be a list")
+    err.msg <- "The output of targetRunner must be a list"
     target.error (err.msg, output, scenario, target.runner.call = NULL)
     return(output)
   }
   
   err.msg <- output$error
   if (is.null(err.msg)) {
-    if (is.null.or.na(output$cost))
-      output$cost <- NULL
-    if (is.null.or.na(output$time))
-      output$time <- NULL
-    # When targetEvaluator is provided targetRunner must return only the time.
-    if (!is.null(.irace$target.evaluator)) {
-      if (scenario$maxTime > 0 && is.null(output$time)) {
-        err.msg <- paste0("The output of targetRunner must be one number 'time'!")
-      } else if (!is.null(output$cost)) {
-        err.msg <- paste0("The output of targetRunner must be empty or just one number 'time'!")
-      }
-    } else if (scenario$maxTime > 0 && (is.null (output$cost) || is.null(output$time))) {
-      err.msg <- paste0("The output of targetRunner must be two numbers 'cost time'!")
-    } else if (scenario$maxExperiments > 0 && is.null (output$cost)) {
-      err.msg <- paste0("The output of targetRunner must be one number 'cost'!")
-    } else if (!is.null(output$time) && output$time < 0) {
-      err.msg <- paste0("The value of time returned by targetRunner cannot be negative (", output$time, ")!")
-    } 
-
     if (!is.null (output$cost)) {
-      if (is.na(output$cost)) {
-        err.msg <- paste0("The cost returned by targetRunner is not numeric!")
-      } else if (is.infinite(output$cost)) {
-        err.msg <- paste0("The cost returned by targetRunner is not finite!")
+      if (is.na.nowarn(output$cost)) {
+        err.msg <- "The cost returned by targetRunner is not numeric!"
       }
     }
 
     if (!is.null (output$time)) {
-      if (is.na(output$time)) {
+      if (is.na.nowarn(output$time)) {
         err.msg <- paste0("The time returned by targetRunner is not numeric!")
       } else if (is.infinite(output$time)) {
         err.msg <- paste0("The time returned by targetRunner is not finite!")
       }
     }
-
-    # Fix too small time.
-    output$time <- if (is.null(output$time)) NA else max(output$time, 0.01)
-    
   }
+
+  if (is.null(err.msg)) {
+    # When targetEvaluator is provided, targetRunner must return only the time.
+    if (!is.null(scenario$targetEvaluator)) {
+      # unless using batchmode, in that case targetRunner returns neither the
+      # time nor the cost.
+      if (scenario$batchmode != 0) {
+        if (!is.null(output$time) || !is.null(output$cost)) {
+          err.msg <- "When batchmode != 0, the output of targetRunner must not contain a cost nor a time!"
+        }
+      } else if (scenario$maxTime > 0 && is.null(output$time)) {
+        err.msg <- "The output of targetRunner must be one number 'time'!"
+      } else if (!is.null(output$cost)) {
+        err.msg <- "The output of targetRunner must be empty or just one number 'time'!"
+      }
+    } else if (scenario$maxTime > 0 && (is.null (output$cost) || is.null(output$time))) {
+      err.msg <- "The output of targetRunner must be two numbers 'cost time'!"
+    } else if (scenario$maxExperiments > 0 && is.null (output$cost)) {
+      err.msg <- "The output of targetRunner must be one number 'cost'!"
+    } else if (!is.null(output$time) && output$time < 0) {
+      err.msg <- paste0("The value of time returned by targetRunner cannot be negative (", output$time, ")!")
+    } 
+  }
+
   if (!is.null(err.msg)) {
     target.error (err.msg, output, scenario, target.runner.call = output$call)
   }
+  # Fix too small time.
+  output$time <- if (is.null(output$time)) NA else max(output$time, 0.01)
   return (output)
 }
 
 # This function invokes target.runner.  When used on a remote node by Rmpi,
 # environments do not seem to be shared and the default value is evaluated too
 # late, thus we have to pass .irace$target.runner explicitly.
-exec.target.runner <- function(experiment, scenario,
-                               target.runner = .irace$target.runner)
+exec.target.runner <- function(experiment, scenario, target.runner)
 {
   doit <- function(experiment, scenario)
   {
@@ -225,6 +316,48 @@ exec.target.runner <- function(experiment, scenario,
   return (output)
 }
 
+#' target.runner.default
+#'
+#' \code{target.runner.default} is the default targetRunner function. 
+#' You can use it as an advanced example of how to create your own targetRunner 
+#' function.
+#' 
+#' @param experiment A list describing the experiment. It contains at least:
+#'    \itemize{
+#'     \item{id.configuration}{An alphanumeric string that uniquely identifies a configuration;}
+#'     \item{id.instance}{An alphanumeric string that uniquely identifies an instance;}
+#'      \item{seed}{Seed for the random number generator to be used for
+#'        this evaluation, ignore the seed for deterministic algorithms;}
+#'      \item{instance}{String giving the instance to be used for this evaluation;}
+#'      \item{bound}{(only when \code{capping} is enabled) Time bound for the execution;}
+#'      \item{configuration}{1-row data frame with a column per parameter
+#'        name;}
+#'      \item{switches}{Vector of parameter switches (labels) in the order
+#'        of parameters used in \code{configuration}.}
+#'    }
+#' @param scenario Options passed when invoking \pkg{irace}.
+#' 
+#' @return If \code{targetEvaluator} is \code{NULL}, then the \code{targetRunner}
+#'  function must return a list with at least one element \code{"cost"},
+#'  the numerical value corresponding to the evaluation of the given
+#'  configuration on the given instance.
+#'    
+#'  If the scenario option \code{maxTime} is non-zero or if \code{capping} is enabled 
+#'  then the list must contain at least another element \code{"time"} that reports the
+#'  execution time for this call to \code{targetRunner}.
+#'  The return list may also contain the following optional elements that are used
+#'  by \pkg{irace} for reporting errors in \code{targetRunner}:
+#'  \itemize{
+#'    \item{error}{is a string used to report an error;}
+#'    \item{outputRaw}{is a string used to report the raw output of calls to
+#'      an external program or function;}
+#'    \item{call}{is a string used to report how \code{targetRunner} called 
+#'      an external program or function.}
+#'  }
+#'
+#' 
+#' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
+#' @export
 target.runner.default <- function(experiment, scenario)
 {
   debugLevel       <- scenario$debugLevel
@@ -234,13 +367,14 @@ target.runner.default <- function(experiment, scenario)
   configuration    <- experiment$configuration
   instance         <- experiment$instance
   switches         <- experiment$switches
+  bound            <- experiment$bound
   
   targetRunner <- scenario$targetRunner
   if (as.logical(file.access(targetRunner, mode = 1))) {
     irace.error ("targetRunner ", shQuote(targetRunner), " cannot be found or is not executable!\n")
   }
 
-  args <- paste(configuration.id, instance.id, seed, instance,
+  args <- paste(configuration.id, instance.id, seed, instance, bound,
                 buildCommandLine(configuration, switches))
   output <- runcommand(targetRunner, args, configuration.id, debugLevel)
 
@@ -249,7 +383,7 @@ target.runner.default <- function(experiment, scenario)
   if (is.null(err.msg)) {
     v.output <- parse.output(output$output, verbose = (scenario$debugLevel >= 2))
     if (length(v.output) > 2) {
-      err.msg <- paste0("The output of targetRunner should not be more than two numbers!")
+      err.msg <- "The output of targetRunner should not be more than two numbers!"
     } else if (length(v.output) == 1) {
       if (!is.null(scenario$targetEvaluator)) {
         time <- v.output[1]
@@ -270,7 +404,7 @@ execute.experiments <- function(experiments, scenario)
 {
   parallel <- scenario$parallel
   mpi <- scenario$mpi
-
+  target.runner <- .irace$target.runner
   execDir <- scenario$execDir
   if (!isTRUE (file.info(execDir)$isdir)) {
     irace.error ("Execution directory '", execDir, "' is not found or not a directory\n")
@@ -282,7 +416,9 @@ execute.experiments <- function(experiments, scenario)
   if (!is.null(scenario$targetRunnerParallel)) {
     # User-defined parallelization
     target.output <-
-      scenario$targetRunnerParallel(experiments, exec.target.runner, scenario = scenario)
+      scenario$targetRunnerParallel(experiments, exec.target.runner,
+                                    scenario = scenario,
+                                    target.runner = target.runner)
   } else if (scenario$batchmode != 0) {
     target.output <- cluster.lapply (experiments, scenario = scenario)
   } else if (parallel > 1) {
@@ -290,7 +426,7 @@ execute.experiments <- function(experiments, scenario)
       if (scenario$loadBalancing) {
         target.output <- Rmpi::mpi.applyLB(experiments, exec.target.runner,
                                            scenario = scenario,
-                                           target.runner = .irace$target.runner)
+                                           target.runner = target.runner)
       } else {
         # Without load-balancing, we need to split the experiments into chunks
         # of size parallel.
@@ -299,7 +435,7 @@ execute.experiments <- function(experiments, scenario)
                                        ceiling(1:length(experiments) / parallel),
                                        Rmpi::mpi.apply, exec.target.runner,
                                        scenario = scenario,
-                                       target.runner = .irace$target.runner))
+                                       target.runner = target.runner))
       }
       # FIXME: if stop() is called from mpi.applyLB, it does not
       # terminate the execution of the parent process, so it will
@@ -319,11 +455,13 @@ execute.experiments <- function(experiments, scenario)
         if (scenario$loadBalancing) {
           target.output <-
             parallel::parLapplyLB(.irace$cluster, experiments, exec.target.runner,
-                                  scenario = scenario)
+                                  scenario = scenario,
+                                  target.runner = target.runner)
         } else {
           target.output <-
             parallel::parLapply(.irace$cluster, experiments, exec.target.runner,
-                                scenario = scenario)
+                                scenario = scenario,
+                                target.runner = target.runner)
         }
         # FIXME: if stop() is called from parLapply, then the parent
         # process also terminates, and we cannot give further errors.
@@ -333,7 +471,8 @@ execute.experiments <- function(experiments, scenario)
                              # FALSE means load-balancing.
                              mc.preschedule = !scenario$loadBalancing,
                              mc.cores = parallel,
-                             scenario = scenario)
+                             scenario = scenario,
+                             target.runner = target.runner)
         # FIXME: if stop() is called from mclapply, it does not
         # terminate the execution of the parent process, so it will
         # continue and give more errors later. We have to terminate
@@ -352,9 +491,9 @@ execute.experiments <- function(experiments, scenario)
     }
   } else {
     # One process, all sequential
-    for (k in seq_along(experiments)) {
-      target.output[[k]] <- exec.target.runner(experiments[[k]], scenario = scenario)
-    }
+    target.output <- lapply(experiments, exec.target.runner,
+                            scenario = scenario,
+                            target.runner = target.runner)
   }
  
   return(target.output)
@@ -375,7 +514,7 @@ execute.evaluator <- function(experiments, scenario, target.output, configuratio
     target.output[[k]]$cost <- output$cost
     if (is.null(target.output[[k]]$call))
       target.output[[k]]$call <- output$call
-    if (is.null(target.output[[k]]$time))
+    if (is.null(target.output[[k]]$time) || !is.null.or.na(output$time))
       target.output[[k]]$time <- output$time
   }
   return(target.output)

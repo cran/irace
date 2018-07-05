@@ -3,7 +3,7 @@
 # FIXME: Reload dynamic libraries? See ?dyn.load
 irace.reload.debug <- function(package = "irace")
 {
-  pkg <- paste("package:", package, sep ="")
+  pkg <- paste0("package:", package)
   try(detach(pkg, character.only = TRUE, unload = TRUE))
   library(package, character.only = TRUE)
   options(error = if (interactive()) utils::recover else
@@ -89,7 +89,7 @@ irace.assert <- function(exp)
 {
   if (exp) return(invisible())
   mc <- match.call()[[2]]
-  msg <- paste(deparse(mc), " is not TRUE\n", .irace.bug.report, sep = "")
+  msg <- paste0(deparse(mc), " is not TRUE\n", .irace.bug.report)
   # FIXME: It would be great if we could save into a file the state of
   # the function that called this one.
   traceback(1)
@@ -105,13 +105,15 @@ irace.assert <- function(exp)
 irace.note <- function(...)
 {
   cat ("# ", format(Sys.time(), usetz=TRUE), ": ",
-       paste(..., sep = "", collapse = ""), sep = "")
+       paste0(..., collapse = ""), sep = "")
 }
 
 file.check <- function (file, executable = FALSE, readable = executable,
+                        writeable = FALSE,
                         isdir = FALSE, notempty = FALSE, text = NULL)
 {
   EXEC <- 1 # See documentation of the function file.access()
+  WRITE <- 2
   READ <- 4
 
   if (!is.character(file) || is.null.or.empty(file)) {
@@ -123,9 +125,22 @@ file.check <- function (file, executable = FALSE, readable = executable,
   ## must remain.
   
   if (!file.exists(file)) {
+    if (writeable) {
+      if (tryCatch({ suppressWarnings(file.create(file) && file.remove(file)) },
+                   error=function(e) FALSE))
+        return(TRUE)
+      irace.error("cannot create ", text, " ", shQuote(file))
+      return (FALSE)
+    }
     irace.error (text, " '", file, "' does not exist")
     return(FALSE)
   }
+
+  if (writeable && (file.access(file, mode = WRITE) != 0)) {
+    irace.error(text, " '", file, "' cannot be written into")
+    return(FALSE)
+  }
+  
   if (readable && (file.access(file, mode = READ) != 0)) {
     irace.error(text, " '", file, "' is not readable")
     return (FALSE)
@@ -155,19 +170,46 @@ file.check <- function (file, executable = FALSE, readable = executable,
 round.to.next.multiple <- function(x, d)
   return(x + d - 1 - (x - 1) %% d)
 
+# This returns FALSE for Inf/-Inf/NA
 is.wholenumber <- function(x, tol = .Machine$double.eps^0.5)
 {
-  abs(x - round(x)) < tol
+  is.finite(x) & (abs(x - round(x)) < tol)
+}
+
+is.na.nowarn <- function(x)
+{
+  length(x) == 1 && suppressWarnings(is.na(x))
 }
 
 is.null.or.na <- function(x)
 {
-  is.null(x) || (length(x) == 1 && suppressWarnings(is.na(x)))
+  is.null(x) || is.na.nowarn(x)
 }
 
+# FIXME: This should also return TRUE when length(x) == 0
 is.null.or.empty <- function(x)
 {
-  is.null(x) || (length(x) == 1 && is.character(x) && x == "")
+  is.null(x) || (!suppressWarnings(is.na(x)) && length(x) == 1 && is.character(x) && x == "")
+}
+
+is.function.name <- function(FUN)
+{
+  # FIXME: Is there a simpler way to do this check?
+  is.function(FUN) ||
+    (!is.null(FUN) && !is.na(FUN) && as.character(FUN) != "" &&
+     !is.null(mget(as.character(FUN), envir = as.environment(-1),
+                   mode = "function", ifnotfound = list(NULL),
+                   inherits = TRUE)[[1]]))
+}
+
+get.function <- function(FUN)
+{
+  irace.assert(is.function.name(FUN))
+  if (is.function(FUN)) return(FUN)
+  # FIXME: Is there a simpler way to do this?
+  return(mget(FUN, envir = as.environment(-1),
+              mode = "function", ifnotfound = list(NULL),
+              inherits = TRUE)[[1]])
 }
 
 is.bytecode <- function(x) typeof(x) == "bytecode"
@@ -175,7 +217,7 @@ is.bytecode <- function(x) typeof(x) == "bytecode"
 bytecompile <- function(x)
 {
   if (is.bytecode(x)) return(x)
-  else return(compiler::cmpfun(x))
+  return(compiler::cmpfun(x))
 }
 
 strcat <- function(...)
@@ -294,16 +336,6 @@ path.rel2abs <- function (path, cwd = getwd())
   return (irace.normalize.path(path))
 }
 
-is.function.name <- function(FUN)
-{
-  # FIXME: Is there a simpler way to do this check?
-  is.function(FUN) ||
-  (!is.null(FUN) && !is.na(FUN) && as.character(FUN) != "" &&
-   !is.null(mget(as.character(FUN), envir = as.environment(-1),
-                 mode = "function", ifnotfound = list(NULL),
-                 inherits = TRUE)[[1]]))
-}
-
 # This function is used to trim potentially large strings for printing, since
 # the maximum error/warning length is 8170 characters (R 3.0.2)
 strlimit <- function(str, limit = 5000)
@@ -412,6 +444,24 @@ extractElites <- function(configurations, nbElites)
   return (elites)
 }
 
+#' removeConfigurationsMetaData
+#'
+#' Remove the columns with "metadata" of a matrix containing some
+#' configuration configurations. These "metadata" are used internaly
+#' by \pkg{irace}. This function can be used e.g. before printing
+#' the configurations, to output only the values for the parameters
+#' of the configuration without data possibly useless to the user.
+#'   
+#' @param configurations A matrix containg the configurations, one per row.
+#' 
+#' @return The same matrix without the "metadata".
+#'    
+#' @seealso 
+#'   \code{\link{configurations.print.command}} to print the configurations as command lines.
+#'   \code{\link{configurations.print}} to print the configurations as a data frame.
+#' 
+#' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
+#' @export
 ## Keep only parameters values
 removeConfigurationsMetaData <- function(configurations)
 {
@@ -420,28 +470,58 @@ removeConfigurationsMetaData <- function(configurations)
                      drop = FALSE])
 }
 
-configurations.print <- function(configuration, metadata = FALSE)
+#' Print configurations as a data frame
+#' 
+#' @param configurations a data frame containing the configurations (one per row).
+#' @param metadata A Boolean specifying whether to print the metadata or
+#' not. The metadata are data for the configurations (additionally to the
+#' value of each parameter) used by \pkg{irace}.
+#' 
+#' @return None.
+#'
+#' @seealso
+#'  \code{\link{configurations.print.command}} to print the configurations as command-line strings.
+#' 
+#' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
+#' @export
+configurations.print <- function(configurations, metadata = FALSE)
 {
-  rownames(configuration) <- configuration$.ID.
+  rownames(configurations) <- configurations$.ID.
   if (!metadata) {
-    configuration <- removeConfigurationsMetaData(configuration)
+    configurations <- removeConfigurationsMetaData(configurations)
   } 
-  print(as.data.frame(configuration, stringsAsFactors = FALSE))
+  print(as.data.frame(configurations, stringsAsFactors = FALSE))
 }
 
-configurations.print.command <- function(configuration, parameters)
+#' Print configurations as command-line strings.
+#' 
+#' Prints configurations after converting them into a representation for the
+#' command-line.
+#' 
+#' @param configurations a data frame containing the configurations (one per row).
+#' @param parameters A data structure similar to that provided by the 
+#' \code{\link{readParameters}} function.
+#' 
+#' @return None.
+#'
+#' @seealso
+#'  \code{\link{configurations.print}} to print the configurations as a data frame.
+#' 
+#' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
+#' @export
+configurations.print.command <- function(configurations, parameters)
 {
-  if (nrow(configuration) <= 0) return(invisible())
-  ids <- as.numeric(configuration$.ID.)
-  configuration <- removeConfigurationsMetaData(configuration)
+  if (nrow(configurations) <= 0) return(invisible())
+  ids <- as.numeric(configurations$.ID.)
+  configurations <- removeConfigurationsMetaData(configurations)
   # Re-sort the columns
-  configuration <- configuration[, parameters$names, drop = FALSE]
+  configurations <- configurations[, parameters$names, drop = FALSE]
   # A better way to do this? We cannot use apply() because that coerces
   # to a character matrix thus messing up numerical values.
   len <- nchar(max(ids))
-  for (i in seq_len (nrow(configuration))) {
+  for (i in seq_len (nrow(configurations))) {
     cat(sprintf("%-*d %s\n", len, ids[i],
-                buildCommandLine(configuration[i, , drop=FALSE], parameters$switches)))
+                buildCommandLine(configurations[i, , drop=FALSE], parameters$switches)))
   }
 }
 
@@ -605,7 +685,7 @@ runcommand <- function(command, args, id, debugLevel)
   # warning and in the attribute ‘"status"’ of the result: an attribute
   # ‘"errmsg"’ may also be available.
   if (!is.null(err)) {
-    err <- paste(err, collapse ="\n")
+    err <- paste(err, collapse = "\n")
     if (!is.null(attr(output, "errmsg")))
       output <- paste(sep = "\n", attr(output, "errmsg"))
     if (debugLevel >= 2L)
@@ -622,3 +702,33 @@ runcommand <- function(command, args, id, debugLevel)
 
 # Safe sampling of vector: 
 resample <- function(x, ...) x[sample.int(length(x), ...)]
+
+# Rounds up the number x to the specified number of decimal places 'digits'.
+ceiling.digits <- function(x, digits)
+{
+   multiple <- 10^-digits
+   div <- x / multiple
+   int_div <- trunc(div)
+   return (int_div * multiple + ceiling(div - int_div) * multiple)
+}
+
+# ceil.decimal <- function(x, d) { 
+  # # get the significant digits in the integer part.
+  # ssd <- x * 10^(d)
+  # # get the non significant digits
+  # nsd <- ssd - floor(ssd)
+
+  # ssd <- trunc(ssd)
+  # sel <- nsd > 0 | ssd==0
+  # ssd[sel] <- ssd[sel] + 1
+  # x2 <- ssd/10^(d)
+  # return(x2)
+# }
+
+is.file.extension <- function(filename, ext)
+{
+  return(substring(filename, nchar(filename) + 1 - nchar(ext)) == ext)
+}
+
+# Same as !(x %in% table)
+"%!in%" <- function (x, table) match(x, table, nomatch = 0L) == 0L

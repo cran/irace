@@ -19,6 +19,13 @@
 # This script should print nothing.
 # Exit with 0 if no error, with 1 in case of error
 ###############################################################################
+error() {
+    echo "`TZ=UTC date`: $0: error: $@"
+    cat $tmpfile
+    rm -f $tmpfile
+    exit 1
+}
+
 tmpfile=$(mktemp)
 
 EXE=~/bin/program
@@ -28,24 +35,17 @@ CANDIDATE=$1
 INSTANCEID=$2
 SEED=$3
 INSTANCE=$4
-shift 4 || error "Not enough parameters to $0"
+shift 4 || error "Not enough parameters"
 CAND_PARAMS=$*
 
-STDOUT=c${CANDIDATE}-${INSTANCEID}.stdout
-STDERR=c${CANDIDATE}-${INSTANCEID}.stderr
-
-error() {
-    echo "`TZ=UTC date`: error: $@"
-    cat $tmpfile
-    rm -f $tmpfile
-    exit 1
-}
+STDOUT=c${CANDIDATE}-${INSTANCEID}-${SEED}.stdout
+STDERR=c${CANDIDATE}-${INSTANCEID}-${SEED}.stderr
 
 # modify with the SLURM submission template
 sbatch 1> $tmpfile <<EOF
 #!/bin/bash
-#SBATCH --job-name=irace-$PPID-$CANDIDATE-${INSTANCEID}
-###SBATCH --output=test-$CANDIDATE-${INSTANCEID}.out
+#SBATCH --job-name=irace-$PPID-$CANDIDATE-${INSTANCEID}-${SEED}
+###SBATCH --output=test-$CANDIDATE-${INSTANCEID}-${SEED}.out
 #SBATCH --time=0-5:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1

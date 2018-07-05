@@ -1,24 +1,24 @@
 ## ----include=FALSE-------------------------------------------------------
 library(knitr)
 
-## ----exampleload,eval=TRUE,include=FALSE------------------
+## ----exampleload,eval=TRUE,include=FALSE----------------------------
 library("irace")
 load("examples.Rdata")
-load("irace-output.Rdata")
-options(width = 60)
+load("irace-acotsp.Rdata")
+load("log-ablation.Rdata")
+options(width = 70)
 
-## ----R_irace_install, prompt=FALSE, eval=FALSE------------
+## ----R_irace_install, prompt=FALSE, eval=FALSE----------------------
 #  install.packages("irace")
 
-## ----R_irace_launch,eval=FALSE, prompt=FALSE--------------
+## ----R_irace_launch,eval=FALSE, prompt=FALSE------------------------
 #  library("irace")
 #  q() # To exit R
 
-## ----install_win1,eval=FALSE, prompt=FALSE----------------
-#  # Replace <package> with the path to the downloaded file.
+## ----install_win1,eval=FALSE, prompt=FALSE--------------------------
 #  install.packages("<package>", repos = NULL)
 
-## ----install_win2,eval=FALSE, prompt=FALSE----------------
+## ----install_win2,eval=FALSE, prompt=FALSE--------------------------
 #  # Replace <package> with the path to the downloaded file.
 #  # Replace <R_LIBS_USER> with the path used for installation.
 #  install.packages("<package>", repos = NULL, lib = "<R_LIBS_USER>")
@@ -26,71 +26,66 @@ options(width = 60)
 #  # This must be executed for every new session.
 #  .libPaths(c("<R_LIBS_USER>", .libPaths()))
 
-## ----R_irace_test1, prompt=FALSE, eval=FALSE--------------
+## ----R_irace_test1, prompt=FALSE, eval=FALSE------------------------
 #  # Load the package
 #  library("irace")
 #  # Obtain the installation path
 #  system.file(package = "irace")
 
-## ----windows_irace_help ,eval=FALSE, prompt=FALSE---------
+## ----windows_irace_help ,eval=FALSE, prompt=FALSE-------------------
 #  library("irace")
 #  irace.cmdline("--help")
 
-## ----irace_R_exe0, eval=FALSE, prompt=FALSE---------------
+## ----irace_R_check, eval=FALSE, prompt=FALSE------------------------
 #  library("irace")
-#  parameters <- readParameters("parameters.txt")
 #  scenario <- readScenario(filename = "scenario.txt",
 #                           scenario = defaultScenario())
-#  irace(scenario = scenario, parameters = parameters)
+#  checkIraceScenario(scenario = scenario)
 
-## ----irace_R_check, eval=FALSE, prompt=FALSE--------------
-#  library("irace")
-#  parameters <- readParameters("parameters.txt")
-#  scenario <- readScenario(filename = "scenario.txt",
-#                           scenario = defaultScenario())
-#  checkIraceScenario(scenario = scenario, parameters = parameters)
-
-## ----irace_R_exe, eval=FALSE, prompt=FALSE----------------
+## ----irace_R_exe, eval=FALSE, prompt=FALSE--------------------------
 #  library("irace")
 #  # Go to the directory containing the scenario files
 #  setwd("~/tuning")
-#  # Create the R objects scenario and parameters
-#  parameters <- readParameters("parameters.txt")
 #  scenario <- readScenario(filename = "scenario.txt",
 #                           scenario = defaultScenario())
-#  irace(scenario = scenario, parameters = parameters)
+#  irace.main(scenario = scenario)
 
-## ----runexample2,prompt=FALSE,eval=FALSE------------------
+## ----runexample2,prompt=FALSE,eval=FALSE----------------------------
 #  library("irace")
 #  setwd("~/tuning/")
-#  parameters <- readParameters("parameters-acotsp.txt")
-#  scenario <- readScenario(filename = "scenario.txt",
-#                           scenario = defaultScenario())
-#  irace(scenario = scenario, parameters = parameters)
+#  irace.cmdline()
 
-## ----readParameters,prompt=FALSE, eval=FALSE--------------
+## ----readParameters,prompt=FALSE, eval=FALSE------------------------
 #  parameters <- readParameters(file = "parameters.txt")
 
-## ----parameterlist,eval=TRUE, prompt=TRUE, size='normalsize', comment=""----
-print(parameters)
+## ----parametersetup,eval=TRUE,include=FALSE-------------------------
+# Setup example
+parameters <- irace::readParameters(text='
+algorithm       "--"                 c		(as,mmas,eas,ras,acs)
+ants            "--ants "            i	  	(5, 100)
+q0              "--q0 "              r  	(0.0, 1.0) 		| algorithm %in% c("acs")
+')
 
-## ----targetRunner,prompt=FALSE, eval=FALSE----------------
+## ----parameterlist,eval=TRUE, prompt=TRUE, size='normalsize', comment=""----
+str(parameters, vec.len = 10)
+
+## ----targetRunner,prompt=FALSE, eval=FALSE--------------------------
 #  targetRunner(experiment, scenario)
 
 ## ----experimentlist,eval=TRUE,size='normalsize', prompt=TRUE,  comment=""----
 print(experiment)
 
-## ----targetEvaluator, prompt=FALSE, eval=FALSE------------
+## ----targetEvaluator, prompt=FALSE, eval=FALSE----------------------
 #  targetEvaluator(experiment, num.configurations, all.conf.id,
 #                  scenario, target.runner.call)
 
-## ----instance1, prompt=FALSE, eval=FALSE------------------
+## ----instance1, prompt=FALSE, eval=FALSE----------------------------
 #  scenario$instances <- c("rosenbrock_20 --function=12 --nvar 20",
 #                          "rosenbrock_40 --function=12 --nvar 30",
 #                          "rastrigin_20 --function=15 --nvar 20",
 #                          "rastrigin_40 --function=15 --nvar 30")
 
-## ----repairEx,prompt=FALSE, eval=FALSE--------------------
+## ----repairEx,prompt=FALSE, eval=FALSE------------------------------
 #  repairConfiguration = function (configuration, parameters, digits)
 #  {
 #    isreal <- parameters$type[colnames(configuration)] %in% "r"
@@ -98,7 +93,7 @@ print(experiment)
 #    return(configuration)
 #  }
 
-## ----repairEx2,prompt=FALSE, eval=FALSE-------------------
+## ----repairEx2,prompt=FALSE, eval=FALSE-----------------------------
 #  repairConfiguration = function (configuration, parameters, digits)
 #  {
 #   columns <- c("p1","p2","p3")
@@ -108,22 +103,22 @@ print(experiment)
 #   return(configuration)
 #  }
 
-## ----targetRunnerParallel,prompt=FALSE, eval=FALSE--------
+## ----targetRunnerParallel,prompt=FALSE, eval=FALSE------------------
 #    targetRunnerParallel(experiments, exec.target.runner, scenario)
 
-## ----targetRunnerParallel2,prompt=FALSE, eval=FALSE-------
+## ----targetRunnerParallel2,prompt=FALSE, eval=FALSE-----------------
 #  targetRunnerParallel <- function(experiments, exec.target.runner, scenario)
 #  {
 #    return (lapply(experiments, exec.target.runner, scenario = scenario))
 #  }
 
-## ----targetRunnerParallel3,prompt=FALSE, eval=TRUE--------
+## ----targetRunnerParallel3,prompt=FALSE, eval=TRUE------------------
    print(output)
 
-## ----testing_r, prompt=FALSE, eval=FALSE------------------
+## ----testing_r, prompt=FALSE, eval=FALSE----------------------------
 #  testing.main(logFile = "./irace.Rdata")
 
-## ----change_recover, prompt=TRUE, eval=FALSE--------------
+## ----change_recover, prompt=TRUE, eval=FALSE------------------------
 #  load ("~/tuning/irace.Rdata")
 #  new.path <- "~/experiments/tuning/instances/"
 #  iraceResults$scenario$instances <-
@@ -132,31 +127,31 @@ print(experiment)
 #           sep="")
 #  save (iraceResults, file="~/tuning/irace.Rdata")
 
-## ----load_rdata, prompt=FALSE, eval=FALSE-----------------
-#  load("irace-output.Rdata")
+## ----load_rdata, prompt=FALSE, eval=FALSE---------------------------
+#  load("irace-acotsp.Rdata")
 
-## ----show_version, prompt=TRUE, eval=TRUE, comment=""-----
+## ----show_version, prompt=TRUE, eval=TRUE, comment=""---------------
 iraceResults$irace.version
 iraceResults[["irace.version"]]
 
-## ----show_configurations, prompt=TRUE, eval=TRUE, comment=""----
+## ----show_configurations, prompt=TRUE, eval=TRUE, comment=""--------
 head(iraceResults$allConfigurations)
 
-## ----show_idelites, prompt=TRUE, eval=TRUE, comment=""----
+## ----show_idelites, prompt=TRUE, eval=TRUE, comment=""--------------
 print(iraceResults$allElites)
 
-## ----get_elites, prompt=TRUE, eval=TRUE, comment=""-------
-getFinalElites(logFile = "irace-output.Rdata", n = 0)
+## ----get_elites, prompt=TRUE, eval=TRUE, comment=""-----------------
+getFinalElites(logFile = "irace-acotsp.Rdata", n = 0)
 
-## ----show_iditelites, prompt=TRUE, eval=TRUE, comment=""----
+## ----show_iditelites, prompt=TRUE, eval=TRUE, comment=""------------
 print(iraceResults$iterationElites)
 
-## ----get_elite, prompt=TRUE, eval=TRUE, comment=""--------
+## ----get_elite, prompt=TRUE, eval=TRUE, comment=""------------------
 last <- length(iraceResults$iterationElites)
 id <- iraceResults$iterationElites[last]
-getConfigurationById(logFile = "irace-output.Rdata", ids = id)
+getConfigurationById(logFile = "irace-acotsp.Rdata", ids = id)
 
-## ----get_experiments, prompt=TRUE, eval=TRUE, comment=""----
+## ----get_experiments, prompt=TRUE, eval=TRUE, comment=""------------
 # As an example, we use the best configuration found
 best.config <- getFinalElites(iraceResults = iraceResults, n = 1)
 id <- best.config$.ID.
@@ -165,7 +160,7 @@ id <- best.config$.ID.
 all.exp <- iraceResults$experiments[,as.character(id)]
 all.exp[!is.na(all.exp)]
 
-## ----get_instance_seed, prompt=TRUE, eval=TRUE, comment=""----
+## ----get_instance_seed, prompt=TRUE, eval=TRUE, comment=""----------
 # As an example, we get seed and instance of the experiments
 # of the best candidate.
 # Get index of the instances
@@ -176,22 +171,22 @@ iraceResults$scenario$instances[index]
 # Get the seeds
 iraceResults$state$.irace$instancesList[index,"seed"]
 
-## ----get_model, prompt=TRUE, eval=TRUE, comment=""--------
+## ----get_model, prompt=TRUE, eval=TRUE, comment=""------------------
 # As an example, we get the model probabilities for the
 # localsearch parameter.
 iraceResults$state$model["localsearch"]
 # The order of the probabilities corresponds to:
 iraceResults$parameters$domain$localsearch
 
-## ----get_test_exp, prompt=TRUE, eval=TRUE, comment=""-----
-# Get the experiments of the testing
+## ----get_test_exp, prompt=TRUE, eval=TRUE, comment=""---------------
+# Get the results of the testing
 iraceResults$testing$experiments
 
-## ----get_test_seeds, prompt=TRUE, eval=TRUE, comment=""----
-# Get the experiments of the testing
+## ----get_test_seeds, prompt=TRUE, eval=TRUE, comment=""-------------
+# Get the seeds used for testing
 iraceResults$testing$seeds
 
-## ----plot_test, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Boxplot of the testing results of the best configurations.", prompt=TRUE, eval=TRUE, comment=""----
+## ----plot_test, fig.pos="tbp", fig.align="center", fig.height = 4, fig.width = 8, out.width='0.85\\textwidth', fig.cap="Boxplot of the testing results of the best configurations.", prompt=TRUE, eval=TRUE, comment=""----
 results <- iraceResults$testing$experiments
 # Wilcoxon paired test
 conf <- gl(ncol(results), # number of configurations
@@ -199,14 +194,12 @@ conf <- gl(ncol(results), # number of configurations
            labels = colnames(results))
 pairwise.wilcox.test (as.vector(results), conf, paired = TRUE, p.adj = "bonf")
 # Plot the results
-boxplot (iraceResults$testing$experiments,
-         ylab = "Solution cost",
-         xlab = "Configuration ID")
+configurationsBoxplot (results, ylab = "Solution cost")
 
-## ----freq, fig.pos="tbp", fig.cap="Parameters sampling frequency.", prompt=TRUE, eval=TRUE, comment=""----
+## ----freq, fig.pos="tbp", fig.cap="Parameters sampling frequency.", out.width="\\textwidth",prompt=TRUE, eval=TRUE, comment=""----
 parameterFrequency(iraceResults$allConfigurations, iraceResults$parameters)
 
-## ----parcord, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Parallel coordinate plots of the parameters of the configurations in the last two iterations of a run of \\irace.", prompt=FALSE, eval=TRUE, comment=""----
+## ----parcord, fig.pos="tbp", fig.align="center", out.width="0.7\\textwidth", fig.cap="Parallel coordinate plots of the parameters of the configurations in the last two iterations of a run of \\irace.", prompt=FALSE, eval=TRUE, comment=""----
 # Get last iteration number
 last <- length(iraceResults$iterationElites)
 # Get configurations in the last two iterations
@@ -219,7 +212,7 @@ parallelCoordinatesPlot (conf, iraceResults$parameters,
 ## ----trainEvo, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Training set performance of the best-so-far configuration over number of experiments.", prompt=FALSE, eval=TRUE, comment=""----
 # Get number of iterations
 iters <- unique(iraceResults$experimentLog[, "iteration"])
-# Get number of experiments (function evaluations) up to each iteration
+# Get number of experiments (runs of target-runner) up to each iteration
 fes <- cumsum(sapply(iters, function(k)
   sum(iraceResults$experimentLog[, "iteration"] == k)))
 # Get the mean value of all experiments executed up to each iteration
@@ -232,14 +225,14 @@ values <- sapply(iters, function(k) {
   return(mean(iraceResults$experiments[
                              instances,
                              as.character(iraceResults$iterationElites[k])]))})
-plot(fes, values, type="s", xlab = "Function evaluations",
-     ylab = "Estimated mean value over training set")
+plot(fes, values, type="s", xlab = "Number of runs of the target algorithm",
+     ylab = "Estimated mean value over whole training set")
 points(fes, values)
 
 ## ----testEvo, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Testing set performance of the best-so-far configuration over number of experiments.", prompt=FALSE, eval=TRUE, comment=""----
 # Get number of iterations
 iters <- unique(iraceResults$experimentLog[, "iteration"])
-# Get number of experiments (function evaluations) up to each iteration
+# Get number of experiments (runs of target-runner) up to each iteration
 fes <- cumsum(sapply(iters, function(k)
   sum(iraceResults$experimentLog[, "iteration"] == k)))
 # Get the mean value of all experiments executed up to each iteration
@@ -248,17 +241,32 @@ values <- sapply(iters, function(k)
   mean(iraceResults$testing$experiments[
                             , as.character(iraceResults$iterationElites[k])]))
 plot(fes, values, type = "s",
-     xlab = "Function evaluations", ylab = "Mean value over testing set")
+     xlab = "Number of runs of the target algorithm",
+     ylab = "Mean value over testing set")
 points(fes, values)
 
-## ----faq3, eval=FALSE-------------------------------------
+## ----ablation, prompt=FALSE, eval=FALSE-----------------------------
+#  ablation(iraceLogFile = "irace.Rdata",
+#           src = 1, target = 60, pdf.file = "plot-ablation.pdf")
+
+## ----testAb, fig.pos="htb!", fig.align="center", out.width="0.75\\textwidth", fig.cap="Example of plot generated by \\code{ablation()}.", prompt=FALSE, eval=TRUE, echo=FALSE----
+plotAblation(abLogFile = "log-ablation.Rdata")
+
+## ----postsel, prompt=FALSE, eval=FALSE------------------------------
+#  # Execute all elite configurations in the iterations
+#  psRace(iraceLogFile="irace.Rdata", elites=TRUE)
+#  # Execute a set of configurations IDs providing budget
+#  psRace(iraceLogFile="irace.Rdata",
+#               conf.ids=c(34, 87, 102, 172, 293),
+#               max.experiments=500)
+
+## ----faq3, eval=FALSE-----------------------------------------------
 #  library(Rmpi)
 #  mpi.spawn.Rslaves(nslaves = 10)
-#  x <- mpi.applyLB(1:10, function(x) {
-#    library(irace)
-#    return(path.package("irace")) })
-#         print(x)
+#  paths <- mpi.applyLB(1:10, function(x) {
+#    library(irace); return(path.package("irace")) })
+#  print(paths)
 
-## ----R_irace_home2, prompt=FALSE, eval=FALSE--------------
+## ----R_irace_home2, prompt=FALSE, eval=FALSE------------------------
 #  system.file(package = "irace")
 

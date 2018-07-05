@@ -2,6 +2,67 @@
 ## READ DEFINITION OF PARAMETERS FROM A FILE
 #########################################################
 
+#' readParameters
+#'
+#' \code{readParameters} reads the parameters to be tuned by 
+#' \pkg{irace} from a file or directly from a character string.
+#' 
+#' @param file (optional) Character string: the name of the file 
+#'  containing the definitions of theparameters to be tuned.
+#' @param digits The number of decimal places to be considered for the
+#'  real parameters.
+#' @param debugLevel Integer: the debug level to increase the amount of output.
+#' @param text (optional) Character string: if file is not supplied and this is,
+#'  then parameters are read from the value of text via a text connection.
+#' 
+#' @return A list containing the definitions of the parameters read. The list is
+#'  structured as follows:
+#'   \itemize{
+#'     \item{names}{Vector that contains the names of the parameters.}
+#'     \item{types}{Vector that contains the type of each parameter 'i', 'c', 'r', 'o'.
+#'       Numerical parameters can be sampled in a log-scale with 'i,log' and 'r,log'
+#'       (no spaces).}
+#'     \item{switches}{Vector that contains the switches to be used for the
+#'       parameters on the command line.}
+#'     \item{domain}{List of vectors, where each vector may contain two
+#'       values (minimum, maximum) for real and integer parameters, or
+#'       possibly more for categorical parameters.}
+#'     \item{conditions}{List of R logical expressions, with variables
+#'       corresponding to parameter names.}
+#'     \item{isFixed}{Logical vectors that specifies which parameter is fixed
+#'       and, thus, it does not need to be tuned.}
+#'     \item{nbParameters}{An integer, the total number of parameters.}
+#'     \item{nbFixed}{An integer, the number of parameters with a fixed value.}
+#'     \item{nbVariable}{Number of variable (to be tuned) parameters.}
+#'   }
+#'
+#' @details Either 'file' or 'text' must be given. If 'file' is given, the
+#'  parameters are read from the file 'file'. If 'text' is given instead,
+#'  the parameters are read directly from the 'text' character string.
+#'  In both cases, the parameters must be given (in 'text' or in the file
+#'  whose name is 'file') in the expected form.  See the documentation
+#'  for details.  If none of these parameters is given, \pkg{irace}
+#'  will stop with an error.
+#'
+#'  A fixed parameter is a parameter that should not be sampled but
+#'  instead should be always set to the only value of its domain.  In this
+#'  function we set isFixed to TRUE only if the parameter is a categorical
+#'  and has only one possible value.  If it is an integer and the minimum
+#'  and maximum are equal, or it is a real and the minimum and maximum
+#'  values satisfy 'round(minimum, digits) == round(maximum, digits)',
+#'  then the parameter description is rejected as invalid to identify
+#'  potential user errors.
+#'
+#' @examples
+#'  ## Read the parameters directly from text
+#'  parameters.table <- 'tmax "" i (2, 10)
+#'  temp "" r (10, 50)
+#'  '
+#'  parameters <- readParameters(text=parameters.table)
+#'  parameters
+#' 
+#' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
+#' @export
 # Main function to read the parameters definition from a file
 readParameters <- function (file, digits = 4, debugLevel = 0, text)
 {
@@ -19,16 +80,22 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
   field.match <- function (line, pattern, delimited = FALSE, sep = "[[:space:]]")
   {
     #cat ("pattern:", pattern, "\n")
-    if (regexpr (paste("^", pattern, sep, sep=""), line) == -1) {
+    positions <- lapply(1:length(pattern), function(x) regexpr (paste0("^", pattern[x], sep), line))
+    if (all(sapply(positions, `[[`, 1) == -1)) {
       #cat("no match: NULL\n")
       return (list(match = NULL, line = line))
     }
-    pos.matched <- regexpr (paste("^", pattern, sep=""), line)
+    pos.matched.list <- lapply(1:length(pattern), function(x) regexpr (paste0("^", pattern[x]), line))
     #cat("pos.matched:", pos.matched, "\n")
-    if (pos.matched == -1) {
+    if (all(sapply(pos.matched.list, `[[`, 1) == -1)) {
       #cat(line)
       return (list(match = NULL, line = line))
     }
+    position <- which(sapply(pos.matched.list, `[[`,1) != -1)
+    if (length(position) > 1) {
+      position <- position[1]
+    }
+    pos.matched <- pos.matched.list[[position]]
     delimited <- as.integer(delimited)
     match <- substr(line, pos.matched[1] + delimited,
                     attr(pos.matched, "match.length") - delimited)
@@ -82,8 +149,9 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
   # *  If a parameter depends on another one not defined, execution is stopped
   treeLevelAux <- function(paramName, conditionsTree, rootParam)
   {
-    ## FIXME: In R 3.2, all.vars does not work with byte-compiled expressions.
-    ## but we can use all.vars(.Internal(disassemble(condition))[[3]][[1]])
+    ## FIXME: In R 3.2, all.vars does not work with byte-compiled expressions,
+    ## thus we do not byte-compile them; but we could use
+    ## all.vars(.Internal(disassemble(condition))[[3]][[1]])
     vars <- all.vars (conditionsTree[[paramName]])
     if (length(vars) == 0) {
       return (1) # This parameter does not have conditions
@@ -172,13 +240,24 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
                          "parameter switch must be a double-quoted string")
     }
     
-    ## Match param.type (single letter)
-    result <- field.match (line, "[ciro]")
+    ## Match param.type (longer matches must precede shorter ones)
+    result <- field.match (line, c("i,log", "r,log", "c","i","r","o"))
     param.type <- result$match
     line <- result$line
     if (is.null (result$match)) {
-      errReadParameters (filename, nbLines, line,
-                         "parameter type must be a single character in {c,i,r,o}")
+      errReadParameters (
+        filename, nbLines, line,
+        "parameter type must be a single character in {'c','i','r','o'}, ",
+        "with 'i', 'r' optionally followed by ',log' (no spaces in between) ",
+        "to sample using a logarithmic scale,")
+    } else if (param.type == "i,log") {
+      param.type <- "i"
+      param.transform <- "log"
+    } else if (param.type == "r,log") {
+      param.type <- "r"
+      param.transform <- "log"
+    } else {
+      param.transform <- ""
     }
 
     ## Match param.value (delimited by parenthesis)
@@ -217,7 +296,7 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
       if (any(dups)) {
         errReadParameters (filename, nbLines, NULL,
                            "duplicated values (",
-                           paste('\"', param.value[dups], "\"", collapse=', ', sep=""),
+                           paste0('\"', param.value[dups], "\"", collapse = ', '),
                            ") for parameter '", param.name, "'")
       }
     }
@@ -227,6 +306,7 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
     parameters$switches[[count]] <- param.switch
     parameters$types[[count]] <- param.type
     parameters$domain[[count]] <- param.value
+    parameters$transform[[count]] <- param.transform
 
     parameters$isFixed[[count]] <-
       isFixed (type = param.type,
@@ -292,7 +372,8 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
     names(parameters$switches) <- 
       names(parameters$domain) <- 
         names(parameters$isFixed) <-
-          names(parameters$hierarchy) <- parameters$names
+          names(parameters$hierarchy) <- 
+            names(parameters$transform) <- parameters$names
 
   # Print the hierarchy vector:
   if (debugLevel >= 1) {
