@@ -49,12 +49,13 @@ createExperimentList <- function(configurations, parameters,
   count <- 1
   for (i in seq_len(nrow(configurations))) {
     values_i <- values[i, , drop = FALSE]
-    for (j in seq_len(length(instances))) {
+    for (j in seq_along(instances)) {
       experiments[[count]] <- list (id.configuration = configurations.ID[i],
                                     id.instance  = instances.ID[j],
                                     seed = seeds[j],
                                     configuration = values_i,
-                                    instance = instances[j],
+                                    # mlr uses lists of objects as instances.
+                                    instance = instances[[j]],
                                     bound = bounds[count],
                                     switches = switches) 
       count <- count + 1 
@@ -84,7 +85,7 @@ race.wrapper <- function(configurations, instance.idx, bounds = NULL,
   # FIXME: Accessing 'seed' and 'instance' should be moved to createExperimentList.
   seed <- .irace$instancesList[instance.idx, "seed"]
   id.instance  <- .irace$instancesList[instance.idx, "instance"]
-  instance <- scenario$instances[[id.instance]]
+  instance <- scenario$instances[id.instance]
   # Experiment list to execute
   experiments <- createExperimentList(configurations,
                                       parameters, instances = instance,
@@ -383,6 +384,7 @@ executionBound <- function(data, type = "median")
   # This should never happen because the data used to obtain the execution
   # bound should be complete, that is, the bounding configurations should have
   # been executed on all previous instances.
+  
   irace.assert (all(!is.na(data)))
   bound <- switch (type,
                    median = median(colMeans(data)),
@@ -429,7 +431,7 @@ dom.elim <- function(results, elites, alive, scenario, minSurvival, eps = 1e-5)
   # would be to disable dom.elim when elites == 0.
   if (length(elites) == 0) {
     # FIXME: We could restrict this to only results[, which.alive]
-    cmeans <- colMeans(results[,alive, drop=FALSE])
+    cmeans <- colMeans(results[, alive, drop = FALSE])
     # In the case we have only two alive configurations only one can be elite.
     if (sum(alive) <= 2)
       elites <- which.alive[which.min(cmeans)]
@@ -438,7 +440,7 @@ dom.elim <- function(results, elites, alive, scenario, minSurvival, eps = 1e-5)
   }
   
   bound <- executionBound(results[, elites, drop = FALSE], type = scenario$cappingType)
-
+  # FIXME: This is duplicated above.
   which.alive <- which(alive)
   cmeans <- colMeans(results[, which.alive, drop = FALSE])
   irace.assert(!all(is.na(cmeans))) # Only NA values when calculating mean for dominance.

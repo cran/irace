@@ -104,12 +104,13 @@ print(experiment)
 #  }
 
 ## ----targetRunnerParallel,prompt=FALSE, eval=FALSE------------------
-#    targetRunnerParallel(experiments, exec.target.runner, scenario)
+#  targetRunnerParallel(experiments, exec.target.runner, scenario, target.runner)
 
 ## ----targetRunnerParallel2,prompt=FALSE, eval=FALSE-----------------
 #  targetRunnerParallel <- function(experiments, exec.target.runner, scenario)
 #  {
-#    return (lapply(experiments, exec.target.runner, scenario = scenario))
+#    return (lapply(experiments, exec.target.runner, scenario = scenario,
+#                   target.runner = target.runner))
 #  }
 
 ## ----targetRunnerParallel3,prompt=FALSE, eval=TRUE------------------
