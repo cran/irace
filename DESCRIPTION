@@ -5,7 +5,7 @@ Description: Iterated race is an extension of the Iterated F-race method for
              the automatic configuration of optimization algorithms, that is,
              (offline) tuning their parameters by finding the most appropriate
              settings given a set of instances of an optimization problem.
-Version: 3.1
+Version: 3.2
 Authors@R: c(person("Manuel", "López-Ibáñez", role = c("aut", "cre"),
                               email = "manuel.lopez-ibanez@manchester.ac.uk",
                               comment = c(ORCID = "0000-0001-9974-1295")),
@@ -15,7 +15,7 @@ Authors@R: c(person("Manuel", "López-Ibáñez", role = c("aut", "cre"),
              person("Mauro", "Birattari", role = "aut"),
              person("Eric", "Yuan", role = "ctb"),
              person("Prasanna", "Balaprakash", role = "ctb"))
-Depends: R (>= 2.15.0)
+Depends: R (>= 3.2.0)
 Imports: stats, utils, compiler
 Suggests: Rmpi (>= 0.6.0), parallel, knitr, testthat
 VignetteBuilder: knitr
@@ -24,9 +24,9 @@ URL: http://iridia.ulb.ac.be/irace
 ByteCompile: yes
 LazyData: yes
 Encoding: UTF-8
-RoxygenNote: 6.0.1
+RoxygenNote: 6.1.1
 NeedsCompilation: no
-Packaged: 2018-07-12 15:16:33 UTC; manu
+Packaged: 2019-04-18 14:40:44 UTC; manu
 Author: Manuel López-Ibáñez [aut, cre]
     (<https://orcid.org/0000-0001-9974-1295>),
   Jérémie Dubois-Lacoste [aut],
@@ -37,4 +37,4 @@ Author: Manuel López-Ibáñez [aut, cre]
   Prasanna Balaprakash [ctb]
 Maintainer: Manuel López-Ibáñez <manuel.lopez-ibanez@manchester.ac.uk>
 Repository: CRAN
-Date/Publication: 2018-07-12 15:50:03 UTC
+Date/Publication: 2019-04-24 11:40:03 UTC

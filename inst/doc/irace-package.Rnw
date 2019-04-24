@@ -131,7 +131,7 @@
 \newcommand{\race}{\pkg{race}\xspace}
 \newcommand{\FRACE}{\text{F-Race}\xspace}
 \newcommand{\IFRACE}{\text{I/F-Race}\xspace}
-\newcommand{\iraceversion}{3.1}
+\newcommand{\iraceversion}{3.2}
 
 \newcommand{\Niter}{\ensuremath{N^\text{iter}}\xspace}
 \newcommand{\Nparam}{\ensuremath{{N^\text{param}}}\xspace}
@@ -334,7 +334,7 @@ algorithms.
 
 \subsection{System requirements}
 \begin{itemize}
-\item \aR ($\text{version} \geq 2.15$) is required for running irace, but you don't
+\item \aR ($\text{version} \geq 3.2.0$) is required for running irace, but you don't
   need to know the \aR language to use it.  \aR is freely available and you can
   download it from the \aR project website
   (\url{https://www.r-project.org}). See \autoref{sec:installation} for a
@@ -602,8 +602,7 @@ target algorithm; the default value is the current directory.
 %\item[\parameter{logFile}] (\code{--log-file}): a file the name of the results \aR data file that produces \irace.
 \item[\parameter{maxExperiments}] (\code{--max-experiments}): the maximum number of executions
 of the target algorithm that \irace will perform.
-\item[\parameter{maxTime}] (\code{--max-time}): the total maximum execution time of the target 
-algorithm. Note that you must provide either \parameter{maxTime} or \parameter{maxExperiments}.
+\item[\parameter{maxTime}] (\code{--max-time}): maximum total execution time in seconds for the executions of \code{targetRunner}. In this case, \code{targetRunner} must return two values: cost and time. Note that you must provide either \parameter{maxTime} or \parameter{maxExperiments}.
 \end{description}
 For setting the tuning budget see \autoref{sec:budget}. For more information on \irace options and their default values, see \autoref{sec:irace options}.
 
@@ -866,7 +865,7 @@ types supported by \irace are the following:
 \item \textit{Integer} parameters are numerical parameters that can take only
   integer values within the given range. Their range is specified as the range
   of real parameters and they can also be optionally sampled on a
-  logarithmic scale.
+  logarithmic scale (base $e$).
 
 \item \textit{Categorical} parameters are defined by a set of possible values
   specified as `\code{(<value 1>,} \code{...,} \code{<value n>)}'. The values
@@ -935,7 +934,7 @@ where each field is defined as follows:
                     \textit{integer}, \textit{real}, \textit{ordinal} or
                     \textit{categorical}, given as a single letter: `\code{i}',
                     `\code{r}', `\code{o}' or `\code{c}'. Numerical parameters
-                    can be sampled using a logarithmic scale with '\code{i,log}' and
+                    can be sampled using a natural logarithmic scale with '\code{i,log}' and
                     '\code{r,log}' (without spaces) for integer and real
                     parameters, respectively.\\
                     %
@@ -1005,7 +1004,7 @@ The structure of the parameter list that is created is as follows:
    and, thus, it does not need to be tuned.\\
     \code{transform}    & Vector that contains the transformation of each parameter. Currently, it
       can take values \code{``''} (no transformation, default) of \code{``log''}
-      (logarithmic transformation).\\
+      (natural logarithmic transformation).\\
     \code{nbParameters} & An integer, the total number of parameters.\\
     \code{nbFixed}      & An integer, the number of parameters with a fixed value.\\
     \code{nbVariable}   & Number of variable (i.e., to be tuned) parameters.\\
@@ -1058,7 +1057,7 @@ is invoked for each candidate configuration, passing as arguments:
     \code{id.instance} & an alphanumeric string that uniquely identifies an instance;\\
     \code{seed} & seed for the random number generator to be used for this evaluation, ignore the seed for deterministic algorithms;\\
     \code{instance} & string giving the instance to be used for this evaluation;\\
-    \code{bound} & optional execution time bound. Only provided when adaptive capping is enabled, see \autoref{sec:capping};\\
+    \code{bound} & optional execution time bound. Only provided when the \parameter{maxBound} option is set in the scenario, see \autoref{sec:capping};\\
     \code{configuration} & the pairs parameter label-value that
     describe this candidate configuration. Typically given as command-line
     switches to be passed to the executable program.\\
@@ -2094,14 +2093,17 @@ parallelCoordinatesPlot (conf, iraceResults$parameters,
                          hierarchy = FALSE)
 @
 
-
-It is also possible to plot the performance evolution of the best-so-far configuration over the number of experiments as follows:
-<<trainEvo, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Training set performance of the best-so-far configuration over number of experiments.", prompt=FALSE, eval=TRUE, comment="">>=
+%%% FIXME: This plot is completely misleading. We should either calculate the
+%%% performance over the whole training set, or find a way to plot the
+%%% performance estimated by irace as a confidence interval to account for
+%%% different number of instances. Or simply plot a heatmap of instances x
+%%% best-of-each iteration.
+\hide{It is also possible to plot the performance evolution of the best-so-far configuration over the number of experiments as follows:
+%% <<trainEvo, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Training set performance of the best-so-far configuration over number of experiments.", prompt=FALSE, eval=TRUE, comment="">>=
 # Get number of iterations
 iters <- unique(iraceResults$experimentLog[, "iteration"])
 # Get number of experiments (runs of target-runner) up to each iteration
-fes <- cumsum(sapply(iters, function(k)
-  sum(iraceResults$experimentLog[, "iteration"] == k)))
+fes <- cumsum(table(iraceResults$experimentLog[,"iteration"]))
 # Get the mean value of all experiments executed up to each iteration
 # for the best configuration of that iteration.
 values <- sapply(iters, function(k) {
@@ -2115,24 +2117,23 @@ values <- sapply(iters, function(k) {
 plot(fes, values, type="s", xlab = "Number of runs of the target algorithm",
      ylab = "Estimated mean value over whole training set")
 points(fes, values)
-@
+}
 
-We can do the same, but using the performance on the test set:
-<<testEvo, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Testing set performance of the best-so-far configuration over number of experiments.", prompt=FALSE, eval=TRUE, comment="">>=
+It is also possible to plot the performance on the test set of the best-so-far configuration over the number of experiments as follows:
+<<testEvo, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Testing set performance of the best-so-far configuration over number of experiments. Label of each point is the configuration ID.", prompt=FALSE, eval=TRUE, comment="">>=
 # Get number of iterations
 iters <- unique(iraceResults$experimentLog[, "iteration"])
 # Get number of experiments (runs of target-runner) up to each iteration
-fes <- cumsum(sapply(iters, function(k)
-  sum(iraceResults$experimentLog[, "iteration"] == k)))
+fes <- cumsum(table(iraceResults$experimentLog[,"iteration"]))
 # Get the mean value of all experiments executed up to each iteration
 # for the best configuration of that iteration.
-values <- sapply(iters, function(k) 
-  mean(iraceResults$testing$experiments[
-                            , as.character(iraceResults$iterationElites[k])]))
+elites <- as.character(iraceResults$iterationElites)
+values <- colMeans(iraceResults$testing$experiments[, elites])
 plot(fes, values, type = "s",
      xlab = "Number of runs of the target algorithm",
      ylab = "Mean value over testing set")
 points(fes, values)
+text(fes, values, elites, pos = 1)
 @
 
 The \irace package also provides an implementation of the ablation
@@ -2304,26 +2305,31 @@ use the \parameter{boundMax} option. The final execution bound ($k_i^j$) is calc
 Additionally, the \parameter{boundDigits} option defines the precision of the time bound
 provided by \irace, the default setting is 0.  
 
-Timed out executions occur when the maximum execution bound (\parameter{boundMax}) is reached and the 
-algorithm has not achieved successful termination or a defined quality goal.
-In this cases, is common practice to apply a penalty known as PARX, in which timeouts 
-are penalized by multiplying  \parameter{boundMax} by a constant $X$. Using the \parameter{boundPar} option is possible to define the 
-constant $X$ to penalize timed out executions. Bounded executions are executions that do not 
-achieve successful termination or a defined quality goal in the execution time provided by \irace, 
-which is smaller than \parameter{boundMax}. The \parameter{boundAsTimeout} option replaces
-the evaluation of bounded executions by the \parameter{boundMax} value. More details about the implementation of adaptive capping can be found in \citet{PerLopHooStu2017:lion}.   
-
+Timed out executions occur when the maximum execution bound
+(\parameter{boundMax}) is reached and the algorithm has not achieved successful
+termination or a defined quality goal.  In this case, it is a common practice
+to apply a penalty known as PARX, in which timeouts are penalized by
+multiplying \parameter{boundMax} by a constant $X$. The constant $X$ may be set
+using the \parameter{boundPar} option. Bounded executions are executions that
+do not achieve successful termination or a defined quality goal in the
+execution bound ($k_i^j$) set by \irace, which is smaller than
+\parameter{boundMax}. The \parameter{boundAsTimeout} option replaces the
+evaluation of bounded executions by the \parameter{boundMax} value. More
+details about the implementation of adaptive capping can be found in
+\citet{PerLopHooStu2017:lion}.
 
 \begin{xwarningbox}
-Note that bounded executions  are not timed out executions and thus, they will not be penalized by PARX. 
+Note that bounded executions are not timed out executions and thus, they will not be penalized by PARX. 
 \end{xwarningbox}
 
 
 \begin{xwarningbox}
-Penalized evaluations of timed out and bounded executions are only used for the elimination tests and
-the comparison between the quality of configurations. \Irace only uses raw execution times to calculate 
-executions bounds. These must be provided by the target runner or target evaluator as described in 
-\autoref{sec:runner} and \autoref{sec:evaluator} . 
+  Penalized evaluations of timed out and bounded executions are only used for
+  the elimination tests and the comparison between the quality of
+  configurations. To calculate execution bounds and computation budget
+  consumed, \irace uses only unpenalized execution times. The unpenalized
+  execution time must be provided by the target runner or target evaluator as
+  described in \autoref{sec:runner} and \autoref{sec:evaluator} .
 \end{xwarningbox}
 
 
@@ -2467,18 +2473,14 @@ interval as follows:
 \begin{minipage}{0.8\linewidth}
 \begin{CodeInput}
 # name    label   type   range
-p1        "-p "   r      (0.0,1.0)
-s1        "-s "   r      (0.0,1.0)
+p        "-p "    i      (1,100)
+s_f      "-s "   r      (0.0,1.0)
 \end{CodeInput}
 \end{minipage}
 \end{center}
 %
-and the values must be further processed in \parameter{targetRunner}. For
-example, if the surrogate parameter \code{p1}  has value 0.5, mapping it to the
-original interval of $[1,100]$, we obtain a value of $\text{\code{p}} =
-51$. More than one value of the surrogate parameter (\eg 0.501 and 0.502)
-result in the same final value. Parameter \code{s} has an interval that depends
-on the final value of parameter \code{p}, if the surrogate parameter \code{s1} has value 0.3, it must be mapped to the interval $[1, 51]$, giving a value of $\text{\code{s}} = 16$.
+and \parameter{targetRunner} must calculate the actual value of \code{s} as $\min(\max(\text{round}(\text{\code{s\_f}}\cdot \text{\code{p}}, 1)), 100)$. For
+example, if the parameter \code{p}  has value 50 and the surrogate parameter \code{s\_f} has value 0.3, then \code{s} will have value 15.
 
 The processing within \parameter{targetRunner} can also split and join
 parameters. For example, assume the following parameters:
@@ -2499,9 +2501,8 @@ $\texttt{m}\cdot 10^\texttt{e}$ for another parameter
 \code{-m} and \code{-e}, computing the strength value and passing the parameter
 \code{--strength} together with its value to the target algorithm.
 
-More complex parameter space constraints may be implemented by means of
-the \parameter{repairConfiguration} function
-(\autoref{sec:repairconf})
+More complex parameter space constraints may be implemented by means of the
+\parameter{repairConfiguration} function (\autoref{sec:repairconf}).
 
 
 \subsection{Unreliable target algorithms and immediate rejection}\label{sec:reject}
@@ -2533,10 +2534,8 @@ memory, might still be considered acceptable if it gives very good results on
 other instances. The configurations which were rejected during the execution of \irace are saved
 in the Rdata output file (see \autoref{sec:output r}).
 \begin{xwarningbox}
-If you are using adaptive capping (\parameter{capping} is enabled) and the 
-configuration budget is specified in total execution time (\parameter{maxTime} option), 
-immediate rejected executions must provide the cost (which must be \code{Inf}) and the 
-execution time which will be used to calculate the used configuration budget. 
+If the configuration budget is specified in total execution time (\parameter{maxTime} option), 
+immediate rejected executions must provide the cost and time (which must be \code{Inf 0}). 
 Nevertheless, rejected configurations will be  excluded from the execution time estimation 
 and the execution bound calculation.
 \end{xwarningbox}
@@ -2662,7 +2661,7 @@ irace. This is done, for example, when maximizing the hypervolume (see the last
 lines in \IRACEHOME{/examples/hypervolume/target-evaluator}).
 
 
-\subsection[Is it possible to configure a MATLAB algorithm with irace?]%
+\subsection[Is it possible to configure a MATLAB algorithm with irace?]
 {Is it possible to configure a \MATLAB algorithm with \irace ?}
 
 Definitely. There are three main ways to achieve this:
@@ -3046,6 +3045,12 @@ $EXE ${FIXED_PARAMS} -i $INSTANCE ${CONFIG_PARAMS} 1> ${STDOUT} 2> ${STDERR}
   then look at the \code{${STDERR}.log} file corresponding to the
   \code{targetRunner} call that failed and execute/debug the last command
   there.
+
+\item If the language of your operating system, the \code{target-runner} or the
+  target algorithm is not English, \irace may not be able to recognize the
+  numbers generated by \code{target-runner}. We recommend that you run \irace,
+  the \code{target-runner} and the target algorithm under an English locale (or
+  make sure that their languages and number format are compatible).
   
 \item It is possible that
   \href{https://en.wikipedia.org/wiki/Heisenbug}{transient bugs} in the target

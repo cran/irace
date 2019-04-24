@@ -65,18 +65,19 @@ sampleUniform <- function (parameters, nbConfigurations, digits,
         # same order as namesParameters, because we sample in the order of the
         # conditions.
         currentType <- parameters$types[[currentParameter]]
-        transform <- parameters$transform[[currentParameter]]
         if (isFixed(currentParameter, parameters)) {
           # We don't even need to sample, there is only one possible value !
           newVal <- get.fixed.value (currentParameter, parameters)
           # The parameter is not a fixed and should be sampled          
-        } else if (currentType == "i" || currentType == "r") {
-          newVal <- sample.numerical(currentParameter, parameters, currentType, digits)
-        } else if (currentType == "c" || currentType == "o") {
+        } else if (currentType == "i") {
+          newVal <- sample.unif(currentParameter, parameters, currentType)
+        } else if (currentType == "r") {
+          newVal <- sample.unif(currentParameter, parameters, currentType, digits)
+        } else if (currentType %in% c("c","o")) {
           possibleValues <- parameters$domain[[currentParameter]]
           newVal <- sample(possibleValues, 1)
         } else {
-          stop (.irace.bug.report);
+          irace.internal.error("Unexpected condition in sampleUniform")
         }
         configuration[[p]] <- newVal
       }
@@ -135,7 +136,6 @@ sampleModel <- function (parameters, eliteConfigurations, model,
         # should fix this or make it impossible to confuse them.
         currentParameter <- namesParameters[p]
         currentType <- parameters$types[[currentParameter]]
-        transform <- parameters$transform[[currentParameter]]
         if (!conditionsSatisfied(parameters, configuration, currentParameter)) {
           # Some conditions are unsatisfied.
           # Should be useless, NA is ?always? assigned when matrix created
@@ -150,13 +150,13 @@ sampleModel <- function (parameters, eliteConfigurations, model,
           # If there is not value we obtain it from the model
           if (is.na(mean)) mean <- model[[currentParameter]][[as.character(idEliteParent)]][2]
           if (is.na(mean)) {
-            # The elite parent does not have any value for this
-            # parameter, let's sample uniformly.
-            ## FIXME: We should save the last used parameter in the model and use it here.
-            newVal <- sample.numerical(currentParameter, parameters, currentType, digits)
+            # The elite parent does not have any value for this parameter,
+            # let's sample uniformly.
+            newVal <- sample.unif(currentParameter, parameters, currentType, digits)
+                                                                                             
           } else {
             stdDev <- model[[currentParameter]][[as.character(idEliteParent)]][1]
-            newVal <- sample.numerical(currentParameter, parameters, currentType, digits, mean, stdDev)
+            newVal <- sample.norm(mean, stdDev, currentParameter, parameters, currentType, digits)
           }
         } else if (currentType == "o") {
           possibleValues <- paramDomain(currentParameter, parameters)  
@@ -172,11 +172,17 @@ sampleModel <- function (parameters, eliteConfigurations, model,
             # values to determine the equivalent integer.
             mean <- match(value, possibleValues) # Return index of value in array
             stdDev <- model[[currentParameter]][[as.character(idEliteParent)]]
-            
+
             # Sample with truncated normal distribution as an integer.
-            newValAsInt <- round(rtnorm(1, mean + 0.5, stdDev, 1,
-                                        length(possibleValues) + 1) - 0.5)
+            # See sample.norm() for an explanation.
+            newValAsInt <- floor(rtnorm(1, mean + 0.5, stdDev, lower = 1,
+                                        upper = length(possibleValues) + 1L))
+
+            # The probability of this happening is very small, but it can happen.
+            if (newValAsInt == length(possibleValues) + 1L)
+              newValAsInt <- length(possibleValues)
             
+            irace.assert(value >= 1L && value <= length(possibleValues))
             # Get back to categorical values, find the one corresponding to the
             # newVal
             newVal <- possibleValues[newValAsInt]
@@ -188,7 +194,7 @@ sampleModel <- function (parameters, eliteConfigurations, model,
           possibleValues <- paramDomain(currentParameter, parameters)
           newVal <- sample(x = possibleValues, size = 1, prob = probVector)
         } else {
-          stop (.irace.bug.report)
+          irace.internal.error("Unexpected condition in sampleModel")
         }
         configuration[[p]] <- newVal
       }
@@ -211,110 +217,118 @@ sampleModel <- function (parameters, eliteConfigurations, model,
   return (newConfigurations)
 }
 
+transform.from.log <- function(x, transf, lowerBound, upperBound)
+{
+  trLower <- attr(transf, "lower") 
+  trUpper <- attr(transf, "upper")
+  x <- exp(trLower + (trUpper - trLower) * x)
+  return(x)
+}
+
+transform.to.log <- function(x, transf, lowerBound, upperBound)
+{
+  trLower <- attr(transf, "lower") 
+  trUpper <- attr(transf, "upper")
+  return((log(x) - trLower)/(trUpper - trLower))
+}
+## How to sample integer values?
+#
+# The problem: If we have an integer with domain [1,3] and we sample a real value
+# and round, then there are more chances of getting 2 than 1 or 3:
+# [1, 1,5) -> 1
+# [1.5, 2,5) -> 2
+# [2.5, 3) -> 3
+#
+# The solution: Sample in [lowerbound, upperbound + 1], that is, [1, 4], then floor():
+# [1, 2) -> 1
+# [2, 3) -> 2
+# [3, 4) -> 3
+#
+# Why floor() and not trunc()?
+# Because trunc(-1.5) -> -1, while floor(-1.5) -> -2, so for a domain [-3,-1]:
+#
+# [-3, -2) -> -3
+# [-2, -1) -> -2
+# [-1, 0)  -> -1
+#
+# Issue 1: We can sample 4 (upperbound + 1). In that case, we return 3.
+#
+# Issue 2: When sampling from a truncated normal distribution, the extremes are
+# not symmetric.
+#
+# nsamples <- 100000
+# table(floor(rtnorm(nsamples, mean=1, sd=1, lower=1,upper=4)))/nsamples
+# table(floor(rtnorm(nsamples, mean=3, sd=1, lower=1,upper=4)))/nsamples
+#
+# To make them symmetric, we translate by 0.5, so that the mean is at the
+# actual center of the interval that will produce the same value after
+# truncation, e.g., given an integer value of 1, then mean=1.5, which is at the
+# center of [1,2).
+#
+# nsamples <- 100000
+# table(floor(rtnorm(nsamples, mean=1.5, sd=1, lower=1,upper=4)))/nsamples
+# table(floor(rtnorm(nsamples, mean=3.5, sd=1, lower=1,upper=4)))/nsamples
+#
+# The above reasoning also works for log-transformed domains, because 
+# floor() happens in the original domain, not in the log-transformed one,
+# except for the case of log-transformed negative domains, where we have to
+# translate by -0.5.
+# 
+numeric.value.round <- function(type, value, lowerBound, upperBound, digits)
+{  
+  irace.assert(is.finite(value))
+  if (type == "i") {
+    value <- floor(value)
+    upperBound <- upperBound - 1L # undo the above for the assert
+    # The probability of this happening is very small, but it could happen.
+    if (value == upperBound + 1L)
+      value <- upperBound
+  } else
+    value <- round(value, digits)
+
+  irace.assert(value >= lowerBound && value <= upperBound)
+  return (value)
+}
+
 # Sample value for a numerical parameter.
-sample.numerical <- function(param, parameters, type, digits, mean = NULL, stdDev = NULL)
+sample.unif <- function(param, parameters, type, digits = NULL)
 {
   lowerBound <- paramLowerBound(param, parameters)
   upperBound <- paramUpperBound(param, parameters)
-  transform <- parameters$transform[[param]]
-
-  if (transform == "log") {
-    value <- sample.numeric.log(type, lowerBound, upperBound, digits, mean, stdDev)
-  } else {
-    value <- sample.numeric.norm(type, lowerBound, upperBound, digits, mean, stdDev)
+  transf <- parameters$transform[[param]]
+  if (type == "i") {
+    # +1 for correct rounding before floor()
+    upperBound <- 1L + upperBound
   }
+  if (transf == "log") {
+    value <- runif(1, min = 0, max = 1)
+    value <- transform.from.log(value, transf, lowerBound, upperBound)
+  } else {
+    value <- runif(1, min = lowerBound, max = upperBound)    
+  }
+  value <- numeric.value.round(type, value, lowerBound, upperBound, digits)
   return(value)
 }
 
-sample.numeric.norm <- function(type, lowerBound, upperBound, digits, mean, stdDev)
+sample.norm <- function(mean, sd, param, parameters, type, digits = NULL)
 {
+  lowerBound <- paramLowerBound(param, parameters)
+  upperBound <- paramUpperBound(param, parameters)
+  transf <- parameters$transform[[param]]
   if (type == "i") {
-    if (is.null(mean)) {
-      # integer uniform
-      newVal <- floor(runif(1, min = lowerBound, max = 1 + upperBound))
-    } else {
-      # integer from model
-      newVal <- round(rtnorm(1, mean + 0.5, stdDev, lowerBound, upperBound + 1) - 0.5)
-    }
-  } else {
-    irace.assert(type == "r")
-    if (is.null(mean)) {
-      # real uniform
-      newVal <- runif(1, min = as.double(lowerBound), max = as.double(upperBound))
-    } else {
-      # real from model
-      newVal <- round(rtnorm(1, mean, stdDev, lowerBound, upperBound), digits)
-    }
-    newVal <- round(newVal, digits)
+    upperBound <- 1L + upperBound
+    # Because negative domains are log-transformed to positive domains.
+    mean <- mean + 0.5
   }
-  return(newVal)
-}
-
-sample.numeric.log <- function(type, lowerBound, upperBound, digits, mean, stdDev)
-{
-  if (is.null(mean)) {
-    trRange <- range.transform.log(lowerBound, upperBound, digits)
-  } else {
-    trRange <- range.transform.log(lowerBound, upperBound, digits, mean)
-  }
-  trLb <- trRange[["trLowerBound"]]
-  trUb <- trRange[["trUpperBound"]]
-  trMean <- trRange[["trMean"]]
   
-  if (is.null(mean)) {
-    # uniform
-    newVal <- exp(runif(1, min = as.double(trLb), max = as.double(trUb)))
+  if (transf == "log") {
+    trMean <- transform.to.log(mean, transf, lowerBound, upperBound)
+    value <- rtnorm(1, trMean, sd, lower = 0, upper = 1)
+    value <- transform.from.log(value, transf, lowerBound, upperBound)
   } else {
-    # sample from model
-    newVal <- exp(rtnorm(1, trMean, abs(stdDev), trLb, trUb)) 
+    value <- rtnorm(1, mean, sd, lowerBound, upperBound)
   }
 
-  if (type == "i") {
-    newVal <- round(newVal)
-  } else {
-    newVal <- round(newVal, digits)
-  }
-
-  newVal <- check.transform.log(newVal, lowerBound, upperBound)
-  return(newVal)
-}
-
-# Transform the range [LB,UB] into [log(LB),log(UB)].
-# It needs to pay attention to shift the range in the
-# positive domain if LB <= 0. The mean is also transformed
-# (if provided, otherwise it can be ignored).
-# A similar check will be required after applying the
-# transformation (see function check.transform.log() ).
-range.transform.log <- function(lowerBound, upperBound, digits, mean = 1)
-{
-  # cannot compute log(0)
-  if (lowerBound <= 0) {
-    trLowerBound <- -digits
-    trUpperBound <- log(upperBound - lowerBound)
-    trMean <- log(mean + lowerBound)
-  } else {
-    trLowerBound <- log(lowerBound)
-    trUpperBound <- log(upperBound)
-    trMean <- log(mean)
-  }
-  return(list(trLowerBound = trLowerBound,
-              trUpperBound = trUpperBound,
-              trMean = trMean))
-}
-
-# Adjust the sampled value if the lower bound is <=0, and
-# check that it does not fall outside the allowed range.
-check.transform.log <- function(newVal, lowerBound, upperBound)
-{
-  # check if LB was negative, then readjust
-  if (lowerBound <= 0) {
-    newVal <- newVal + lowerBound
-  }
-  # never too sure
-  if (newVal < lowerBound) {
-    newVal <- lowerBound
-  } else if (newVal > upperBound) {
-    newVal <- upperBound
-  }
-  return(newVal)
+  value <- numeric.value.round(type, value, lowerBound, upperBound, digits)
+  return(value)
 }

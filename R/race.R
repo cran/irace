@@ -35,6 +35,7 @@ createExperimentList <- function(configurations, parameters,
                                  instances, instances.ID, seeds,
                                  scenario, bounds = NULL)
 {
+  instances <- instances[instances.ID]
   experiments <- vector("list", nrow(configurations) * length(instances))
   configurations.ID <- configurations[, ".ID."]
   pnames <- parameters$names
@@ -85,10 +86,9 @@ race.wrapper <- function(configurations, instance.idx, bounds = NULL,
   # FIXME: Accessing 'seed' and 'instance' should be moved to createExperimentList.
   seed <- .irace$instancesList[instance.idx, "seed"]
   id.instance  <- .irace$instancesList[instance.idx, "instance"]
-  instance <- scenario$instances[id.instance]
   # Experiment list to execute
-  experiments <- createExperimentList(configurations,
-                                      parameters, instances = instance,
+  experiments <- createExperimentList(configurations, parameters,
+                                      instances = scenario$instances,
                                       instances.ID = id.instance,
                                       seeds = seed, scenario, bounds = bounds)
 
@@ -312,7 +312,7 @@ race.print.header <- function(capping)
 ")
 }
 
-race.print.task <- function(Results,
+race.print.task <- function(res.symb, Results,
                             instance,
                             current.task,
                             alive,
@@ -320,29 +320,17 @@ race.print.task <- function(Results,
                             mean.best,
                             experimentsUsed,
                             start.time,
-                            bound = NULL)
+                            bound, capping)
 {
   time.diff <- difftime(Sys.time(), start.time, units = "secs")
   # FIXME: Maybe better and faster if we only print seconds?
   time.str <- format(.POSIXct(time.diff, tz="GMT"), "%H:%M:%S")
-  if (is.null(bound))
-    cat(sprintf("%11d|%11d|%11d|%#15.10g|%11d|%s",
-                instance,
-                sum(alive),
-                id.best,
-                mean.best,
-                experimentsUsed,
-                time.str))
-  else
-    cat(sprintf("%11d|%8.2f|%11d|%11d|%#15.10g|%11d|%s",
-                instance,
-                bound,
-                sum(alive),
-                id.best,
-                mean.best,
-                experimentsUsed,
-                time.str))
-                
+  cat(sprintf("|%s|%11d|", res.symb, instance))
+  if (capping) cat(sprintf("%8.2f|", if(is.null(bound)) NA else bound))
+  cat(sprintf("%11d|%11d|%#15.10g|%11d|%s",
+              sum(alive), id.best, mean.best, experimentsUsed,
+              time.str))
+  
   if (current.task > 1 && sum(alive) > 1) {
     conc <- concordance(Results[1:current.task, alive, drop = FALSE])
     qvar <- dataVariance(Results[1:current.task, alive, drop = FALSE])
@@ -363,7 +351,7 @@ race.print.footer <- function(bestconf, mean.best, break.msg, debug.level, cappi
       sprintf("Best-so-far configuration: %11d", bestconf[1, ".ID."]),
       sprintf("    mean value: %#15.10g", mean.best), "\n",
       "Description of the best-so-far configuration:\n")
-  print(bestconf)
+  configurations.print(bestconf, metadata = TRUE)
   cat("\n")
 }
 
@@ -553,6 +541,23 @@ overall.ranks <- function(x, stat.test)
   return(ranks)
 }
 
+# Remove one elite count from every configuration not executed.
+update.is.elite <- function(is.elite, which.exe)
+{
+  which.notexecuted <- setdiff(which(is.elite > 0), which.exe) 
+  is.elite[which.notexecuted] <- is.elite[which.notexecuted] - 1
+  irace.assert (all(is.elite >= 0))
+  return(is.elite)
+}
+
+update.elite.safe <- function(Results, is.elite)
+{
+  if (any(is.elite > 0L))
+    return(max(which(apply(!is.na(Results[, is.elite > 0, drop=FALSE]), 1, any))))
+  # All elites rejected.
+  return(0L)
+}
+
 race <- function(maxExp = 0,
                  minSurvival = 1,
                  elite.data = NULL,
@@ -620,6 +625,12 @@ race <- function(maxExp = 0,
     elite.safe <- 0L
     elite.instances.ID <- NULL
   } else {
+    # There must be a non-NA entry for each instance.
+    irace.assert(all(apply(!is.na(elite.data$experiments), 1, any)),
+                 eval.after = { print(elite.data$experiments)})
+    # There must be a non-NA entry for each configuration.
+    irace.assert(all(apply(!is.na(elite.data$experiments), 2, any)))
+    
     # elite.safe: maximum instance number for which any configuration may be
     # considered elite. After evaluating this instance, no configuration is
     # elite.
@@ -701,7 +712,8 @@ race <- function(maxExp = 0,
                     paste0(configurations[is.rejected, ".ID."],
                            collapse = ", ") , "\n")
         alive[is.rejected] <- FALSE
-        # Calculate the maximum instance that has any non-NA value. 
+        # Calculate the maximum instance that has any non-NA value.
+        # FIXME: Use update.elite.safe()
         if (n.elite > 0L)
           elite.safe <- max(which(apply(!is.na(Results[, which.elites, drop=FALSE]), 1, any)))
         else 
@@ -720,15 +732,6 @@ race <- function(maxExp = 0,
   
   race.print.header(scenario$capping)
 
-# Remove one elite count from every configuration not executed.
-update.is.elite <- function(is.elite, which.exe)
-{
-  which.notexecuted <- setdiff(which(is.elite > 0), which.exe) 
-  is.elite[which.notexecuted] <- is.elite[which.notexecuted] - 1
-  irace.assert (all(is.elite >= 0))
-  return(is.elite)
-}
-  
   # Start main loop
   break.msg <- NULL
   for (current.task in seq_len (no.tasks)) {
@@ -748,26 +751,17 @@ update.is.elite <- function(is.elite, which.exe)
         # and we are still in the previous instances execution, but we can still 
         # continue with the race. (This is only possible because the early termination
         # criterion is disabled)
-        # LESLIE: This we really need to discuss: when using capping, are we going to allow
-        # early termination?
-        # LESLIE: If we keep this and thus, the early termination, 
-        # here we can print something to indicate we skip an instance...
-        # MANUEL: I think we should print the race.print.task() corresponding to this instance.
-        cat("|.|")
         # FIXME: We need to calculate the best just as we do below. Create a function for doing that.
         ## MANUEL: So what is the reason to not immediately terminate here? Is
         ## there a reason to continue?
-        race.print.task(Results,
-                        race.instances[current.task],
-                        current.task,
-                        alive,
+        race.print.task(".", Results, race.instances[current.task],
+                        current.task, alive,
                         configurations[best, ".ID."],
                         # FIXME: This is the mean of the best, but perhaps it should
                         # be the sum of ranks in the case of test == friedman?
                         mean.best = mean(Results[1:current.task, best]),
-                        experimentsUsed,
-                        Sys.time(), 
-                        bound = NULL)
+                        experimentsUsed, Sys.time(), 
+                        bound = NA, scenario$capping)
         next
       }
     }
@@ -893,26 +887,19 @@ update.is.elite <- function(is.elite, which.exe)
           nbAlive     <- length(which.alive)
           if (nbAlive == 0L)
             irace.error("All configurations have been immediately rejected (all of them returned Inf) !")
-          if (any(is.elite > 0L))
-            elite.safe <- max(which(apply(!is.na(Results[, is.elite > 0, drop=FALSE]), 1, any)))
-          else
-            elite.safe <- 0L
+          elite.safe <- update.elite.safe(Results, is.elite)
         }
         which.exe <- setdiff(which.exe, which.elite.exe)
         if (length(which.exe) == 0L) {
           is.elite <- update.is.elite(is.elite, which.elite.exe)
-          cat("|.!")
-          race.print.task(Results,
-                          race.instances[current.task],
-                          current.task,
-                          alive,
+          race.print.task(".", Results, race.instances[current.task],
+                          current.task, alive,
                           configurations[best, ".ID."],
                           # FIXME: This is the mean of the best, but perhaps it should
                           # be the sum of ranks in the case of test == friedman?
                           mean.best = mean(Results[1:current.task, best]),
-                          experimentsUsed,
-                          start.time, 
-                          bound = NULL)
+                          experimentsUsed, start.time, 
+                          bound = NA, scenario$capping)
           next
         }
       }
@@ -923,6 +910,8 @@ update.is.elite <- function(is.elite, which.exe)
                                           which.exe, scenario)
       final.bounds <- all.bounds$final.bounds
       elite.bound <- all.bounds$elite.bound
+    } else {
+      final.bounds <- rep(scenario$boundMax, no.configurations)
     }
     
     # Execute experiments
@@ -985,12 +974,7 @@ update.is.elite <- function(is.elite, which.exe)
       if (nbAlive == 0)
         irace.error("All configurations have been immediately rejected (all of them returned Inf) !")
       # FIXME: Should we stop  if (nbAlive <= minSurvival) ???
-  
-      # All elites rejected.
-      if (any(is.elite > 0L))
-        elite.safe <- max(which(apply(!is.na(Results[, is.elite > 0, drop=FALSE]), 1, any)))
-      else
-        elite.safe <- 0L
+      elite.safe <- update.elite.safe(Results, is.elite)  
     }
     irace.assert(!any(is.infinite(colMeans(Results[, alive, drop=FALSE]))))
     
@@ -1057,13 +1041,9 @@ update.is.elite <- function(is.elite, which.exe)
     }
     
     # Output the result of the elimination test
-    if (cap.dropped || test.dropped) {
-      if (prev.sum.alive != sum(alive)) cat("|!|") else cat("|-|")
-    } else if (cap.done || test.done) { 
-      cat("|=|") 
-    } else {
-      cat("|x|")
-    }
+    res.symb <- if (cap.dropped || test.dropped) {
+                  if (prev.sum.alive != sum(alive)) "-" else "!"
+                } else if (cap.done || test.done) "=" else "x"
     
     # Rank alive configurations: order all configurations (eliminated or not)
     # LESLIE: we have to make the ranking outside: we can have configurations eliminated by capping
@@ -1093,17 +1073,14 @@ update.is.elite <- function(is.elite, which.exe)
     race.ranks <- race.ranks[which.alive]
     irace.assert(length(race.ranks) == sum(alive))
 
-    race.print.task(Results,
-                    race.instances[current.task],
-                    current.task,
-                    alive,
+    race.print.task(res.symb, Results, race.instances[current.task],
+                    current.task, alive,
                     configurations[best, ".ID."],
                     # FIXME: This is the mean of the best, but perhaps it should
                     # be the sum of ranks in the case of test == friedman?
                     mean.best = mean(Results[1:current.task, best]),
-                    experimentsUsed,
-                    start.time, 
-                    bound = elite.bound)
+                    experimentsUsed, start.time, 
+                    bound = elite.bound, scenario$capping)
     
     if (elitist) {
       # Compute number of statistical tests without eliminations.
@@ -1131,6 +1108,10 @@ update.is.elite <- function(is.elite, which.exe)
   if (is.null(break.msg))
     break.msg <- paste0("all instances (", no.tasks, ") evaluated")
 
+  # If we stop the loop before we see all new instances, there may be gaps in
+  # Results. Remove those rows.
+  Results <- Results[apply(!is.na(Results), 1, any), , drop = FALSE]
+  
   race.ranks <- overall.ranks(Results[, alive, drop = FALSE], stat.test = stat.test)
   best <- which.alive[which.min(race.ranks)]
 
@@ -1162,7 +1143,7 @@ update.is.elite <- function(is.elite, which.exe)
 
   # nrow(Results) may be smaller, equal or larger than current.task.
   irace.assert(nrow(experimentLog) == experimentsUsed)
-  
+
   return(list(experiments = Results,
               experimentLog = experimentLog,
               experimentsUsed = experimentsUsed,

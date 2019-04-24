@@ -234,7 +234,7 @@ computeTerminationOfRace <- function(nbParameters)
 ## Compute the minimum budget required, and exit early in case the
 ## budget given by the user is insufficient.
 checkMinimumBudget <- function(remainingBudget, minSurvival, nbIterations,
-                               scenario)
+                               boundEstimate, scenario)
 {
   eachTest <- scenario$eachTest
   Tnew <- scenario$elitistNewInstances
@@ -304,13 +304,17 @@ checkMinimumBudget <- function(remainingBudget, minSurvival, nbIterations,
   }
      
   if (remainingBudget < minimumBudget) {
-    if (scenario$maxTime == 0 || nbIterations == 1)
+    if (scenario$maxTime == 0) {
       irace.error("Insufficient budget: ",
                   "With the current settings, irace will require a value of ",
-                  "'maxExperiments' of at least '",  minimumBudget, "'. ",
-                  "You can either increase the budget, ",
-                  "or set a smaller value of either 'minNbSurvival' ",
-                  "or 'nbIterations'")
+                  "'maxExperiments' of at least '",  minimumBudget, "'.")
+    } else if (nbIterations == 1) {
+      irace.error("Insufficient budget: ",
+                  "With the current settings and estimated time per run (",
+                  boundEstimate,
+                  ") irace will require a value of ",
+                  "'maxTime' of at least '",  minimumBudget * boundEstimate, "'.")
+    }
     return(FALSE)
   }
   return(TRUE)
@@ -327,7 +331,7 @@ startParallel <- function(scenario)
       mpiInit(parallel, scenario$debugLevel)
     } else {
       requireNamespace("parallel", quietly = TRUE)
-      if (.Platform$OS.type == 'windows') {
+      if (.Platform$OS.type == 'windows' && is.null(.irace$cluster)) {
         .irace$cluster <- parallel::makeCluster(parallel)
         # In Windows, this needs to be exported, or we get:
         ## Error in checkForRemoteErrors(val) : 
@@ -357,6 +361,10 @@ irace.init <- function(scenario)
     scenario$seed <- trunc(runif(1, 1, .Machine$integer.max))
   }
   set.seed(scenario$seed)
+  if (scenario$debugLevel > 2) {
+    irace.note("RNGkind: ", paste0(RNGkind(), collapse = " "), "\n")
+    irace.note(".Random.seed: ", paste0(.Random.seed, collapse = ", "), "\n")
+  }
   return(scenario)
 }
 
@@ -402,8 +410,7 @@ addInstances <- function(scenario, instancesList, n.instances)
 do.experiments <- function(configurations, ninstances, scenario, parameters)
 {
   output <- lapply(1:ninstances, race.wrapper, configurations = configurations, 
-                   bounds = if (scenario$capping) rep(scenario$boundMax, nrow(configurations))
-                            else NULL,
+                   bounds = rep(scenario$boundMax, nrow(configurations)),
                    which.alive = 1:nrow(configurations), which.exe = 1:nrow(configurations), 
                    parameters = parameters, scenario = scenario)
                                         
@@ -422,7 +429,7 @@ do.experiments <- function(configurations, ninstances, scenario, parameters)
     irace.assert(!any(is.null(vtimes)))
     experimentLog <- rbind(experimentLog,
                            cbind(j, configurations$.ID., vtimes, 
-                                 if (scenario$capping) scenario$boundMax else NA))
+                                 if(!is.null(scenario$boundMax)) scenario$boundMax else NA))
   }
   
   rejectedIDs <- configurations[apply(is.infinite(Results), 2, any), ".ID."]
@@ -666,7 +673,7 @@ irace <- function(scenario, parameters)
     indexIteration <- 1
     experimentsUsedSoFar <- 0
     timeUsed <- 0
-    timeEstimate <- NA 
+    boundEstimate <- NA 
     rejectedIDs <- c()
 
     startParallel(scenario)
@@ -682,14 +689,13 @@ irace <- function(scenario, parameters)
       ## discarding these configurations.
       ninstances <- scenario$firstTest
       estimationTime <- ceiling(scenario$maxTime * scenario$budgetEstimation)
-      timeEstimate <- scenario$boundMax
       irace.note("Estimating execution time using ", 100 * scenario$budgetEstimation,
                  "% of ", scenario$maxTime, " = ", estimationTime, "\n")
 
       # Estimate the number of configurations to be used
       nconfigurations <- max(2, floor(scenario$parallel / ninstances))
-      
       next.configuration <- 1
+
       while (TRUE) {
         # Sample new configurations if needed
         if (nrow(allConfigurations) < nconfigurations) {
@@ -725,18 +731,16 @@ irace <- function(scenario, parameters)
         # For the used time, we count the time reported in all configurations
         # including rejected ones. 
         timeUsed <- sum(timeUsed, output$experimentLog[, "time"], na.rm = TRUE)
-        # In the rare case all configurations are eliminated, we keep timeEstimate as 
-        # initially defined (boundMax)
-        if (nrow(allConfigurations) > length(rejectedIDs)) {
-          timeEstimate <- mean(iraceResults$experimentLog[
-                               iraceResults$experimentLog[, "configuration"] %!in% rejectedIDs, "time"], 
-                               na.rm = TRUE)
-        }
-        next.configuration <- nconfigurations + 1
+        # User should return time zero for rejectedIDs.
+        boundEstimate <- mean(iraceResults$experimentLog[, "time"], na.rm = TRUE)
+        if (boundEstimate <= 0)
+          boundEstimate <- if (!is.null(scenario$boundMax)) scenario$boundMax else 1.0
+        
+        next.configuration <- nconfigurations + 1L
         
         # Calculate how many new configurations:
         # 1. We do not want to overrun estimationTime
-        new.conf <- floor(((estimationTime - timeUsed) / timeEstimate) / ninstances)
+        new.conf <- floor(((estimationTime - timeUsed) / boundEstimate) / ninstances)
         # 2. But there is no point in executing more configurations than those
         # that we can execute in parallel.
         new.conf <- min(new.conf, max(1, floor(scenario$parallel / ninstances)))
@@ -753,12 +757,12 @@ irace <- function(scenario, parameters)
                     paste0(rejectedIDs, collapse = ", ") , "\n")
       }
   
-      irace.note("Estimated execution time is ", timeEstimate, " based on ",
+      irace.note("Estimated execution time is ", boundEstimate, " based on ",
                  next.configuration - 1, " configurations and ",
                  ninstances," instances. Used time: ", timeUsed, "\n")
       
       # Update budget
-      remainingBudget <- round((scenario$maxTime - timeUsed) / timeEstimate)
+      remainingBudget <- round((scenario$maxTime - timeUsed) / boundEstimate)
 
       experimentsUsedSoFar <- experimentsUsedSoFar + nrow(iraceResults$experimentLog)
       eliteConfigurations <- allConfigurations[allConfigurations$.ID. %!in% rejectedIDs, ,drop = FALSE]
@@ -785,13 +789,14 @@ irace <- function(scenario, parameters)
     repeat {
       if (scenario$maxTime == 0
           || checkMinimumBudget (remainingBudget, minSurvival, nbIterations,
-                                 scenario = scenario)) {
+                                 boundEstimate, scenario = scenario)) {
         break;
       }
-      irace.note("\nWarning:",
-                 " with the current settings and estimated time per run,",
-                 " irace will not have enough budget to execute the minimum",
-                 " number of iterations.",
+      irace.note("Warning:",
+                 " with the current settings and estimated time per run (",
+                 boundEstimate,
+                 ") irace will not have enough budget to execute the minimum",
+                 " number of iterations (", nbIterations, "). ",
                  " Execution will continue by assuming that the estimated time",
                  " is too high and reducing the minimum number of iterations,",
                  " however, if the estimation was correct or too low,",
@@ -816,12 +821,15 @@ irace <- function(scenario, parameters)
           else paste0("# time budget: ", scenario$maxTime - timeUsed, "\n"),
           "# mu: ", max(scenario$mu, scenario$firstTest), "\n",
           "# deterministic: ", scenario$deterministic, "\n",
+            
           if (scenario$capping) 
             paste0("# capping: ", scenario$cappingType, "\n",
                    "# type bound: ", scenario$boundType, "\n", 
-                   "# maximum bound: ", scenario$boundMax, "\n", 
+                   "# maxBound: ", scenario$boundMax, "\n",
                    "# par bound: ", scenario$boundPar, "\n", 
-                   "# bound digits: ", scenario$boundDigits, "\n"),
+                   "# bound digits: ", scenario$boundDigits, "\n")
+          else if (!is.null(scenario$boundMax))
+            paste0("# maxBound: ", scenario$boundMax, "\n"),
           verbose = FALSE)
 
   
@@ -840,7 +848,7 @@ irace <- function(scenario, parameters)
                                nbIterations = nbIterations,
                                remainingBudget = remainingBudget,
                                timeUsed = timeUsed,
-                               timeEstimate = timeEstimate,
+                               boundEstimate = boundEstimate,
                                rejectedIDs = rejectedIDs,
                                forbiddenExps = forbiddenExps)
     # Consistency checks
@@ -965,7 +973,7 @@ irace <- function(scenario, parameters)
             "# experimentsUsedSoFar: ", experimentsUsedSoFar, "\n",
             if (scenario$maxTime == 0) ""
             else paste0("# timeUsed: ", timeUsed, "\n",
-                        "# timeEstimate: ", timeEstimate, "\n"),
+                        "# boundEstimate: ", boundEstimate, "\n"),
             "# remainingBudget: ", remainingBudget, "\n",
             "# currentBudget: ", currentBudget, "\n",
             "# nbConfigurations: ", nbConfigurations,
@@ -1132,11 +1140,9 @@ irace <- function(scenario, parameters)
     experimentsUsedSoFar <- experimentsUsedSoFar + raceResults$experimentsUsed
     # Update remaining budget.
     if (scenario$maxTime > 0) { 
-      timeUsed <- sum (timeUsed, raceResults$experimentLog[,"time"], na.rm=TRUE)                                   
-      timeEstimate <- mean(iraceResults$experimentLog[
-                                          iraceResults$experimentLog[, "configuration"] %!in% rejectedIDs, "time"], 
-                           na.rm=TRUE)
-      remainingBudget <- round((scenario$maxTime - timeUsed) / timeEstimate)
+      timeUsed <- sum(timeUsed, raceResults$experimentLog[, "time"], na.rm=TRUE)                                   
+      boundEstimate <- mean(iraceResults$experimentLog[, "time"], na.rm=TRUE)
+      remainingBudget <- round((scenario$maxTime - timeUsed) / boundEstimate)
     } else {
       remainingBudget <- remainingBudget - raceResults$experimentsUsed
     }

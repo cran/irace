@@ -210,41 +210,20 @@ parallelCoordinatesPlot (conf, iraceResults$parameters,
                          param_names = c("algorithm", "alpha", "beta", "rho", "q0"),
                          hierarchy = FALSE)
 
-## ----trainEvo, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Training set performance of the best-so-far configuration over number of experiments.", prompt=FALSE, eval=TRUE, comment=""----
+## ----testEvo, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Testing set performance of the best-so-far configuration over number of experiments. Label of each point is the configuration ID.", prompt=FALSE, eval=TRUE, comment=""----
 # Get number of iterations
 iters <- unique(iraceResults$experimentLog[, "iteration"])
 # Get number of experiments (runs of target-runner) up to each iteration
-fes <- cumsum(sapply(iters, function(k)
-  sum(iraceResults$experimentLog[, "iteration"] == k)))
+fes <- cumsum(table(iraceResults$experimentLog[,"iteration"]))
 # Get the mean value of all experiments executed up to each iteration
 # for the best configuration of that iteration.
-values <- sapply(iters, function(k) {
-  instances <- as.character(
-    unique(iraceResults$experimentLog[
-                          iraceResults$experimentLog[, "iteration"] == k,
-                          "instance"]))
-  return(mean(iraceResults$experiments[
-                             instances,
-                             as.character(iraceResults$iterationElites[k])]))})
-plot(fes, values, type="s", xlab = "Number of runs of the target algorithm",
-     ylab = "Estimated mean value over whole training set")
-points(fes, values)
-
-## ----testEvo, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Testing set performance of the best-so-far configuration over number of experiments.", prompt=FALSE, eval=TRUE, comment=""----
-# Get number of iterations
-iters <- unique(iraceResults$experimentLog[, "iteration"])
-# Get number of experiments (runs of target-runner) up to each iteration
-fes <- cumsum(sapply(iters, function(k)
-  sum(iraceResults$experimentLog[, "iteration"] == k)))
-# Get the mean value of all experiments executed up to each iteration
-# for the best configuration of that iteration.
-values <- sapply(iters, function(k) 
-  mean(iraceResults$testing$experiments[
-                            , as.character(iraceResults$iterationElites[k])]))
+elites <- as.character(iraceResults$iterationElites)
+values <- colMeans(iraceResults$testing$experiments[, elites])
 plot(fes, values, type = "s",
      xlab = "Number of runs of the target algorithm",
      ylab = "Mean value over testing set")
 points(fes, values)
+text(fes, values, elites, pos = 1)
 
 ## ----ablation, prompt=FALSE, eval=FALSE-----------------------------
 #  ablation(iraceLogFile = "irace.Rdata",

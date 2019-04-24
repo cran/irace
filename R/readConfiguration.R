@@ -51,7 +51,7 @@ readConfigurationsFile <- function(filename, parameters, debugLevel = 0, text)
   # Print the table that has been read.
   if (debugLevel >= 2) {
     cat("# Read ", nbConfigurations, " configurations from file '", filename, "'\n", sep="")
-    print(as.data.frame(configurationTable, stringAsFactor = FALSE))
+    print(as.data.frame(configurationTable, stringAsFactor = FALSE), digits=15)
   }
 
   namesParameters <- names(parameters$conditions)
@@ -262,7 +262,16 @@ readScenario <- function(filename = "", scenario = list())
       irace.error ("The scenario file ", shQuote(rfilename), " included from ",
                    shQuote(topfile), " does not exist.")
     }
-    source(rfilename, local = envir., chdir = TRUE)
+    handle.source.error <- function(e) {
+      irace.error("Reading scenario file ", shQuote(rfilename),
+                  " included from ", shQuote(topfile),
+                  " produced the following errors or warnings:\n",
+                  paste0(conditionMessage(e), collapse="\n"))
+      return(NULL)
+    }
+    withCallingHandlers(
+      tryCatch(source(rfilename, local = envir., chdir = TRUE),
+               error = handle.source.error, warning = handle.source.error))
   }
 
   # First find out which file...
@@ -284,7 +293,15 @@ readScenario <- function(filename = "", scenario = list())
     if (debug.level >= 1)
       cat ("# Reading scenario file", shQuote(filename), ".......")
     # chdir = TRUE to allow recursive sourcing.
-    source(filename, local = TRUE, chdir = TRUE)
+    handle.source.error <- function(e) {
+      irace.error("Reading scenario file ", shQuote(filename),
+                  " produced the following errors or warnings:\n",
+                  paste0(conditionMessage(e), collapse="\n"))
+      return(NULL)
+    }
+    withCallingHandlers(
+      tryCatch(source(filename, local = TRUE, chdir = TRUE),
+               error = handle.source.error, warning = handle.source.error))
     if (debug.level >= 1) cat (" done!\n")
   } else {
     irace.error ("The scenario file ", shQuote(filename), " does not exist.")
@@ -351,7 +368,21 @@ checkScenario <- function(scenario = defaultScenario())
   dups <- anyDuplicated(names(scenario))
   if (dups > 0)
     irace.error("scenario contains duplicated entries: ", names(scenario)[dups])
-  
+
+  # Boolean control parameters.
+  as.boolean.param <- function(x, name)
+  {
+    x <- as.integer(x)
+    if (is.na (x) || (x != 0 && x != 1)) {
+      irace.error (quote.param(name), " must be either 0 or 1.")
+    }
+    return(as.logical(x))
+  }
+  boolParams <- .irace.params.def[.irace.params.def[, "type"] == "b", "name"]
+  for (p in boolParams) {
+    scenario[[p]] <- as.boolean.param (scenario[[p]], p)
+  }
+
   ## Check that everything is fine with external parameters
   # Check that the files exist and are readable.
   scenario$parameterFile <- path.rel2abs(scenario$parameterFile)
@@ -360,7 +391,7 @@ checkScenario <- function(scenario = defaultScenario())
   scenario$execDir <- path.rel2abs(scenario$execDir)
   file.check (scenario$execDir, isdir = TRUE,
               text = paste0("execution directory ", quote.param("execDir")))
-  
+  options(.irace.execdir = scenario$execDir)
   if (!is.null.or.empty(scenario$logFile)) {
     scenario$logFile <- path.rel2abs(scenario$logFile, cwd = scenario$execDir)
     file.check(scenario$logFile, writeable = TRUE,
@@ -408,9 +439,10 @@ checkScenario <- function(scenario = defaultScenario())
       scenario$targetRunner <- path.rel2abs(scenario$targetRunner)
       file.check (scenario$targetRunner, executable = TRUE,
                   text = paste0("target runner ", quote.param("targetRunner")))
-      .irace$target.runner <- target.runner.default
+      .irace$target.runner <- if (scenario$aclib)
+                                target.runner.aclib else target.runner.default
     } else {
-      irace.error("'targetRunner' must be a function or an executable program")
+      irace.error(quote.param ('targetRunner'), " must be a function or an executable program")
     }
   }
 
@@ -466,8 +498,7 @@ checkScenario <- function(scenario = defaultScenario())
   if (!is.null(scenario$testInstances)
       && is.null(names(scenario$testInstances))) {
     # Create unique IDs for testInstances
-    names (scenario$testInstances) <-
-      paste0(1:length(scenario$testInstances), "t")
+    names(scenario$testInstances) <- paste0(1:length(scenario$testInstances), "t")
   }
   
   # Configurations file
@@ -527,6 +558,12 @@ checkScenario <- function(scenario = defaultScenario())
     }
     scenario$mu <- scenario$firstTest
   }
+
+  # AClib benchmarks use 15 digits
+  if (scenario$aclib)
+    scenario$digits <- 15
+  if (scenario$digits > 15 || scenario$digits <= 0)
+    irace.error (quote.param ("digits"), " must be within [1,15].")
   
   # Real [0, 1] control parameters
   realParams <- .irace.params.def[.irace.params.def[, "type"] == "r", "name"]
@@ -567,20 +604,6 @@ checkScenario <- function(scenario = defaultScenario())
     scenario$softRestartThreshold <- 10^(- scenario$digits)
   }
   
-  # Boolean control parameters
-  as.boolean.param <- function(x, name)
-  {
-    x <- as.integer(x)
-    if (is.na (x) || (x != 0 && x != 1)) {
-      irace.error (quote.param(name), " must be either 0 or 1.")
-    }
-    return(as.logical(x))
-  }
-  boolParams <- .irace.params.def[.irace.params.def[, "type"] == "b", "name"]
-  for (p in boolParams) {
-    scenario[[p]] <- as.boolean.param (scenario[[p]], p)
-  }
-
   if (scenario$deterministic &&
       scenario$firstTest > length(scenario$instances)) {
     irace.error("When deterministic == TRUE, the number of instances (",
@@ -637,12 +660,17 @@ checkScenario <- function(scenario = defaultScenario())
                    "' of ", quote.param("boundType"),
                    ", valid values are: ",
                    paste0(valid.types, collapse = ", "))
-    }    
+    }
     
     if (scenario$boundPar < 1)
       irace.error("Invalid value boundPar (", scenario$boundPar,
                   ") must be >= 1")
+  } else { # no capping
+    if (scenario$boundMax <= 0 || is.na(scenario$boundMax))
+      scenario$boundMax <- NULL
   }
+
+
   
   if (is.null.or.empty(scenario$testType) || 
       is.null.or.na(scenario$testType) || 
@@ -670,13 +698,6 @@ checkScenario <- function(scenario = defaultScenario())
   return (scenario)
 }
 
-print.instances <- function(param, value)
-{
-  cat (param, "= \"")
-  cat (value, sep = ", ")
-  cat ("\"\n")
-}
-
 #' Prints the given scenario
 #'
 #' @param scenario A list where tagged elements correspond to scenario
@@ -696,15 +717,7 @@ printScenario <- function(scenario)
 {
   cat("## irace scenario:\n")
   for (param in .irace.params.names) {
-    
-    # Special case for instances
-    if (param == "instances" || param == "testInstances") {
-      print.instances (param, scenario[[param]])
-    } else {# All other parameters (no vector, but can be functions)
-      # FIXME: Perhaps deparse() is not the right way to do this?
-      # FIXME: Perhaps toString() ?
-      cat(param, "=", deparse(scenario[[param]]), "\n")
-    }
+    cat(param, " = ", deparse(scenario[[param]]), "\n", sep = "")
   }
   cat("## end of irace scenario\n")
 }
@@ -731,6 +744,7 @@ printScenario <- function(scenario)
 #'      \item{\code{seed}}{Seed of the random number generator (by default, generate a random seed). (Default: \code{NA})}
 #'      \item{\code{repairConfiguration}}{User-defined R function that takes a configuration generated by irace and repairs it. (Default: \code{""})}
 #'      \item{\code{postselection}}{Percentage of the configuration budget used to perform a postselection race of the best configurations of each iteration after the execution of irace. (Default: \code{0})}
+#'      \item{\code{aclib}}{Enable/disable AClib mode. This option enables compatibility with GenericWrapper4AC as targetRunner script. (Default: \code{0})}
 #'    }
 #'  \item Elitist \code{irace}:
 #'    \describe{
@@ -884,21 +898,23 @@ checkTargetFiles <- function(scenario, parameters)
 {
   result <- TRUE
   ## Create two random configurations
-  conf.id <- c("testConfig1","testConfig2")
+  conf.id <- c("testConfig1", "testConfig2")
   configurations <- sampleUniform(parameters, length(conf.id),
                                   digits = scenario$digits,
                                   forbidden = scenario$forbiddenExps,
                                   repair = scenario$repairConfiguration)
   configurations <- cbind (.ID. = conf.id, configurations)
 
-  bounds <- if (scenario$capping)
-              rep(scenario$boundMax, length(configurations)) else NULL
+  bounds <- rep(scenario$boundMax, nrow(configurations))
 
-  experiments <- createExperimentList(configurations, parameters,
-                                      scenario$instances[1],
-                                      instances.ID = "instance1",
-                                      seeds = 1234567, scenario,
-                                      bounds = bounds)
+  instances.ID <- if (scenario$sampleInstances)
+                    sample.int(length(scenario$instances), 1) else 1
+  experiments <- createExperimentList(
+    configurations, parameters, instances = scenario$instances,
+    instances.ID = instances.ID, seeds = 1234567, scenario, bounds = bounds)
+
+  startParallel(scenario)
+  on.exit(stopParallel(), add = TRUE)
 
   # FIXME: Create a function try.call(err.msg,warn.msg, fun, ...)
   # Executing targetRunner
@@ -919,7 +935,7 @@ checkTargetFiles <- function(scenario, parameters)
 
   if (scenario$debugLevel >= 1) {
     cat ("# targetRunner returned:\n")
-    print(output)
+    print(output, digits = 15)
   }
   
   irace.assert(is.null(scenario$targetEvaluator) == is.null(.irace$target.evaluator))
@@ -941,7 +957,7 @@ checkTargetFiles <- function(scenario, parameters)
                    invokeRestart("muffleWarning")})
     if (scenario$debugLevel >= 1) {
       cat ("# targetEvaluator returned:\n")
-      print(output)
+      print(output, digits = 15)
     }
   }
   return(result)

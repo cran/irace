@@ -8,12 +8,12 @@
 #' has to be the one returned by the function \code{\link{defaultScenario}} and
 #' \code{\link{readScenario}}.
 #' @param parameters A data structure similar to that provided
-#' by the \code{link{readParameters}} function.
+#' by the \code{\link{readParameters}} function.
 #'
 #' @return A list with the following elements:
-#'   \itemize{
-#'     \item{experiments}{Experiments results.}
-#'     \item{seeds}{Array of the instance seeds used in the experiments.}
+#'   \describe{
+#'     \item{\code{experiments}}{Experiments results.}
+#'     \item{\code{seeds}}{Array of the instance seeds used in the experiments.}
 #'   }
 #'
 #' @details A test instance set must be provided through \code{scenario$testInstances}.
@@ -45,7 +45,7 @@ testConfigurations <- function(configurations, scenario, parameters)
   values <- values[, parameters$names, drop = FALSE]
   switches <- parameters$switches[parameters$names]
 
-  bounds <- if (scenario$capping) rep(scenario$boundMax, nrow(configurations)) else NULL
+  bounds <- rep(scenario$boundMax, nrow(configurations))
   # If there is no ID (e.g., after using readConfigurations), then add it.
   if (! (".ID." %in% colnames(configurations))) {
     configurations$.ID. <- 1:nrow(configurations)

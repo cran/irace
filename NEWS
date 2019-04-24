@@ -1,8 +1,67 @@
-3.1
+3.2 (18/04/2019)
+
+ * Fix `irace --check --parallel 2` on Windows.         (Manuel López-Ibáñez)
+                                                         
+ * Values of real-valued parameter are now printed with sufficient precision to
+   satisfy `digits` (up to `digits=15`).
+                                                        (Manuel López-Ibáñez)
+                                                        
+ * It is possible to specify boundMax without capping.
+                                    (Leslie Pérez Cáceres, Manuel López-Ibáñez) 
+
+ * `irace --check` will exit with code 1 if the check is unsuccessful
+                                                        (Manuel López-Ibáñez)
+
+ * Print where irace is installed with `--help`.          (Manuel López-Ibáñez)
+                                                        
+ * irace will now complain if the output of target-runner or target-evaluator
+   contains extra lines even if the first line of output is correct. This is to
+   avoid parsing the wrong output. Unfortunately, this may break setups that
+   relied on this behavior. The solution is to only print the output that irace
+   expects. 
+                                                        (Manuel López-Ibáñez)
+   
+ * Completely re-implement `log` parameters to fix several bugs. Domains that
+   contain zero or negative values are now rejected.
+                                    (Leslie Pérez Cáceres, Manuel López-Ibáñez)
+                                    
+ * New option `aclib=` (`--aclib 1`) enables compatibility with the
+   GenericWrapper4AC (https://github.com/automl/GenericWrapper4AC/) used by
+   AClib (http://aclib.net/). This is EXPERIMENTAL.
+   `--aclib 1` also sets digits to 15 for compatibility with AClib defaults.
+                                                         (Manuel López-Ibáñez)
+                                                         
+ * Fix printing of output when capping is enabled.
+                                                         (Manuel López-Ibáñez)
+ 
+ * `checkTargetFiles()` (`--check`) samples an instance unless
+   `sampleInstances` is FALSE.                           (Manuel López-Ibáñez)
+   
+ * Fix symbol printed in elimination test.               (Manuel López-Ibáñez)
+
+ * Use `dynGet()` to find `targetRunner` and `targetEvaluator`.
+   As a result, we now require R >= 3.2.
+                                                         (Manuel López-Ibáñez)
+ 
+ * All tests now use `testthat`.                         (Manuel López-Ibáñez)
+ 
+ * New function `scenario.update.paths()`                (Manuel López-Ibáñez)
+ 
+ * Fix assert failure that may happen when `elitistNewInstances` is larger than
+   `firstTest`. Reported by Jose Riveaux.                (Manuel López-Ibáñez)
+   
+ * Fix bug in `checkTargetFiles()` (`--check`) with capping.
+                                                        (Leslie Pérez Cáceres)
+
+ * Clarify a few errors/warnings when `maxTime` > 0.
+                     (Manuel López-Ibáñez, suggested by Haroldo Gambini Santos) 
+ 
+ 
+3.1  (12/07/2018)
 
  * Use testthat for unit testing.                        (Manuel López-Ibáñez)
 
- * Allow instances to be a list of arbitrary R objects (mlr bugfix).
+ * Allow instances to be a list of arbitrary R objects (`mlr` bugfix).
                                                          (Manuel López-Ibáñez)
  
 3.0  (05/07/2018)
@@ -12,11 +71,11 @@
    is enabled. Please see the user-guide for details.
                                     (Leslie Pérez Cáceres, Manuel López-Ibáñez)
 
- * The package contains an ablation() function implementing the ablation
+ * The package contains an `ablation()` function implementing the ablation
    method for parameter importance analysis by Fawcett and Hoos (2016).
                                      (Leslie Pérez Cáceres, Manuel López-Ibáñez)
 
- * New option 'postselection' executes a post-selection race.
+ * New option `postselection` executes a post-selection race.
                                                         (Leslie Pérez Cáceres)
 
  * At the end of each race, if the race stops before evaluating all instances
@@ -25,7 +84,7 @@
    on more instances are considered better than those evaluated on fewer.
                                     (Manuel López-Ibáñez, Leslie Pérez Cáceres)
 
- * Last active parameter values of numerical parameters (i and r) are carried
+ * Last active parameter values of numerical parameters (`i` and `r`) are carried
    by the sampling model. When a value must be assigned and the parameter was
    previously not active, the sampling is performed around the last value.
                                    (Leslie Pérez Cáceres, Manuel López-Ibáñez)
@@ -36,29 +95,29 @@
  * The user guide documents --version, --help, and --check.
                                                         (Manuel López-Ibáñez)
  
- * A return value of "Inf" from targetRunner/targetEvaluation results in the
-   immediate rejection of the configuration without any further evaluation.
+ * A return value of `Inf` from `targetRunner`/`targetEvaluation` results in
+   the immediate rejection of the configuration without any further evaluation.
    This is useful for handling unreliable or broken configurations that should
-   not stop irace.                                     (Manuel López-Ibáñez)
+   not stop irace.                                        (Manuel López-Ibáñez)
 
- * Numerical parameters may be sampled on a logarithmic scale using "i,log"
-   or "r,log".                                               (Alberto Franzin)
+ * Numerical parameters may be sampled on a logarithmic scale using `i,log`
+   or `r,log`.                                               (Alberto Franzin)
  
- * New target-runner.bat for Windows contributed by André de Souza Andrade.
+ * New `target-runner.bat` for Windows contributed by André de Souza Andrade.
   
  * Fixed all shell scripts calling functions before defining them, which is not
    portable.
                                                          (Manuel López-Ibáñez)
 
- * Fixed '--parallel' bug in Windows that resulted in
-   "Error in checkForRemoteErrors(val)"
+ * Fixed `--parallel` bug in Windows that resulted in
+   `Error in checkForRemoteErrors(val)`.
                                                           (Manuel López-Ibáñez)
 
  * Improve error message when no training instances are given.
                                                           (Manuel López-Ibáñez)
 
 
-2.4
+2.4 (03/08/2017)
 
  * The output of irace now specifies in which order, if any, configurations are
    printed.

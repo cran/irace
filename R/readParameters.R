@@ -17,23 +17,23 @@
 #' 
 #' @return A list containing the definitions of the parameters read. The list is
 #'  structured as follows:
-#'   \itemize{
-#'     \item{names}{Vector that contains the names of the parameters.}
-#'     \item{types}{Vector that contains the type of each parameter 'i', 'c', 'r', 'o'.
+#'   \describe{
+#'     \item{\code{names}}{Vector that contains the names of the parameters.}
+#'     \item{\code{types}}{Vector that contains the type of each parameter 'i', 'c', 'r', 'o'.
 #'       Numerical parameters can be sampled in a log-scale with 'i,log' and 'r,log'
 #'       (no spaces).}
-#'     \item{switches}{Vector that contains the switches to be used for the
+#'     \item{\code{switches}}{Vector that contains the switches to be used for the
 #'       parameters on the command line.}
-#'     \item{domain}{List of vectors, where each vector may contain two
+#'     \item{\code{domain}}{List of vectors, where each vector may contain two
 #'       values (minimum, maximum) for real and integer parameters, or
 #'       possibly more for categorical parameters.}
-#'     \item{conditions}{List of R logical expressions, with variables
+#'     \item{\code{conditions}}{List of R logical expressions, with variables
 #'       corresponding to parameter names.}
-#'     \item{isFixed}{Logical vectors that specifies which parameter is fixed
+#'     \item{\code{isFixed}}{Logical vectors that specifies which parameter is fixed
 #'       and, thus, it does not need to be tuned.}
-#'     \item{nbParameters}{An integer, the total number of parameters.}
-#'     \item{nbFixed}{An integer, the number of parameters with a fixed value.}
-#'     \item{nbVariable}{Number of variable (to be tuned) parameters.}
+#'     \item{\code{nbParameters}}{An integer, the total number of parameters.}
+#'     \item{\code{nbFixed}}{An integer, the number of parameters with a fixed value.}
+#'     \item{\code{nbVariable}}{Number of variable (to be tuned) parameters.}
 #'   }
 #'
 #' @details Either 'file' or 'text' must be given. If 'file' is given, the
@@ -167,7 +167,7 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
                       "One parameter of this cycle is '", rootParam, "'")
         
         # The following line detects a missing definition
-        if (!child %in% names(conditionsTree))
+        if (child %!in% names(conditionsTree))
           irace.error("A parameter definition is missing! ",
                       "Check definition of parameters.\n",
                       "Parameter '", paramName,
@@ -197,13 +197,34 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
     irace.error (paste0 (...),
                  " at ", filename, ", line ", line, context)
   }
-  
+
+  transform.domain <- function(transf, lower, upper, type)
+  {
+    if (transf == "") return(transf)
+    if (transf == "log") {
+      # Reject log if domain contains zero or negative values
+      if (any(c(lower,upper) <= 0)) return(NULL)
+      
+      trLower <- log(lower)
+      # +1 to adjust before floor()
+      trUpper <- if (type == "i") log(upper + 1) else log(upper)
+      
+      irace.assert(is.finite(trLower))
+      irace.assert(is.finite(trUpper))
+      attr(transf, "lower") <- trLower
+      attr(transf, "upper") <- trUpper
+      return(transf)
+    }
+    irace.internal.error("unrecognized transformation type '", transf, "'")
+  }
+    
   parameters <- list(names = c(),
                      types = c(),
                      switches = c(),
                      domain = list(),
                      conditions = list(),
-                     isFixed = c())
+                     isFixed = c(),
+                     transform = list())
 
   conditions <- list()
   lines <- readLines(con = file)
@@ -249,7 +270,7 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
         filename, nbLines, line,
         "parameter type must be a single character in {'c','i','r','o'}, ",
         "with 'i', 'r' optionally followed by ',log' (no spaces in between) ",
-        "to sample using a logarithmic scale,")
+        "to sample using a logarithmic scale")
     } else if (param.type == "i,log") {
       param.type <- "i"
       param.transform <- "log"
@@ -270,7 +291,7 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
     }
 
     param.value <- string2vector(param.value)
-    if (param.type == "r" || param.type == "i") {
+    if (param.type %in% c("r","i")) {
       param.value <- suppressWarnings(as.numeric(param.value))
       if (any(is.na(param.value)) || length(param.value) != 2) {
         errReadParameters (filename, nbLines, NULL,
@@ -290,6 +311,13 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
         errReadParameters (filename, nbLines, NULL,
                            "for parameter type 'i' values must be integers (",
                            result$match, ") for parameter '", param.name, "'")
+      }
+
+      param.transform <- transform.domain(param.transform,
+                                          param.value[1], param.value[2], param.type)
+      if (is.null(param.transform)) {
+        errReadParameters (filename, nbLines, NULL, "The domain of parameter '",
+                           param.name, "' of type 'log' cannot contain zero")
       }
     } else {
       dups <- duplicated(param.value)
@@ -389,6 +417,6 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
   parameters$nbParameters <- length(parameters$names)
   parameters$nbFixed <- sum(parameters$isFixed == TRUE)
   parameters$nbVariable <- sum(parameters$isFixed == FALSE)
-  if (debugLevel >= 2) print(parameters)
+  if (debugLevel >= 2) print(parameters, digits = 15)
   return (parameters)
 }

@@ -25,7 +25,7 @@
 #  or by writing to the  Free Software Foundation, Inc., 59 Temple Place,
 #                  Suite 330, Boston, MA 02111-1307 USA
 # -------------------------------------------------------------------------
-# $Revision: 2052 $
+# $Revision: 2205 $
 # =========================================================================
 
 #' irace.license
@@ -36,23 +36,22 @@
 ## __VERSION__ below will be replaced by the version defined in R/version.R
 ## This avoids constant conflicts within this file.
 irace.license <-
-'*******************************************************************************
-* irace: An implementation in R of Iterated Race
-* Version: __VERSION__
-* Copyright (C) 2010-2018
-* Manuel Lopez-Ibanez     <manuel.lopez-ibanez@manchester.ac.uk>
-* Jeremie Dubois-Lacoste  
-* Leslie Perez Caceres    <leslie.perez.caceres@ulb.ac.be>
-*
-* This is free software, and you are welcome to redistribute it under certain
-* conditions.  See the GNU General Public License for details. There is NO
-* WARRANTY; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-*
-* irace builds upon previous code from the race package:
-*
-* race: Racing methods for the selection of the best
-* Copyright (C) 2003 Mauro Birattari
-*******************************************************************************
+'#------------------------------------------------------------------------------
+# irace: An implementation in R of (Elitist) Iterated Racing
+# Version: __VERSION__
+# Copyright (C) 2010-2019
+# Manuel Lopez-Ibanez     <manuel.lopez-ibanez@manchester.ac.uk>
+# Jeremie Dubois-Lacoste  
+# Leslie Perez Caceres    <leslie.perez.caceres@ulb.ac.be>
+#
+# This is free software, and you are welcome to redistribute it under certain
+# conditions.  See the GNU General Public License for details. There is NO
+# WARRANTY; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#
+# irace builds upon previous code from the race package:
+#     race: Racing methods for the selection of the best
+#     Copyright (C) 2003 Mauro Birattari
+#------------------------------------------------------------------------------
 '
 cat.irace.license <- function()
 {
@@ -69,6 +68,7 @@ cat.irace.license <- function()
 irace.usage <- function ()
 {
   cat.irace.license()
+  cat ("# installed at: ", system.file(package="irace"), "\n", sep = "")
 
   for (i in seq_len(nrow(.irace.params.def))) {
     short <- .irace.params.def[i,"short"]
@@ -112,7 +112,6 @@ irace.main <- function(scenario = defaultScenario(), output.width = 9999)
 
   scenario <- checkScenario (scenario)
   debug.level <- scenario$debugLevel
-  options(.irace.execdir = scenario$execDir)
   
   if (debug.level >= 1) {
     op.debug <- options(warning.length = 8170,
@@ -154,16 +153,17 @@ irace.main <- function(scenario = defaultScenario(), output.width = 9999)
 #' \code{testing.main} executes the testing of the target 
 #' algorithm configurations found on an \pkg{irace} execution.
 #' 
-#' @param logFile Path to the .Rdata file produced by \pkg{irace}.
+#' @param logFile Path to the \code{.Rdata} file produced by \pkg{irace}.
 #'
-#' @return Boolean. TRUE if the testing ended successfully otherwise, returns FALSE.
+#' @return Boolean. TRUE if the testing ended successfully otherwise, returns
+#'   FALSE.
 #' 
-#' @details The function \code{testing.main} load the \code{logFile} and obtains
-#' the needed configurations according to the specified test. Use the 
-#' \code{scenario$testNbElites} to test N final elite configurations or use  
-#' \code{scenario$testIterationElites} to test the best configuration of each 
-#' iteration. A test instance set must be provided through \code{scenario$testInstancesDir} 
-#' and \code{testInstancesFile}.
+#' @details The function \code{testing.main} loads the \code{logFile} and
+#'   obtains the needed configurations according to the specified test. Use the
+#'   \code{scenario$testNbElites} to test N final elite configurations or use
+#'   \code{scenario$testIterationElites} to test the best configuration of each
+#'   iteration. A test instance set must be provided through
+#'   \code{scenario$testInstancesDir} and \code{testInstancesFile}.
 #'
 #' @seealso
 #'  \code{\link{defaultScenario}} to provide a default scenario for \pkg{irace}.
@@ -273,6 +273,9 @@ testing.cmdline <- function(filename, scenario)
 #' @param parameters Data structure containing the parameter definition. The data
 #' structure has to be the one returned by the function \code{\link{readParameters}}.
 #' See documentation of this function for details.
+#'
+#' @return returns \code{TRUE} if succesful and gives an error and returns
+#' \code{FALSE} otherwise.
 #' 
 #' @details Provide the \code{parameters} argument only if the parameter list
 #'   should not be obtained from the parameter file given by the scenario. If
@@ -307,10 +310,13 @@ checkIraceScenario <- function(scenario, parameters = NULL)
   }
 
   irace.note("Checking target execution.\n")
-  if (checkTargetFiles(scenario = scenario, parameters = parameters))
+  if (checkTargetFiles(scenario = scenario, parameters = parameters)) {
     irace.note("Check succesful.\n")
-  else
-    irace.note("Check unsuccesful.\n") 
+    return(TRUE)
+  } else {
+    irace.error("Check unsuccessful.\n")
+    return(FALSE)
+  }
 }
 
 #' irace.cmdline

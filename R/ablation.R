@@ -4,14 +4,14 @@ fixDependenciesWithReference <- function(configuration, ref.configuration, param
 {
   # Search parameters that need a value
   changed <- c()
-  for (pname in parameters[["names"]]) {
-    if (parameters[["isFixed"]][pname]) next
+  for (pname in names(which(!parameters[["isFixed"]]))) {
     # If dependent parameter has been activated, set the value of the reference.
     if (is.na(configuration[,pname]) && conditionsSatisfied(parameters, configuration, pname)) {
        if (!is.null(ref.configuration)) {
          configuration[,pname] <- ref.configuration[pname]
        } 
        changed <- c(changed, pname)
+       # MANUEL: Why do we need to recurse here?
        aux <- fixDependenciesWithReference(configuration=configuration, ref.configuration=ref.configuration, parameters)
        changed <- c(changed, aux$changed)
        configuration <- aux$configuration
@@ -120,24 +120,27 @@ ablation <- function(iraceLogFile = NULL, iraceResults = NULL,
                      pdf.file = NULL, pdf.width = 20, mar = c(12,5,4,1),
                      debugLevel = NULL)
 {
+  # FIXME: The previous seed needs to be saved and restored at the end.
+  set.seed(seed)
+
   # Input check
   if (is.null(iraceLogFile) && is.null(iraceResults)) 
     irace.error("You must provide a Rdata file or an iraceResults object.")
   if (!(type %in% c("full", "racing")))
     irace.error("Type of ablation", type, "not recognized.") 
-                      	
-  irace.note ("Starting ablation:\n# Seed:", seed, "\n")
-   
+
   # Load the data of the log file
   if (!is.null(iraceLogFile)) load(iraceLogFile)
     
   if (is.null(src)) src <- 1
   if (is.null(target)) target <- iraceResults$iterationElites[length(iraceResults$iterationElites)]
-  
-  if (!(src %in% iraceResults$allConfigurations$.ID.))
+
+  irace.note ("Starting ablation from ", src, " to ", target, " :\n# Seed:", seed, "\n")
+
+  if (src %!in% iraceResults$allConfigurations$.ID.)
     irace.error("Source configuration ID (", src, ") cannot be found")
     
-  if (!(target %in% iraceResults$allConfigurations$.ID.))
+  if (target %!in% iraceResults$allConfigurations$.ID.)
     irace.error("Target configuration ID (", target, ") cannot be found")
   
   src.configuration <- iraceResults$allConfigurations[src, , drop = FALSE]
@@ -146,17 +149,13 @@ ablation <- function(iraceLogFile = NULL, iraceResults = NULL,
   parameters <- iraceResults$parameters
   scenario   <- iraceResults$scenario
   
-  if (!is.null(ablationLogFile))
-    scenario$logFile <- ablationLogFile
+  if (!is.null(ablationLogFile)) scenario$logFile <- ablationLogFile
   if (!is.null(debugLevel)) scenario$debugLevel <- debugLevel
   
   scenario <- checkScenario (scenario)
   
   startParallel(scenario)
   on.exit(stopParallel(), add = TRUE)
-
-  # FIXME: The previous seed needs to be saved and restored at the end.
-  set.seed(seed)
 
   # LESLIE: we should decide how to select the instances to perform the ablation
   # for now we generate an instace list with one instance.
@@ -175,7 +174,7 @@ ablation <- function(iraceLogFile = NULL, iraceResults = NULL,
   if (is.null(ab.params)) {
     ab.params <-  parameters$names
   } else if (!all(ab.params %in% parameters$names)) {
-  	  irace.error("Some of the parameters provided are not defined in the parameters object.")
+    irace.error("Some of the parameters provided are not defined in the parameters object.")
   }  
   # Select parameters that are different in both configurations
   neq.params <- which(src.configuration[,ab.params] != target.configuration[,ab.params])
@@ -202,11 +201,11 @@ ablation <- function(iraceLogFile = NULL, iraceResults = NULL,
   ## FIXME: We may already have these experiments in the logFile!
   experiments <- createExperimentList(configurations = rbind(src.configuration, target.configuration), 
                                       parameters = parameters,
-                                      instances = scenario$instances[instances[,"instance"]],
-                                      # FIXME: We should create/use unique IDs for these instances.
-                                      instances.ID = 1:nrow(instances),
+                                      instances = scenario$instances,
+                                      instances.ID = instances[, "instance"],
                                       seeds = instances[, "seed"],
-                                      scenario = scenario) # FIXME: No bound ???
+                                      scenario = scenario,
+                                      bounds = scenario$boundMax)
   irace.note("Executing source and target configurations on the given instances...\n")
   target.output <- execute.experiments(experiments, scenario)
   if (!is.null(scenario$targetEvaluator))
@@ -317,13 +316,13 @@ ablation <- function(iraceLogFile = NULL, iraceResults = NULL,
   best.ids <- which.min(cranks)
   best.configuration <- all.configurations[trajectory[best.ids[1]],,drop=FALSE]
   irace.note("Final best configuration:\n")
-  print(best.configuration)
+  configurations.print(best.configuration)
   
   # LESLIE: If we use racing we can have a matrix of results that is not
   # complete, how should we do the plots?
   # MANUEL: Do not plot anything that was discarded
   
-  # Save final log
+  # Save final log.
   ab.log <- list(configurations  = all.configurations,
                  instances   = instances, 
                  experiments = results, 
@@ -393,7 +392,7 @@ plotAblation <- function (ab.log = NULL, abLogFile = NULL,
   if (!is.null(pdf.file)) {
     if (!is.file.extension(pdf.file, ".pdf"))
       pdf.file <- paste0(pdf.file, ".pdf")
-    cat(paste0("Creating PDF file '", pdf.file, "'\n"))
+    cat("Creating PDF file '", pdf.file, "'\n", sep="")
     pdf(file = pdf.file, width = pdf.width,
         title = paste0("Ablation plot: ", pdf.file))
     on.exit(dev.off(), add = TRUE)

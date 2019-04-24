@@ -12,10 +12,6 @@ irace.reload.debug <- function(package = "irace")
 
 .irace.prefix <- "== irace == "
 
-.irace.bug.report <-
-  paste("An unexpected condition occurred.",
-        "Please report this bug to the authors of the irace package <http://iridia.ulb.ac.be/irace>")
-
 irace.print.memUsed <- function(objects)
 {
   object.size.kb <- function (name, envir) {
@@ -75,30 +71,35 @@ irace.dump.frames <- function()
 # Print an internal fatal error message that signals a bug in irace.
 irace.internal.error <- function(...)
 {
-  traceback(1)
+  .irace.bug.report <-
+    paste0("An unexpected condition occurred. ",
+           "Please report this bug to the authors of the irace package <http://iridia.ulb.ac.be/irace>")
+
   op <- options(warning.length = 8170,
                 error = if (interactive()) utils::recover
                         else irace.dump.frames)
   on.exit(options(op))
+  # 6 to not show anything below irace.assert()
+  bt <- capture.output(traceback(6))
   warnings()
-  stop (.irace.prefix, ..., "\n", .irace.bug.report, call. = TRUE)
+  stop (.irace.prefix, paste0(..., collapse = "\n"),
+        paste0(bt, collapse= "\n"), "\n",
+        .irace.prefix, "\n", .irace.bug.report, call. = FALSE)
   invisible()
 }
 
-irace.assert <- function(exp)
+irace.assert <- function(exp, eval.after = NULL)
 {
-  if (exp) return(invisible())
-  mc <- match.call()[[2]]
-  msg <- paste0(deparse(mc), " is not TRUE\n", .irace.bug.report)
   # FIXME: It would be great if we could save into a file the state of
   # the function that called this one.
-  traceback(1)
-  op <- options(warning.length = 8170,
-                error = if (interactive()) utils::recover
-                        else irace.dump.frames)
-  on.exit(options(op))
-  warnings()
-  stop (msg)
+  if (exp) return(invisible())
+  mc <- match.call()[[2]]
+  msg <- paste0(deparse(mc), " is not TRUE\n")
+  if (!is.null(eval.after)) {
+    msg.after <- eval.parent(capture.output(eval.after))
+    msg <- paste0(msg, "\n", msg.after)
+  }
+  irace.internal.error(msg)
   invisible()
 }
 
@@ -181,15 +182,19 @@ is.na.nowarn <- function(x)
   length(x) == 1 && suppressWarnings(is.na(x))
 }
 
+is.na.or.empty <- function(x)
+{
+  (length(x) == 0) || is.na.nowarn(x)
+}
+
 is.null.or.na <- function(x)
 {
   is.null(x) || is.na.nowarn(x)
 }
 
-# FIXME: This should also return TRUE when length(x) == 0
 is.null.or.empty <- function(x)
 {
-  is.null(x) || (!suppressWarnings(is.na(x)) && length(x) == 1 && is.character(x) && x == "")
+  (length(x) == 0) || (length(x) == 1 && !suppressWarnings(is.na(x)) && is.character(x) && x == "")
 }
 
 is.function.name <- function(FUN)
@@ -197,19 +202,15 @@ is.function.name <- function(FUN)
   # FIXME: Is there a simpler way to do this check?
   is.function(FUN) ||
     (!is.null(FUN) && !is.na(FUN) && as.character(FUN) != "" &&
-     !is.null(mget(as.character(FUN), envir = as.environment(-1),
-                   mode = "function", ifnotfound = list(NULL),
-                   inherits = TRUE)[[1]]))
+     !is.null(get.function(FUN)))
 }
 
 get.function <- function(FUN)
 {
-  irace.assert(is.function.name(FUN))
   if (is.function(FUN)) return(FUN)
-  # FIXME: Is there a simpler way to do this?
-  return(mget(FUN, envir = as.environment(-1),
-              mode = "function", ifnotfound = list(NULL),
-              inherits = TRUE)[[1]])
+  FUN <- dynGet(as.character(FUN), ifnotfound = NULL, inherits = TRUE)
+  if (is.function(FUN)) return(FUN)
+  return (NULL)
 }
 
 is.bytecode <- function(x) typeof(x) == "bytecode"
@@ -336,6 +337,38 @@ path.rel2abs <- function (path, cwd = getwd())
   return (irace.normalize.path(path))
 }
 
+#' Update filesystem paths of a scenario consistently.
+#'
+#' This function should be used to change the filesystem paths stored in a
+#' scenario object. Useful when moving a scenario from one computer to another.
+#'
+#' @param scenario list containing \pkg{irace} settings. The data structure has
+#'   to be the one returned by the function \code{\link{defaultScenario}} and
+#'   \code{\link{readScenario}}.
+#' @param from character string containing a regular expression (or character
+#'   string for \code{fixed = TRUE}) to be matched.
+#' @param to the replacement string.character string. For \code{fixed = FALSE}
+#'   this can include backreferences \code{"\1"} to \code{"\9"} to
+#'   parenthesized subexpressions of \code{from}.
+#' @param fixed logical.  If \code{TRUE}, \code{from} is a string to be matched
+#'   as is.
+#' @return The updated scenario
+#' @examples
+#' \dontrun{
+#' scenario <- readScenario(filename = "scenario.txt")
+#' scenario <- scenario.update.paths(scenario, from = "/home/manuel/", to = "/home/leslie")
+#' }
+#' @seealso \code{\link[base]{grep}}
+#' @export
+scenario.update.paths <- function(scenario, from, to, fixed = TRUE)
+{
+  pathParams <- .irace.params.def[.irace.params.def[, "type"] == "p", "name"]
+  # Only consider the ones that actually appear in scenario.
+  pathParams <- intersect(pathParams, names(scenario))
+  scenario[pathParams] <- lapply(scenario[pathParams], sub, pattern = from, replacement = to, fixed = fixed)
+  return(scenario)
+}
+
 # This function is used to trim potentially large strings for printing, since
 # the maximum error/warning length is 8170 characters (R 3.0.2)
 strlimit <- function(str, limit = 5000)
@@ -423,6 +456,8 @@ merge.matrix <- function(x, y)
                     dimnames = list(new.rows, colnames(x))))
   # Update
   x[rownames(y), colnames(y)] <- y
+  # There must be a non-NA entry for each instance.
+  irace.assert(all(apply(!is.na(x), 1, any)))
   return(x)
 }
 
@@ -490,7 +525,7 @@ configurations.print <- function(configurations, metadata = FALSE)
   if (!metadata) {
     configurations <- removeConfigurationsMetaData(configurations)
   } 
-  print(as.data.frame(configurations, stringsAsFactors = FALSE))
+  print(as.data.frame(configurations, stringsAsFactors = FALSE), digits = 15)
 }
 
 #' Print configurations as command-line strings.
@@ -680,6 +715,8 @@ runcommand <- function(command, args, id, debugLevel)
                err <<- c(err, paste(conditionMessage(w), collapse="\n"))
                invokeRestart("muffleWarning")
              })
+  if (is.null(output))
+    output <- ""
   # If the command could not be run an R error is generated.  If ‘command’
   # runs but gives a non-zero exit status this will be reported with a
   # warning and in the attribute ‘"status"’ of the result: an attribute
@@ -687,13 +724,13 @@ runcommand <- function(command, args, id, debugLevel)
   if (!is.null(err)) {
     err <- paste(err, collapse = "\n")
     if (!is.null(attr(output, "errmsg")))
-      output <- paste(sep = "\n", attr(output, "errmsg"))
+      err <- paste(sep = "\n", err, attr(output, "errmsg"))
     if (debugLevel >= 2L)
       irace.note ("ERROR (", id, "): ", err, "\n")
     return(list(output = output, error = err))
   }
   if (debugLevel >= 2L) {
-    irace.note ("DONE (", id, ") Elapsed: ",
+    irace.note ("DONE (", id, ") Elapsed wall-clock seconds: ",
                 formatC(proc.time()["elapsed"] - elapsed,
                         format = "f", digits = 2), "\n")
   }

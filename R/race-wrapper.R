@@ -49,7 +49,8 @@ buildCommandLine <- function(values, switches)
   for (i in seq_along(values)) {
     value <- values[i]
     if (!is.na(value)) {
-        command <- paste0(command, " ", switches[i], format(value, scientific=FALSE))
+      command <- paste0(command, " ", switches[i],
+                        format(value, digits=15, scientific=FALSE))
     }
   }
   return(command)
@@ -65,11 +66,11 @@ parse.output <- function(outputRaw, verbose)
   output <- outputRaw
   # strsplit crashes if outputRaw == character(0)
   if (length(outputRaw) > 0) {
+    outputRaw <- paste0(outputRaw, collapse = "\n")
     output <- strsplit(trim(outputRaw), "[[:space:]]+")[[1]]
   }
   # suppressWarnings to avoid messages about NAs introduced by coercion
-  output <- suppressWarnings (as.numeric (output))
-  return (output)
+  return(suppressWarnings (as.numeric (output)))
 }
 
 target.error <- function(err.msg, output, scenario, target.runner.call,
@@ -97,7 +98,7 @@ target.error <- function(err.msg, output, scenario, target.runner.call,
       "This is not a bug in irace, but means that something failed when",
       " running the command(s) above or they were terminated before completion.",
       " Try to run the command(s) above from the execution directory '",
-      scenario$execDir, "' to investigate the issue.")
+      scenario$execDir, "' to investigate the issue. See also Appendix B (targetRunner troubleshooting checklist) of the User Guide (https://cran.r-project.org/package=irace/vignettes/irace-package.pdf).")
   }
   irace.error(err.msg, "\n", .irace.prefix,
               "The output was:\n", paste(output$outputRaw, collapse = "\n"),
@@ -156,16 +157,16 @@ exec.target.evaluator <- function (experiment, num.configurations, all.conf.id,
 #'  an advanced example of how to create your own \code{targetEvaluator} function.
 #'   
 #' @param experiment A list describing the experiment. It contains at least:
-#'    \itemize{
-#'     \item{id.configuration}{An alphanumeric string that uniquely identifies a configuration;}
-#'     \item{id.instance}{An alphanumeric string that uniquely identifies an instance;}
-#'      \item{seed}{Seed for the random number generator to be used for
+#'    \describe{
+#'     \item{\code{id.configuration}}{An alphanumeric string that uniquely identifies a configuration;}
+#'     \item{\code{id.instance}}{An alphanumeric string that uniquely identifies an instance;}
+#'      \item{\code{seed}}{Seed for the random number generator to be used for
 #'        this evaluation, ignore the seed for deterministic algorithms;}
-#'      \item{instance}{String giving the instance to be used for this evaluation;}
-#'      \item{bound}{(only when \code{capping} is enabled) Time bound for the execution;}
-#'      \item{configuration}{1-row data frame with a column per parameter
+#'      \item{\code{instance}}{String giving the instance to be used for this evaluation;}
+#'      \item{\code{bound}}{(only when \code{capping} is enabled) Time bound for the execution;}
+#'      \item{\code{configuration}}{1-row data frame with a column per parameter
 #'        name;}
-#'      \item{switches}{Vector of parameter switches (labels) in the order
+#'      \item{\code{switches}}{Vector of parameter switches (labels) in the order
 #'        of parameters used in \code{configuration}.}
 #'    }
 #' @param num.configurations Number of  configurations alive in the race.
@@ -182,11 +183,11 @@ exec.target.evaluator <- function (experiment, num.configurations, all.conf.id,
 #'    
 #'  The return list may also contain the following optional elements that are used
 #'  by \pkg{irace} for reporting errors in \code{targetEvaluator}:
-#'  \itemize{
-#'    \item{error}{is a string used to report an error;}
-#'    \item{outputRaw}{is a string used to report the raw output of calls to
+#'  \describe{
+#'    \item{\code{error}}{is a string used to report an error;}
+#'    \item{\code{outputRaw}}{is a string used to report the raw output of calls to
 #'      an external program or function;}
-#'    \item{call}{is a string used to report how \code{targetRunner} called 
+#'    \item{\code{call}}{is a string used to report how \code{targetRunner} called 
 #'      an external program or function.}
 #'  }
 #'
@@ -201,7 +202,6 @@ target.evaluator.default <- function(experiment, num.configurations, all.conf.id
   seed             <- experiment$seed
   instance         <- experiment$instance
 
-  execDir <- scenario$execDir
   debugLevel <- scenario$debugLevel
   targetEvaluator <- scenario$targetEvaluator
   if (as.logical(file.access(targetEvaluator, mode = 1))) {
@@ -209,7 +209,7 @@ target.evaluator.default <- function(experiment, num.configurations, all.conf.id
                  "cannot be found or is not executable!\n")
   }
 
-  cwd <- setwd (execDir)
+  cwd <- setwd (scenario$execDir)
   # FIXME: I think we don't even need to paste the args, since system2 handles this by itself.
   args <- paste(configuration.id, instance.id, seed, instance, num.configurations, all.conf.id)
   output <- runcommand(targetEvaluator, args, configuration.id, debugLevel)
@@ -247,13 +247,13 @@ check.output.target.runner <- function (output, scenario)
   err.msg <- output$error
   if (is.null(err.msg)) {
     if (!is.null (output$cost)) {
-      if (is.na.nowarn(output$cost)) {
+      if (is.na.or.empty(output$cost)) {
         err.msg <- "The cost returned by targetRunner is not numeric!"
       }
     }
 
     if (!is.null (output$time)) {
-      if (is.na.nowarn(output$time)) {
+      if (is.na.or.empty(output$time)) {
         err.msg <- paste0("The time returned by targetRunner is not numeric!")
       } else if (is.infinite(output$time)) {
         err.msg <- paste0("The time returned by targetRunner is not finite!")
@@ -316,6 +316,78 @@ exec.target.runner <- function(experiment, scenario, target.runner)
   return (output)
 }
 
+parse.aclib.output <- function(outputRaw)
+{
+  outputRaw <- paste0(outputRaw, collapse = "\n")
+  text <- regmatches(outputRaw,
+                     regexec("Result of this algorithm run:\\s*\\{(.+)\\}\\s*\n",
+                             outputRaw))[[1]][2]
+  aclib.match <- function(text, key, value) {
+    pattern <- paste0('"', key, '":\\s*', value)
+    return(regmatches(text, regexec(pattern, text))[[1]][2])
+  }
+  cost <- runtime <- error <- NULL
+  # AClib wrappers print:
+  # Result of this algorithm run:  {"status": "SUCCESS", "cost": cost, "runtime": time }
+  # FIXME: This is not very robust. If we are going to be using jsonlite, then we can simply do:
+  # jsonlite::fromJSON('{\"misc\": \"\", \"runtime\": 164.14, \"status\": \"SUCCESS\", \"cost\": \"0.121340\"}')
+  status <- aclib.match(text, "status", '"([^"]+)"')
+  if (!is.character(status)) {
+    error <- paste0("Not valid AClib output")
+  } else if (status %in% c("SUCCESS", "TIMEOUT")) {
+    cost <- aclib.match(text, "cost", "([^[:space:],}]+)")
+    cost <- suppressWarnings(as.numeric(cost))
+    runtime <- aclib.match(text, "runtime", "([^[:space:],}]+)")
+    runtime <- suppressWarnings(as.numeric(runtime))
+    if (is.null.or.na(cost) && is.null.or.na(runtime))
+      error <- paste0("Not valid cost or runtime in AClib output")
+  } else if (status %in% c("CRASHED", "ABORT")) {
+    # FIXME: Implement ABORT semantics of fatal error
+    error <- paste0("targetRunner returned status (", status, ")")
+  } else {
+    error <- paste0("Not valid AClib output status (", status, ")")
+  }
+  return(list(status = status, cost = cost, time = runtime, error = error))
+}
+
+target.runner.aclib <- function(experiment, scenario)
+{
+  configuration.id <- experiment$id.configuration
+  instance.id      <- experiment$id.instance
+  seed             <- experiment$seed
+  configuration    <- experiment$configuration
+  instance         <- experiment$instance
+  switches         <- experiment$switches
+  bound            <- experiment$bound
+  
+  debugLevel   <- scenario$debugLevel
+  targetRunner <- scenario$targetRunner
+  if (as.logical(file.access(targetRunner, mode = 1))) {
+    irace.error ("targetRunner ", shQuote(targetRunner), " cannot be found or is not executable!\n")
+  }
+
+  has_value <- !is.na(configuration)
+  # <executable> [<arg>] [<arg>] ... [--cutoff <cutoff time>] [--instance <instance name>] 
+  # [--seed <seed>] --config [-param_name_1 value_1] [-param_name_2 value_2] ...
+  args <- paste("--instance", instance, "--seed", seed, "--config",
+                paste0("-", switches[has_value], " ", configuration[has_value],
+                       collapse = " "))
+  if (!is.null.or.na(bound))
+    args <- paste("--cutoff", bound, args)
+  
+  output <- runcommand(targetRunner, args, configuration.id, debugLevel)
+
+  err.msg <- output$error
+  if (is.null(err.msg)) {
+    return(c(parse.aclib.output (output$output),
+             list(outputRaw = output$output, call = paste(targetRunner, args))))
+  }
+  
+  return(list(cost = NULL, time = NULL, error = err.msg,
+              outputRaw = output$output, call = paste(targetRunner, args)))
+}
+
+
 #' target.runner.default
 #'
 #' \code{target.runner.default} is the default targetRunner function. 
@@ -323,16 +395,16 @@ exec.target.runner <- function(experiment, scenario, target.runner)
 #' function.
 #' 
 #' @param experiment A list describing the experiment. It contains at least:
-#'    \itemize{
-#'     \item{id.configuration}{An alphanumeric string that uniquely identifies a configuration;}
-#'     \item{id.instance}{An alphanumeric string that uniquely identifies an instance;}
-#'      \item{seed}{Seed for the random number generator to be used for
+#'    \describe{
+#'     \item{\code{id.configuration}}{An alphanumeric string that uniquely identifies a configuration;}
+#'     \item{\code{id.instance}}{An alphanumeric string that uniquely identifies an instance;}
+#'      \item{\code{seed}}{Seed for the random number generator to be used for
 #'        this evaluation, ignore the seed for deterministic algorithms;}
-#'      \item{instance}{String giving the instance to be used for this evaluation;}
-#'      \item{bound}{(only when \code{capping} is enabled) Time bound for the execution;}
-#'      \item{configuration}{1-row data frame with a column per parameter
+#'      \item{\code{instance}}{String giving the instance to be used for this evaluation;}
+#'      \item{\code{bound}}{(only when \code{capping} is enabled) Time bound for the execution;}
+#'      \item{\code{configuration}}{1-row data frame with a column per parameter
 #'        name;}
-#'      \item{switches}{Vector of parameter switches (labels) in the order
+#'      \item{\code{switches}}{Vector of parameter switches (labels) in the order
 #'        of parameters used in \code{configuration}.}
 #'    }
 #' @param scenario Options passed when invoking \pkg{irace}.
@@ -347,11 +419,11 @@ exec.target.runner <- function(experiment, scenario, target.runner)
 #'  execution time for this call to \code{targetRunner}.
 #'  The return list may also contain the following optional elements that are used
 #'  by \pkg{irace} for reporting errors in \code{targetRunner}:
-#'  \itemize{
-#'    \item{error}{is a string used to report an error;}
-#'    \item{outputRaw}{is a string used to report the raw output of calls to
+#'  \describe{
+#'    \item{\code{error}}{is a string used to report an error;}
+#'    \item{\code{outputRaw}}{is a string used to report the raw output of calls to
 #'      an external program or function;}
-#'    \item{call}{is a string used to report how \code{targetRunner} called 
+#'    \item{\code{call}}{is a string used to report how \code{targetRunner} called 
 #'      an external program or function.}
 #'  }
 #'
@@ -360,7 +432,6 @@ exec.target.runner <- function(experiment, scenario, target.runner)
 #' @export
 target.runner.default <- function(experiment, scenario)
 {
-  debugLevel       <- scenario$debugLevel
   configuration.id <- experiment$id.configuration
   instance.id      <- experiment$id.instance
   seed             <- experiment$seed
@@ -369,6 +440,7 @@ target.runner.default <- function(experiment, scenario)
   switches         <- experiment$switches
   bound            <- experiment$bound
   
+  debugLevel   <- scenario$debugLevel
   targetRunner <- scenario$targetRunner
   if (as.logical(file.access(targetRunner, mode = 1))) {
     irace.error ("targetRunner ", shQuote(targetRunner), " cannot be found or is not executable!\n")
