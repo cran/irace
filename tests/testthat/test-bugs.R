@@ -45,3 +45,4 @@ test_that("target.runner as string (global)", {
   expect_equal(scenario$targetRunner, target.runner.global)
   expect_is(scenario$targetRunner, "function")
 })
+

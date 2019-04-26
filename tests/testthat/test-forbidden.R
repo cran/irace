@@ -21,3 +21,4 @@ NA        NA   "x3"   4.5   "low"
   test.checkForbidden("parameters.txt")
   test.checkForbidden("logparameters.txt")
 })
+
