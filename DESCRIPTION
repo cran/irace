@@ -5,28 +5,32 @@ Description: Iterated race is an extension of the Iterated F-race method for
              the automatic configuration of optimization algorithms, that is,
              (offline) tuning their parameters by finding the most appropriate
              settings given a set of instances of an optimization problem.
-Version: 3.3
+Version: 3.4
 Authors@R: c(person("Manuel", "López-Ibáñez", role = c("aut", "cre"),
                               email = "manuel.lopez-ibanez@manchester.ac.uk",
                               comment = c(ORCID = "0000-0001-9974-1295")),
              person("Jérémie", "Dubois-Lacoste", role = "aut"),
-             person("Leslie", "Pérez Cáceres", role = c("aut")),
+             person("Leslie", "Pérez Cáceres", role = "aut"),
              person("Thomas", "Stützle", role = "aut"),
              person("Mauro", "Birattari", role = "aut"),
              person("Eric", "Yuan", role = "ctb"),
-             person("Prasanna", "Balaprakash", role = "ctb"))
+             person("Prasanna", "Balaprakash", role = "ctb"),
+             person("Nguyen", "Dang", role = "ctb", email = "nttd@st-andrews.ac.uk"))
 Depends: R (>= 3.2.0)
-Imports: stats, utils, compiler
-Suggests: Rmpi (>= 0.6.0), parallel, knitr, testthat, withr, mlr
+Imports: stats, utils, compiler, R6
+Suggests: Rmpi (>= 0.6.0), parallel, knitr, testthat, withr, mlr (>=
+        2.15.0), ParamHelpers, devtools, rhub
 VignetteBuilder: knitr
 License: GPL (>= 2)
-URL: http://iridia.ulb.ac.be/irace
+URL: http://iridia.ulb.ac.be/irace,
+        https://github.com/MLopez-Ibanez/irace
+BugReports: https://github.com/MLopez-Ibanez/irace/issues
 ByteCompile: yes
 LazyData: yes
 Encoding: UTF-8
 RoxygenNote: 6.1.1
-NeedsCompilation: no
-Packaged: 2019-04-26 17:10:34 UTC; manu
+NeedsCompilation: yes
+Packaged: 2020-03-30 11:22:35 UTC; manu
 Author: Manuel López-Ibáñez [aut, cre]
     (<https://orcid.org/0000-0001-9974-1295>),
   Jérémie Dubois-Lacoste [aut],
@@ -34,7 +38,8 @@ Author: Manuel López-Ibáñez [aut, cre]
   Thomas Stützle [aut],
   Mauro Birattari [aut],
   Eric Yuan [ctb],
-  Prasanna Balaprakash [ctb]
+  Prasanna Balaprakash [ctb],
+  Nguyen Dang [ctb]
 Maintainer: Manuel López-Ibáñez <manuel.lopez-ibanez@manchester.ac.uk>
 Repository: CRAN
-Date/Publication: 2019-04-26 22:50:49 UTC
+Date/Publication: 2020-03-30 12:30:02 UTC

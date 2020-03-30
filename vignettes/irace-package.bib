@@ -6,6 +6,8 @@
 
 @string{lncs = {Lecture Notes in Computer Science}}
 
+@string{aaaip-pub = {{AAAI} Press}}
+
 @string{ieeep = {IEEE Press}}
 
 @string{ieeep-ad = {Piscataway, NJ}}
@@ -14,9 +16,9 @@
 
 @string{springer-berlin-ad = {Berlin, Germany}}
 
-@string{springer-cham-ad = {Cham, Switzerland}}
-
 @string{springer-lncs = {Springer, Heidelberg, Germany}}
+
+@string{add-cham = {Cham, Switzerland}}
 
 @string{iridia = {IRIDIA, Universit{\'e} Libre de Bruxelles, Belgium}}
 
@@ -63,6 +65,8 @@
 
 @string{paquete = { Lu{\'i}s Paquete }}
 
+@string{pardalos = { Panos M. Pardalos }}
+
 @string{perez_l = { Leslie {P{\'e}rez C{\'a}ceres} }}
 
 @string{preuss_m = { Mike Preuss }}
@@ -74,6 +78,15 @@
 @string{stuetzle = { Thomas St{\"u}tzle }}
 
 @string{yuan_z = { Zhi Yuan }}
+
+@inproceedings{BieLinEggFraFawHoo2017,
+  author = {Biedenkapp, Andr{\'e} and Lindauer, Marius and Eggensperger,
+                  Katharina} # and # hutter # and # fawcett # and # hoos,
+  title = {Efficient Parameter Importance Analysis via Ablation with
+                  Surrogates},
+  crossref = {AAAI2017},
+  url = {https://aaai.org/ocs/index.php/AAAI/AAAI17/paper/view/14750}
+}
 
 @incollection{BirYuaBal2010:emaoa,
   author = birattari # and # yuan_z # and # balaprakash # and # stuetzle,
@@ -118,6 +131,26 @@
                   exponent even further.}
 }
 
+@incollection{HutHooLey2013lion,
+  author = hutter # and # hoos # and # leyton-brown,
+  title = {Identifying key algorithm parameters and instance features
+                  using forward selection},
+  crossref = {LION2013},
+  pages = {364--381},
+  doi = {10.1007/978-3-642-44973-4_40},
+  keywords = {parameter importance}
+}
+
+@inproceedings{HutHooLey2014icml,
+  author = hutter # and # hoos # and # leyton-brown,
+  title = {An Efficient Approach for Assessing Hyperparameter
+                  Importance},
+  crossref = {ICML2014},
+  pages = {754--762},
+  url = {http://jmlr.org/proceedings/papers/v32/hutter14.html},
+  keywords = {fANOVA, parameter importance}
+}
+
 @article{HutHooLeyStu2009jair,
   author = hutter # and # hoos # and # leyton-brown # and # stuetzle,
   title = {{ParamILS:} An Automatic Algorithm Configuration
@@ -156,7 +189,8 @@
   institution = iridia,
   year = 2011,
   number = {TR/IRIDIA/2011-004},
-  url = {http://iridia.ulb.ac.be/IridiaTrSeries/IridiaTr2011-004.pdf}
+  url = {http://iridia.ulb.ac.be/IridiaTrSeries/IridiaTr2011-004.pdf},
+  note = {Published in } # orp # {~\cite{LopDubPerStuBir2016irace}}
 }
 
 @article{McG1992vrt,
@@ -222,6 +256,17 @@
   doi = {10.1007/978-3-642-34413-8_14}
 }
 
+@book{AAAI2017,
+  booktitle = {AAAI Conference on Artificial Intelligence},
+  editor = {Satinder P. Singh and Shaul Markovitch},
+  title = {Proceedings of the Thirty-First {AAAI} Conference on
+                  Artificial Intelligence, February 4-9, 2017, San Francisco,
+                  California, {USA}},
+  year = 2017,
+  month = feb,
+  publisher = aaaip-pub
+}
+
 @book{BarChiPaqPre2010emaoa,
   title = {Experimental Methods for the Analysis of
                   Optimization Algorithms},
@@ -233,7 +278,8 @@
   editor = bartz-beielstein # and # chiarandini # and # paquete # and # preuss_m
 }
 
-@book{CEC2006,
+@proceedings{CEC2006,
+  key = {IEEE CEC},
   title = {Proceedings of the 2006 Congress on Evolutionary
                   Computation (CEC 2006)},
   booktitle = cec06,
@@ -241,6 +287,17 @@
   month = jul,
   publisher = ieeep,
   address = ieeep-ad
+}
+
+@proceedings{ICML2014,
+  editor = {Xing, Eric P. and Jebara, Tony},
+  title = {Proceedings of the 31th International Conference on Machine
+                  Learning, {ICML} 2014, Beijing, China, 21-26 June 2014},
+  booktitle = {Proceedings of the 31th International Conference on Machine
+                  Learning},
+  volume = 32,
+  year = 2014,
+  url = {http://jmlr.org/proceedings/papers/v32/}
 }
 
 @book{LION2012,
@@ -255,6 +312,18 @@
   volume = 7219
 }
 
+@book{LION2013,
+  title = {7th International Conference, LION 7, Catania,
+                  Italy, January 7-11, 2013. Selected Papers},
+  booktitle = {Learning and Intelligent Optimization, 7th
+                  International Conference, LION 7},
+  year = 2013,
+  series = lncs,
+  editor = pardalos # and # {G. Nicosia},
+  volume = 7997,
+  publisher = springer-lncs
+}
+
 @book{LION2017,
   title = {11th International Conference, LION 11, Nizhny Novgorod,
                   Russia, June 19-21, 2017, Revised Selected Papers},
@@ -265,6 +334,6 @@
   volume = 10556,
   series = lncs,
   publisher = springer,
-  address = springer-cham-ad
+  address = add-cham
 }
 

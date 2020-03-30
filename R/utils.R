@@ -38,6 +38,13 @@ irace.print.memUsed <- function(objects)
   cat(sep="", sprintf("%30s : %17.1f Mb\n", "gc", sum(gc()[,2])))
 }
 
+# Print a user-level warning message, when the calling context
+# cannot help the user to understand why the program failed.
+irace.warning <- function(...)
+{
+  cat(sep="", "WARNING: ", ..., "\n")
+}
+
 # Print a user-level fatal error message, when the calling context
 # cannot help the user to understand why the program failed.
 irace.error <- function(...)
@@ -221,6 +228,17 @@ bytecompile <- function(x)
   return(compiler::cmpfun(x))
 }
 
+# FIXME: Use stringr function and replace this function
+str_sub <- function(x, start=0, stop=nchar(x))
+{
+  negs <- start < 0
+  if (any(negs)) start[negs] <- nchar(x[negs]) + 1  - start[negs]
+
+  negs <- stop < 0
+  if (any(negs)) stop[negs] <- nchar(x[negs]) + 1  - stop[negs]
+  return(substr(x, start, stop))
+}
+
 strcat <- function(...)
 {
   do.call(paste0, args = list(..., collapse = NULL))
@@ -342,9 +360,7 @@ path.rel2abs <- function (path, cwd = getwd())
 #' This function should be used to change the filesystem paths stored in a
 #' scenario object. Useful when moving a scenario from one computer to another.
 #'
-#' @param scenario list containing \pkg{irace} settings. The data structure has
-#'   to be the one returned by the function \code{\link{defaultScenario}} and
-#'   \code{\link{readScenario}}.
+#' @template arg_scenario
 #' @param from character string containing a regular expression (or character
 #'   string for \code{fixed = TRUE}) to be matched.
 #' @param to the replacement string.character string. For \code{fixed = FALSE}
@@ -487,7 +503,7 @@ extractElites <- function(configurations, nbElites)
 #' the configurations, to output only the values for the parameters
 #' of the configuration without data possibly useless to the user.
 #'   
-#' @param configurations A matrix containg the configurations, one per row.
+#' @template arg_configurations
 #' 
 #' @return The same matrix without the "metadata".
 #'    
@@ -507,7 +523,7 @@ removeConfigurationsMetaData <- function(configurations)
 
 #' Print configurations as a data frame
 #' 
-#' @param configurations a data frame containing the configurations (one per row).
+#' @template arg_configurations
 #' @param metadata A Boolean specifying whether to print the metadata or
 #' not. The metadata are data for the configurations (additionally to the
 #' value of each parameter) used by \pkg{irace}.
@@ -533,9 +549,8 @@ configurations.print <- function(configurations, metadata = FALSE)
 #' Prints configurations after converting them into a representation for the
 #' command-line.
 #' 
-#' @param configurations a data frame containing the configurations (one per row).
-#' @param parameters A data structure similar to that provided by the 
-#' \code{\link{readParameters}} function.
+#' @template arg_configurations
+#' @template arg_parameters
 #' 
 #' @return None.
 #'
@@ -769,3 +784,13 @@ is.file.extension <- function(filename, ext)
 
 # Same as !(x %in% table)
 "%!in%" <- function (x, table) match(x, table, nomatch = 0L) == 0L
+
+irace_save_logfile <- function(iraceResults, scenario)
+{
+  if (is.null.or.empty(scenario$logFile)) return(invisible())
+  cwd <- setwd(scenario$execDir)
+  # FIXME: Use saveRDS
+  # FIXME: Bump to version=3 when we bump the minimum R version to >=3.6
+  save (iraceResults, file = scenario$logFile, version = 2)
+  setwd (cwd)
+}

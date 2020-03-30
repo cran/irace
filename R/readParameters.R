@@ -1,46 +1,41 @@
-#########################################################
-## READ DEFINITION OF PARAMETERS FROM A FILE
-#########################################################
-
 #' readParameters
 #'
-#' \code{readParameters} reads the parameters to be tuned by 
+#' `readParameters` reads the parameters to be tuned by 
 #' \pkg{irace} from a file or directly from a character string.
 #' 
-#' @param file (optional) Character string: the name of the file 
-#'  containing the definitions of theparameters to be tuned.
-#' @param digits The number of decimal places to be considered for the
-#'  real parameters.
-#' @param debugLevel Integer: the debug level to increase the amount of output.
-#' @param text (optional) Character string: if file is not supplied and this is,
-#'  then parameters are read from the value of text via a text connection.
+#' @param file (`character(1)`) \cr Filename containing the definitions of
+#'   the parameters to be tuned.
+#' @param digits The number of decimal places to be considered for the real
+#'   parameters.
+#' @template arg_debuglevel
+#' @template arg_text
 #' 
 #' @return A list containing the definitions of the parameters read. The list is
 #'  structured as follows:
 #'   \describe{
-#'     \item{\code{names}}{Vector that contains the names of the parameters.}
-#'     \item{\code{types}}{Vector that contains the type of each parameter 'i', 'c', 'r', 'o'.
+#'     \item{`names`}{Vector that contains the names of the parameters.}
+#'     \item{`types`}{Vector that contains the type of each parameter 'i', 'c', 'r', 'o'.
 #'       Numerical parameters can be sampled in a log-scale with 'i,log' and 'r,log'
 #'       (no spaces).}
-#'     \item{\code{switches}}{Vector that contains the switches to be used for the
+#'     \item{`switches`}{Vector that contains the switches to be used for the
 #'       parameters on the command line.}
-#'     \item{\code{domain}}{List of vectors, where each vector may contain two
+#'     \item{`domain`}{List of vectors, where each vector may contain two
 #'       values (minimum, maximum) for real and integer parameters, or
 #'       possibly more for categorical parameters.}
-#'     \item{\code{conditions}}{List of R logical expressions, with variables
+#'     \item{`conditions`}{List of R logical expressions, with variables
 #'       corresponding to parameter names.}
-#'     \item{\code{isFixed}}{Logical vectors that specifies which parameter is fixed
+#'     \item{`isFixed`}{Logical vector that specifies which parameter is fixed
 #'       and, thus, it does not need to be tuned.}
-#'     \item{\code{nbParameters}}{An integer, the total number of parameters.}
-#'     \item{\code{nbFixed}}{An integer, the number of parameters with a fixed value.}
-#'     \item{\code{nbVariable}}{Number of variable (to be tuned) parameters.}
+#'     \item{`nbParameters`}{An integer, the total number of parameters.}
+#'     \item{`nbFixed`}{An integer, the number of parameters with a fixed value.}
+#'     \item{`nbVariable`}{Number of variable (to be tuned) parameters.}
 #'   }
 #'
-#' @details Either 'file' or 'text' must be given. If 'file' is given, the
-#'  parameters are read from the file 'file'. If 'text' is given instead,
-#'  the parameters are read directly from the 'text' character string.
-#'  In both cases, the parameters must be given (in 'text' or in the file
-#'  whose name is 'file') in the expected form.  See the documentation
+#' @details Either `file` or `text` must be given. If `file` is given, the
+#'  parameters are read from the file `file`. If `text` is given instead,
+#'  the parameters are read directly from the `text` character string.
+#'  In both cases, the parameters must be given (in `text` or in the file
+#'  whose name is `file`) in the expected form.  See the documentation
 #'  for details.  If none of these parameters is given, \pkg{irace}
 #'  will stop with an error.
 #'
@@ -49,22 +44,33 @@
 #'  function we set isFixed to TRUE only if the parameter is a categorical
 #'  and has only one possible value.  If it is an integer and the minimum
 #'  and maximum are equal, or it is a real and the minimum and maximum
-#'  values satisfy 'round(minimum, digits) == round(maximum, digits)',
+#'  values satisfy `round(minimum, digits) == round(maximum, digits)`,
 #'  then the parameter description is rejected as invalid to identify
 #'  potential user errors.
 #'
 #' @examples
 #'  ## Read the parameters directly from text
-#'  parameters.table <- 'tmax "" i (2, 10)
-#'  temp "" r (10, 50)
+#'  parameters.table <- '
+#'  # name       switch           type values               [conditions (using R syntax)]
+#'  algorithm    "--"             c    (as,mmas,eas,ras,acs)
+#'  localsearch  "--localsearch " c    (0, 1, 2, 3)
+#'  alpha        "--alpha "       r    (0.00, 5.00)
+#'  beta         "--beta "        r    (0.00, 10.00)
+#'  rho          "--rho  "        r    (0.01, 1.00)
+#'  ants         "--ants "        i            (5, 100)
+#'  q0           "--q0 "          r    (0.0, 1.0)           | algorithm == "acs"
+#'  rasrank      "--rasranks "    i    (1, 100)             | algorithm == "ras"
+#'  elitistants  "--elitistants " i    (1, 750)             | algorithm == "eas"
+#'  nnls         "--nnls "        i    (5, 50)              | localsearch %in% c(1,2,3)
+#'  dlb          "--dlb "         c    (0, 1)               | localsearch %in% c(1,2,3)
 #'  '
 #'  parameters <- readParameters(text=parameters.table)
-#'  parameters
+#'  str(parameters)
 #' 
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
+#' @md
 #' @export
-# Main function to read the parameters definition from a file
-readParameters <- function (file, digits = 4, debugLevel = 0, text)
+readParameters <- function(file, digits = 4, debugLevel = 0, text)
 {
   if (missing(file) && !missing(text)) {
     filename <- strcat("text=", deparse(substitute(text)))
@@ -81,13 +87,13 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
   {
     #cat ("pattern:", pattern, "\n")
     positions <- lapply(1:length(pattern), function(x) regexpr (paste0("^", pattern[x], sep), line))
-    if (all(sapply(positions, `[[`, 1) == -1)) {
+    if (all(sapply(positions, "[[", 1) == -1)) {
       #cat("no match: NULL\n")
       return (list(match = NULL, line = line))
     }
     pos.matched.list <- lapply(1:length(pattern), function(x) regexpr (paste0("^", pattern[x]), line))
     #cat("pos.matched:", pos.matched, "\n")
-    if (all(sapply(pos.matched.list, `[[`, 1) == -1)) {
+    if (all(sapply(pos.matched.list, "[[", 1) == -1)) {
       #cat(line)
       return (list(match = NULL, line = line))
     }
@@ -142,51 +148,41 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
   # Subordinate parameter: ordering of the parameters according to
   # conditions hierarchy
   # *  The conditions hierarchy is an acyclic directed graph.
-  #    Functions treeLevel() and treeLevelAux() compute an order on vertex s.t:
+  #    Function treeLevel() computes an order on vertex s.t:
   #    level(A) > level(B)  <=>  There is an arc A ---> B
   #    (A depends on B to be activated)
   # *  If a cycle is detected, execution is stopped
   # *  If a parameter depends on another one not defined, execution is stopped
-  treeLevelAux <- function(paramName, conditionsTree, rootParam)
-  {
-    ## FIXME: In R 3.2, all.vars does not work with byte-compiled expressions,
-    ## thus we do not byte-compile them; but we could use
-    ## all.vars(.Internal(disassemble(condition))[[3]][[1]])
-    vars <- all.vars (conditionsTree[[paramName]])
-    if (length(vars) == 0) {
-      return (1) # This parameter does not have conditions
-    } else {
-      # This parameter has some conditions
-      # Recursive call: level <- MAX( level(m) : m in children )
-      maxChildLevel <- 0
-      for (child in vars) {
-        # The following line detects cycles
-        if (child == rootParam)
-          irace.error("A cycle detected in subordinate parameters! ",
-                      "Check definition of conditions.\n",
-                      "One parameter of this cycle is '", rootParam, "'")
-        
-        # The following line detects a missing definition
-        if (child %!in% names(conditionsTree))
-          irace.error("A parameter definition is missing! ",
-                      "Check definition of parameters.\n",
-                      "Parameter '", paramName,
-                      "' depends on '", child, "' which is not defined.")
-        
-        level <- treeLevelAux(child, conditionsTree, rootParam)
-        if (level > maxChildLevel)
-          maxChildLevel <- level
-      }
-      level <- maxChildLevel + 1
-    }
-    return (level)
-  }
-
-  treeLevel <- function(paramName, conditionsTree)
+  treeLevel <- function(paramName, varsTree, rootParam = paramName)
   {
     # The last parameter is used to record the root parameter of the
     # recursive call in order to detect the presence of cycles.
-    return (treeLevelAux(paramName, conditionsTree, paramName))
+    vars <- varsTree[[paramName]]
+    if (length(vars) == 0) return (1) # This parameter does not have conditions
+
+    # This parameter has some conditions
+    # Recursive call: level <- MAX( level(m) : m in children )
+    maxChildLevel <- 0
+    for (child in vars) {
+      # The following line detects cycles
+      if (child == rootParam)
+        irace.error("A cycle detected in subordinate parameters! ",
+                    "Check definition of conditions.\n",
+                    "One parameter of this cycle is '", rootParam, "'")
+      
+      # The following line detects a missing definition
+      if (child %!in% names(varsTree))
+        irace.error("A parameter definition is missing! ",
+                    "Check definition of parameters.\n",
+                    "Parameter '", paramName,
+                    "' depends on '", child, "' which is not defined.")
+        
+      level <- treeLevel(child, varsTree, rootParam)
+      if (level > maxChildLevel)
+        maxChildLevel <- level
+    }
+    level <- maxChildLevel + 1
+    return (level)
   }
 
   errReadParameters <- function(filename, line, context, ...)
@@ -198,13 +194,17 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
                  " at ", filename, ", line ", line, context)
   }
 
-  transform.domain <- function(transf, lower, upper, type)
+  transform.domain <- function(transf, domain, type)
   {
     if (transf == "") return(transf)
+
+    lower <- domain[1]
+    upper <- domain[2]
+
     if (transf == "log") {
       # Reject log if domain contains zero or negative values
-      if (any(c(lower,upper) <= 0)) return(NULL)
-      
+      if (any(domain <= 0)) return(NULL)
+
       trLower <- log(lower)
       # +1 to adjust before floor()
       trUpper <- if (type == "i") log(upper + 1) else log(upper)
@@ -218,12 +218,12 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
     irace.internal.error("unrecognized transformation type '", transf, "'")
   }
     
-  parameters <- list(names = c(),
-                     types = c(),
-                     switches = c(),
+  parameters <- list(names = character(0),
+                     types = character(0),
+                     switches = character(0),
                      domain = list(),
                      conditions = list(),
-                     isFixed = c(),
+                     isFixed = logical(0),
                      transform = list())
 
   conditions <- list()
@@ -313,15 +313,14 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
                            result$match, ") for parameter '", param.name, "'")
       }
 
-      param.transform <- transform.domain(param.transform,
-                                          param.value[1], param.value[2], param.type)
+      param.transform <- transform.domain(param.transform, param.value, param.type)
       if (is.null(param.transform)) {
         errReadParameters (filename, nbLines, NULL, "The domain of parameter '",
                            param.name, "' of type 'log' cannot contain zero")
       }
     } else {
-      dups <- duplicated(param.value)
-      if (any(dups)) {
+      if (anyDuplicated(param.value)) {
+        dups <- duplicated(param.value)
         errReadParameters (filename, nbLines, NULL,
                            "duplicated values (",
                            paste0('\"', param.value[dups], "\"", collapse = ', '),
@@ -330,15 +329,14 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
     }
 
     count <- count + 1
-    parameters$names[[count]] <- param.name
-    parameters$switches[[count]] <- param.switch
-    parameters$types[[count]] <- param.type
+    parameters$names[count] <- param.name
+    parameters$switches[count] <- param.switch
+    parameters$types[count] <- param.type
     parameters$domain[[count]] <- param.value
     parameters$transform[[count]] <- param.transform
 
-    parameters$isFixed[[count]] <-
-      isFixed (type = param.type,
-               domain = parameters$domain[[count]])
+    parameters$isFixed[count] <- isFixed(type = param.type,
+                                         domain = parameters$domain[[count]])
     # Reject non-categorical fixed parameters. They are often the
     # result of a user error.
     if (parameters$isFixed[[count]]) {
@@ -366,7 +364,8 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
                            "expected condition after '|'")
       # FIXME: Provide a better error for invalid conditions like "a 2 0"
       conditions[[param.name]] <- NA
-      try(conditions[[param.name]] <- parse(text=result$match))
+      # keep.source = FALSE avoids adding useless attributes.
+      try(conditions[[param.name]] <- parse(text=result$match, keep.source = FALSE))
       if (!is.expression (conditions[[param.name]]))
         errReadParameters (filename, nbLines, line,
                            "invalid condition after '|'")
@@ -385,17 +384,19 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
     irace.error("No parameter definition found: ",
                 "check that the parameter file is not empty")
   }
+
+  # Obtain the variables in each condition
+  ## FIXME: In R 3.2, all.vars does not work with byte-compiled expressions,
+  ## thus we do not byte-compile them; but we could use
+  ## all.vars(.Internal(disassemble(condition))[[3]][[1]])
+  parameters$depends <- lapply(conditions, all.vars)
   # Sort parameters in 'conditions' in the proper order according to
   # conditions
-  hierarchyLevel <- c()
-  for (paramName in parameters$names)
-    hierarchyLevel <- c(hierarchyLevel, treeLevel(paramName, conditions))
-
-  # FIXME: Check that the parameter names that appear in the
-  # conditions all appear in names to catch typos.
-  parameters$conditions <- conditions[order(hierarchyLevel)]
+  hierarchyLevel <- sapply(parameters$names, treeLevel,
+                           varsTree = parameters$depends)
   parameters$hierarchy <- hierarchyLevel
-
+  parameters$conditions <- conditions[order(hierarchyLevel)]
+  
   names(parameters$types) <- 
     names(parameters$switches) <- 
       names(parameters$domain) <- 
@@ -405,18 +406,163 @@ readParameters <- function (file, digits = 4, debugLevel = 0, text)
 
   # Print the hierarchy vector:
   if (debugLevel >= 1) {
-    cat ("# --- Hierarchy vector ---\n",
-         "# Param : Level\n",
-         paste(names(parameters$hierarchy), ":",
-               parameters$hierarchy, collapse = "\n"),
-         "\n# ------------------------\n", sep = "")
+    cat ("# --- Parameters Hierarchy ---\n")
+    print(paste0(names(parameters$hierarchy)))
+    print(parameters$hierarchy)
+    print(sapply(parameters$depends, paste0, collapse=", "))
+    print(data.frame(Parameter = paste0(names(parameters$hierarchy)),
+                     Level = parameters$hierarchy,
+                     "Depends on" = sapply(parameters$depends, paste0, collapse=", "),
+                     row.names=NULL))
+    cat("\n# ------------------------\n")
   }
 
-  irace.assert(length(conditions) == length(parameters$names))
+  irace.assert(length(parameters$conditions) == length(parameters$names))
 
   parameters$nbParameters <- length(parameters$names)
   parameters$nbFixed <- sum(parameters$isFixed == TRUE)
   parameters$nbVariable <- sum(parameters$isFixed == FALSE)
   if (debugLevel >= 2) print(parameters, digits = 15)
   return (parameters)
+}
+
+#' read_pcs_file
+#'
+#' Read parameters in PCS (AClib) format and write them in irace format.
+#' 
+#' @param file (`character(1)`) \cr Filename containing the definitions of
+#'   the parameters to be tuned.
+#' @param digits The number of decimal places to be considered for the real
+#'   parameters.
+#' @template arg_debuglevel
+#' @template arg_text
+#' 
+#' @return A string representing the parameters in irace format.
+#'
+#' @details Either `file` or `text` must be given. If `file` is given, the
+#'  parameters are read from the file `file`. If `text` is given instead,
+#'  the parameters are read directly from the `text` character string.
+#'  In both cases, the parameters must be given (in `text` or in the file
+#'  whose name is `file`) in the expected form.  See the documentation
+#'  for details.  If none of these parameters is given, \pkg{irace}
+#'  will stop with an error.
+#'
+#' @examples
+#'  ## Read the parameters directly from text
+#'  pcs.table <- '
+#'  # name       values               [conditions (using R syntax)]
+#'  algorithm    {as,mmas,eas,ras,acs}[as]
+#'  localsearch  {0, 1, 2, 3}[0]
+#'  alpha        [0.00, 5.00][1]
+#'  beta         [0.00, 10.00][1]
+#'  rho          [0.01, 1.00][0.95]
+#'  ants         [5, 100][10]i
+#'  q0           [0.0, 1.0][0]
+#'  rasrank      [1, 100][1]i
+#'  elitistants  [1, 750][1]i
+#'  nnls         [5, 50][5]i
+#'  dlb          {0, 1}[1] 
+#'  Conditionals:
+#'  q0 | algorithm in {acs}
+#'  rasrank | algorithm in {ras}
+#'  elitistants | algorithm in {eas}
+#'  nnls | localsearch in {1,2,3}
+#'  dlb | localsearch in {1,2,3}
+#'  '
+#'  parameters.table <- read_pcs_file(text=pcs.table)
+#'  parameters <- readParameters(text=parameters.table)
+#'  str(parameters)
+#' 
+#' @author Manuel López-Ibáñez
+#' @md
+#' @export
+read_pcs_file <- function(file, digits = 4, debugLevel = 0, text)
+{
+  if (missing(file) && !missing(text)) {
+    filename <- strcat("text=", deparse(substitute(text)))
+    file <- textConnection(text)
+    on.exit(close(file))
+  } else if (is.character(file)) {
+    filename <- file
+    file.check (file, readable = TRUE, text = "read_pcs_file: parameter file")
+  } else {
+    irace.error("'file' must be a character string")
+  }
+  lines <- readLines(con = file)
+  handle_conditionals <- FALSE
+  conditions <- list()
+  for (k in seq_along(lines)) {
+    if (grepl("Conditionals:", lines[k])) {
+      handle_conditionals <- TRUE
+      lines[k] <- ""
+    } else if (handle_conditionals) {
+      matches <- regmatches(lines[k],
+                            regexec("^[[:space:]]*([^[:space:]]+)[[:space:]]+\\|[[:space:]]+(.+)$",
+                                    lines[k], perl=TRUE))[[1]]
+      if (length(matches) > 0) {
+        lines[k] <- ""
+        conditions[[matches[2]]] <- matches[3]
+      }
+    }
+  }
+  
+  parse_pcs_condition <- function(x, types) {
+    if (is.null(x)) return ("")
+    matches <- regmatches(x, regexec("([^[:space:]]+)[[:space:]]+in[[:space:]]+\\{([^}]+)\\}[[:space:]]*$", x, perl=TRUE))[[1]]
+    if (length(matches) == 0) irace.error("unknown condition ", x)
+    type <- types[[matches[2]]]
+    if (is.null(type)) irace.error("unknown type for ", matches[2], " in condition: ", x)
+    cond <- matches[3]
+    if (type %in% c("c", "o"))
+      cond <- paste0('"', strsplit(cond, ",[[:space:]]*")[[1]], '"', collapse=',')
+    # FIXME: Use "==" if there is only one element in cond.
+    return(paste0(" | ", matches[2], " %in% c(", cond, ")"))
+  }
+  param_types <- list()
+  param_domains <- list()
+  param_comments <- list()
+  for (line in lines) {
+    if (grepl("^[[:space:]]*#", line) || grepl("^[[:space:]]*$", line)) next
+    # match a parameter
+    matches <- regmatches(line, regexec("^[[:space:]]*([^[:space:]]+)[[:space:]]+\\[([^,]+),[[:space:]]*([^]]+)\\][[:space:]]*\\[[^]]+\\](i?l?i?)(.*)$", line, perl=TRUE))[[1]]
+    if (length(matches) > 0) {
+      param_name <- matches[2]
+      
+      param_type <- paste0(if(grepl("i", matches[5], fixed=TRUE)) "i" else "r",
+                           if(grepl("l", matches[5], fixed=TRUE)) ",log" else "")
+      param_types[[param_name]] <- param_type
+      param_domains[[param_name]] <- paste0("(", matches[3], ", ", matches[4], ")")
+      param_comments[[param_name]] <- matches[6]
+      next
+    }
+    matches <- regmatches(line, regexec("^[[:space:]]*([^[:space:]]+)[[:space:]]+\\{([^}]+)\\}[[:space:]]*\\[[^]]+\\](.*)$", line, perl=TRUE))[[1]]
+    if (length(matches) > 0) {
+      param_name <- matches[2]
+      param_type <- "c"
+      param_types[[param_name]] <- param_type
+      param_types[[param_name]] <- param_type
+      param_domains[[param_name]] <- paste0("(", matches[3], ")")
+      param_comments[[param_name]] <- matches[4]
+      next
+    }
+  }
+  output <- ""
+  for (line in lines) {
+    if (grepl("^[[:space:]]*#", line) || grepl("^[[:space:]]*$", line)) {
+      output <- paste0(output, line, "\n")
+      next
+    }
+    # match a parameter
+    matches <- regmatches(line, regexec("^[[:space:]]*([^[:space:]]+)[[:space:]]+", line, perl=TRUE))[[1]]
+    if (length(matches) > 0) {
+      param_name <- matches[2]
+      cond <- parse_pcs_condition(conditions[[param_name]], param_types)
+      output <- paste0(output,
+                       sprintf('%s "%s" %s %s%s%s\n',
+                               param_name, param_name, param_types[[param_name]], param_domains[[param_name]], cond, param_comments[[param_name]]))
+      next
+    }
+    irace.error("unrecognized line: ", line)
+  }
+  return(output)
 }

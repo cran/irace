@@ -3,12 +3,9 @@
 #' \code{testConfigurations} executes the given configurations on the
 #' testing instances specified in the scenario.
 #' 
-#' @param configurations a data frame containing the configurations (one per row).
-#' @param scenario Data structure containing \pkg{irace} settings.The data structure
-#' has to be the one returned by the function \code{\link{defaultScenario}} and
-#' \code{\link{readScenario}}.
-#' @param parameters A data structure similar to that provided
-#' by the \code{\link{readParameters}} function.
+#' @template arg_configurations
+#' @template arg_scenario
+#' @template arg_parameters
 #'
 #' @return A list with the following elements:
 #'   \describe{
@@ -79,7 +76,8 @@ testConfigurations <- function(configurations, scenario, parameters)
   # assign it.
   for (i in seq_along(experiments)) {
     cost <- target.output[[i]]$cost
-    if (scenario$capping) cost <- applyPAR(cost, scenario)
+    if (scenario$capping)
+      cost <- applyPAR(cost, boundMax = scenario$boundMax, boundPar = scenario$boundPar)
     testResults[rownames(testResults) == experiments[[i]]$id.instance,
                 colnames(testResults) == experiments[[i]]$id.configuration] <- cost
   }

@@ -1,9 +1,11 @@
+% !Rnw weave = knitr
 %%% DO NOT EDIT the .tex file directly since it is generated from the .Rnw
 %%% sources.
 %\VignetteEngine{knitr::knitr}
 %\VignetteIndexEntry{irace package: User Guide}
 %\VignetteDepends{knitr}
 %\VignetteCompiler{knitr}
+\synctex=1
 \RequirePackage[dvipsnames]{xcolor}
 \documentclass[a4paper,english]{article}
 \usepackage[a4paper]{geometry} % It saves some pages
@@ -12,7 +14,6 @@
 \usepackage[english]{babel}
 \usepackage{ifthen}
 \newboolean{Release}
-\setboolean{Release}{false}
 \setboolean{Release}{true}
 \usepackage{calc}
 \usepackage{afterpage}
@@ -131,7 +132,8 @@
 \newcommand{\race}{\pkg{race}\xspace}
 \newcommand{\FRACE}{\text{F-Race}\xspace}
 \newcommand{\IFRACE}{\text{I/F-Race}\xspace}
-\newcommand{\iraceversion}{3.3}
+\newcommand{\PyImp}{\pkg{PyImp}\xspace}
+\newcommand{\iraceversion}{\Sexpr{packageVersion("irace")}}
 
 \newcommand{\Niter}{\ensuremath{N^\text{iter}}\xspace}
 \newcommand{\Nparam}{\ensuremath{{N^\text{param}}}\xspace}
@@ -340,9 +342,8 @@ algorithms.
   (\url{https://www.r-project.org}). See \autoref{sec:installation} for a
   quick installation guide of \aR.
 
-\item For GNU/Linux and OS X, the command-line executables \code{irace} and
-  \code{parallel-irace} require GNU Bash. There is also an \code{irace.bat} for
-  Windows. Individual examples may require additional software.
+\item For GNU/Linux and OS X, the command-line executable
+  \code{parallel-irace} requires GNU Bash.  Individual examples may require additional software.
 \end{itemize}
 
 \subsection{\irace installation} \label{sec:irace install}
@@ -480,7 +481,7 @@ irace --help
 On Windows, you need to add both \aR and the installation path of \irace to the
 environment variable \code{PATH}. To edit the \code{PATH}, search for
 ``Environment variables'' in the control panel, edit \code{PATH} and add
-a string similar to \path{C:\R_PATH\bin;C:\IRACE_HOME\bin} where \code{R_PATH}
+a string similar to \path{C:\R_PATH\bin;C:\IRACE_HOME\bin\x64\} where \code{R_PATH}
 is the installation path of \aR and \code{IRACE_HOME} is the installation path
 of \irace. If \irace was installed locally, you also need to edit the
 environment variable \code{R_LIBS} to add \code{R_LIBS_USER}. Then, open a new
@@ -488,7 +489,7 @@ terminal (run program \code{cmd.exe}) and launch \irace as:
 %
 %<<win_irace_help,engine='bash',eval=FALSE>>=
 \begin{lstlisting}[style=BashInputStyle]
-irace.bat --help
+irace.exe --help
 \end{lstlisting}
 %@
 
@@ -708,7 +709,7 @@ checkIraceScenario(scenario = scenario)
 \begin{itemize}
 \item{%
 \textbf{From the command-line console}, call the command (on Windows, you should execute
-  \code{irace.bat}):
+  \code{irace.exe}):
 \begin{lstlisting}[style=BashInputStyle]
 cd ~/tuning/
 # $IRACE_HOME is the installation directory of irace
@@ -2399,18 +2400,23 @@ beneficial for different goals:
 \begin{itemize}
 \item Friedman test (\code{F-test}): This test uses the ranking of the
   configurations to analyze the differences between their performance. This
-  makes the test suitable for scenarios where the numerical results and their
-  scale are not significant to assess the cost of the configurations.  For
-  example, if the results for different instances have high numerical
-  differences and evaluating the performance of the configurations using the
-  mean could be deceiving.  We recommend to use the \code{F-test} (default when 
-  \parameter{capping} is not enabled)
-  when tuning for solution cost and whenever the best performing algorithm
-  should be among the best in as many instances as possible.
+  makes the test suitable for scenarios where the scale of the performance
+  metric is not as important to assess configurations as their relative
+  ranking.  This test is also indicated when the distribution of the mean
+  performances deviates greatly from a normal distribution. For example, the
+  ranges of the performance metric on different instances may be completely
+  difference and comparing the performance of different configurations using
+  the mean over multiple instances may be deceiving.  We recommend to use the
+  \code{F-test} (default when \parameter{capping} is not enabled) when tuning
+  for solution cost and whenever the best performing algorithm should be among
+  the best in as many instances as possible.
   
 \item Student's t-test (\code{t-test}): This test uses the mean performance of
   the configurations to analyze the differences between the
-  configurations. This makes the test suitable for scenarios where the
+  configurations.\footnote{The t-test does not require that the performance
+    values follow a normal distribution, only that the distribution of sample
+    means does. In practice, the t-test is robust despite large deviations from
+    the assumptions.} This makes the test suitable for scenarios where the
   differences between values obtained for different instances are relevant to
   assess good configurations.  We recommend using t-test, in particular, when
   the target algorithm is minimizing computation time and, in general, whenever
@@ -2615,12 +2621,43 @@ psRace(iraceLogFile="irace.Rdata",
              max.experiments=500)
 @
 
-%%
-%%
+\subsection[Parameter importance analysis using PyImp]{Parameter importance analysis using \PyImp}
+
+The \PyImp\footnote{\url{https://github.com/automl/ParameterImportance}} tool developed by the AutoML group\footnote{\url{https://www.automl.org/}}
+supports various parameter importance analysis methods using surrogate models. 
+Given a performance dataset of an algorithm configuration scenario, a Random Forest is built to predict performance of all algorithm configurations. 
+Parameter importance analyses are then applied on the prediction model. 
+The model serves as a surrogate for the original target algorithm, so that the algorithm does not need to be executed during the analyses.
+Three analysis methods are supported, namely fANOVA~\citep{HutHooLey2014icml} (functional analysis of variance), forward selection~\cite{HutHooLey2013lion},
+and ablation analysis with surrogates~\cite{BieLinEggFraFawHoo2017}. 
+Note that the \irace package directly supports ablation (without surrogate models) analysis with and without racing (\autoref{sec:ablation}).
+Although ablation analysis without surrogates may be more time-consuming, results of the surrogate version may be less accurate than the non-surrogate one.
+
+The \code{.Rdata} dataset generated by \irace can be used as input for \PyImp. 
+We provide a script to translate an \code{irace.Rdata} file into the input format required by \PyImp.
+The script is available in the \irace package, and can be accessed either through the \aR console (function \code{irace2pyimp}), or via command line (\IRACEHOME{/bin/irace2pyimp}).
+
+To see the usage of the executable, please run: \code{irace2pyimp --help}. 
+For more information on the \aR function \code{irace2pyimp}, type in the \aR console: \code{?irace2pyimp}.
+
+Given as input an \code{irace.Rdata} file, the script will generate the following output files:
+\begin{itemize}
+  \item \code{params.pcs}: a text file containing the parameter space definition.
+  \item \code{runhistory.json}: a JSON file containing the list of algorithm configurations evaluated during the tuning and the performance data obtained.
+  \item \code{traj_aclib2.json}: a JSON file containing the best configurations after each iteration of \irace. The last configuration will be used as the target configuration in ablation analysis.
+  \item \code{scenario.txt}: a text file containing the definition of the tuning scenario.
+  \item \code{instances.txt}: a text file containing the list of instances.
+  \item \code{features.csv}: a .csv file containing instance features. If no instance features are provided, the index of each instance will be used as a feature.
+\end{itemize}
+
+\PyImp can then be called using the files listed above as input. Several examples on how to use the script and to call \PyImp can be found at \IRACEHOME{/inst/examples/irace2pyimp/}.
+
+%\emph{\PyImp installation note:} At the time when this document is written (December 2019), the latest \PyImp release version (1.0.6) has some bugs. 
+%Please check on \url{https://pypi.org/project/PyImp/#history} to see if \PyImp version > 1.0.6 has been released. 
+%If it has, you can easily install \PyImp using \code{pip install pyimp}. 
+%Otherwise, please install \PyImp from source (\url{https://github.com/automl/ParameterImportance}), branch \code{development}. Installation instructions can be found at \url{https://automl.github.io/ParameterImportance/installation.html}.
 %%
 %% irace options
-%%
-%%
 %%
 
 \section{List of command-line and scenario options} \label{sec:irace options}
@@ -2704,17 +2741,31 @@ valgrind --error-exitcode=1 ${EXE} ${FIXED_PARAMS} -i ${INSTANCE} \
 \end{lstlisting}
 
 If there are bugs in your program, they will appear in
-\code{${STDERR}}, thus do not delete those files. Memory debuggers will
+\code{\${STDERR}}, thus do not delete those files. Memory debuggers will
 significantly slowdown your code, so use them only as a means to find what is
 wrong with your target algorithm. Once you have fixed the bugs, you should
 remove the use of \code{valgrind}.
 
 
+\subsection{\irace seems to run forever without any progress, is this a bug?}\label{faq:infloop}
+
+Every time this problem was reported, the issue was in the target algorithm and
+not in \irace. Some ideas for debugging this problem:
+\begin{itemize}
+\item Check that the target algorithm is really not running nor paused nor
+  sleeping nor waiting for input-output.
+\item Use \parameter{debugLevel}\code{=3} to see how  \irace calls \code{target-runner}, run the same command outside \irace and verify that it terminates.
+\item Add some output to your algorithm that reports at the very end the runtime and exit code. Verify that this output is printed when \irace calls your algorithm. 
+\item In \code{target-runner}, print something to a log file \emph{after} calling your target algorithm. Verify that this output appears in the log file when \irace is running.
+ 
+\item Set a maximum timeout when calling your target algorithm from \code{target-runner} (see FAQ~\ref{faq:timeout}).
+
+\end{itemize}
 
 \subsection{My program may be buggy and run into an infinite loop. Is it possible to set a maximum timeout?}\label{faq:timeout}
 
 We are not aware of any way to achieve this using \aR. However, in
-GNU/Linux, it is easy to implement by using the \code{timeout} command in
+GNU/Linux, it is easy to implement by using the \code{timeout} command\footnote{\url{http://man7.org/linux/man-pages/man1/timeout.1.html}} in
 \code{targetRunner} when invoking your program.
 
 \subsection{When using the mpi option, \irace is aborted with an error message indicating that a
@@ -2758,6 +2809,14 @@ If the path is set correctly and the problem persists, please check these instru
 This is a bug in \aR 3.2.0 on Windows. The solution is to update your version of
 \aR.
 
+\subsection{Warning: \code{In read.table(filename,}  \code{header = TRUE,} \code{colClasses = "character",} \code{: incomplete final line found by} \ldots}
+
+This is a warning given by \aR when the last line of an input file does not
+finish with the newline character. The warning is harmless and can be
+ignored. If you want to suppress it, just open the file and press the
+\code{ENTER} key at the end of the last line of the file.
+
+
 \subsection{How are relative filesystem paths interpreted by \irace?}\label{faq:relpaths}
 
 The answer depends on where the path appears. Relative paths may appear as the
@@ -2790,9 +2849,10 @@ can be evaluated for the given budget, thus, the initial random sampling
 performed by \irace may generate repeated configurations and/or never generate
 some configurations, which is not ideal. The ideal approach in such cases is to
 provide all configurations explicitly to \irace (\autoref{sec:initial}) and
-execute a single race (\parameter{nbIterations}\code{=1}). Hopefully, a future
-version of \irace will automatically detect this case and switch to basic
-racing.
+execute a single race (\parameter{nbIterations}\code{=1}) with exactly the
+number of configurations provided (e.g.,
+\parameter{nbConfigurations}\code{=10}). A future version of \irace will
+automatically detect this case and switch to basic racing without having to set additional options.
 
 %%
 %%
@@ -2844,6 +2904,7 @@ collaborated in the development and improvement of \irace:
 \item Federico Caselli % bug reports with fixes
 \item Pablo Valledor Pellicer % testing of --parallel under Windows
 \item André de Souza Andrade
+\item Nguyen Dang (\texttt{nttd@st-andrews.ac.uk}) % implemented \code{irace2pyimp}
 \end{acklist}
 
 
@@ -3157,7 +3218,7 @@ system.file(package = "irace")
 }
 
 %% NEWS is latin1 but this file is utf8
-\begingroup\inputencoding{latin1}%
+\begingroup\inputencoding{utf8}%
 \VerbatimInput{NEWS.txt}%
 \endgroup
 

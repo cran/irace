@@ -25,7 +25,7 @@
 #  or by writing to the  Free Software Foundation, Inc., 59 Temple Place,
 #                  Suite 330, Boston, MA 02111-1307 USA
 # -------------------------------------------------------------------------
-# $Revision: 2205 $
+# $Revision$
 # =========================================================================
 
 #' irace.license
@@ -58,6 +58,19 @@ cat.irace.license <- function()
   cat(sub("__VERSION__", irace.version, irace.license, fixed=TRUE))
 }
 
+cmdline_usage <- function(cmdline_args)
+{
+  for (i in seq_len(nrow(cmdline_args))) {
+    short <- cmdline_args[i,"short"]
+    long <- cmdline_args[i,"long"]
+    desc <- cmdline_args[i,"description"]
+    if (desc == "" || (short == "" && long == "")) next
+    cat(sep = "\n", strwrap(desc, width = 80,
+                            initial = sprintf("%2s %-20s  ", short, long),
+                            exdent = 25))
+  }
+}
+  
 #' irace.usage
 #'
 #' \code{irace.usage}  This function prints all command-line options of \pkg{irace},
@@ -69,26 +82,16 @@ irace.usage <- function ()
 {
   cat.irace.license()
   cat ("# installed at: ", system.file(package="irace"), "\n", sep = "")
-
-  for (i in seq_len(nrow(.irace.params.def))) {
-    short <- .irace.params.def[i,"short"]
-    long <- .irace.params.def[i,"long"]
-    desc <- .irace.params.def[i,"description"]
-    if (desc == "" || (short == "" && long == "")) next
-    cat(sep = "\n",
-        strwrap(desc, width = 80,
-                initial = sprintf("%2s %-20s  ", short, long),
-                exdent = 25))
-  }
+  cmdline_usage(.irace.params.def)
 }
 
 #' irace.main
 #'
 #' \code{irace.main} is a higher-level interface to invoke \code{\link{irace}}.
 #' 
-#' @param scenario \code{\link{defaultScenario}}() The scenario setup of 
-#' \pkg{irace}.
-#' @param output.width 9999 The width that must be used for the screen
+#' @template arg_scenario
+#' 
+#' @param output.width (\code{integer(1)}) The width that must be used for the screen
 #' output.
 #'
 #' @details  The function \code{irace.main} checks the correctness of the
@@ -97,6 +100,8 @@ irace.usage <- function ()
 #' prints its results in various formatted ways. If you want a
 #' lower-level interface, please see function \code{\link{irace}}.
 #'
+#' @templateVar return_invisible TRUE
+#' @template return_irace
 #' @seealso
 #'  \code{\link{irace.cmdline}} a higher-level command-line interface to
 #'  \code{irace.main}.
@@ -105,7 +110,7 @@ irace.usage <- function ()
 #' 
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
 #' @export
-irace.main <- function(scenario = defaultScenario(), output.width = 9999)
+irace.main <- function(scenario = defaultScenario(), output.width = 9999L)
 {
   op <- options(width = output.width) # Do not wrap the output.
   on.exit(options(op), add = TRUE)
@@ -209,10 +214,7 @@ testing.main <- function(logFile)
   # FIXME : We should print the seeds also. As an additional column?
   irace.note ("Testing results (column number is configuration ID in no particular order):\n")
   print(iraceResults$testing$experiments)
-  
-  cwd <- setwd(scenario$execDir)
-  save (iraceResults, file = scenario$logFile)
-  setwd (cwd)
+  irace_save_logfile (iraceResults, scenario)
 
   irace.note ("Finished testing\n")
   return(TRUE)
@@ -252,11 +254,7 @@ testing.cmdline <- function(filename, scenario)
   # FIXME : We should print the seeds also. As an additional column?
   irace.note ("Testing results (column number is configuration ID in no particular order):\n")
   print(iraceResults$testing$experiments)
-  if (!is.null.or.empty(scenario$logFile)) {
-    cwd <- setwd(scenario$execDir)
-    save (iraceResults, file = scenario$logFile)
-    setwd(cwd)
-  }
+  irace_save_logfile(iraceResults, scenario)
   irace.note ("Finished testing\n")
   return(iraceResults)
 }
@@ -267,12 +265,8 @@ testing.cmdline <- function(filename, scenario)
 #'   can be run by checking the scenario settings provided and trying to run
 #'   the target-algorithm.
 #' 
-#' @param scenario Data structure containing \pkg{irace} settings.The data structure
-#' has to be the one returned by the function \code{\link{defaultScenario}} and
-#' \code{\link{readScenario}}.
-#' @param parameters Data structure containing the parameter definition. The data
-#' structure has to be the one returned by the function \code{\link{readParameters}}.
-#' See documentation of this function for details.
+#' @template arg_scenario
+#' @template arg_parameters
 #'
 #' @return returns \code{TRUE} if succesful and gives an error and returns
 #' \code{FALSE} otherwise.
@@ -319,125 +313,74 @@ checkIraceScenario <- function(scenario, parameters = NULL)
   }
 }
 
+
 #' irace.cmdline
 #'
 #' \code{irace.cmdline} starts \pkg{irace} using the parameters
 #'  of the command line used to invoke R.
 #' 
-#' @param args \code{commandArgs(trailingOnly = TRUE)} The arguments 
+#' @param argv (\code{character()}) \cr The arguments 
 #' provided on the R command line as a character vector, e.g., 
 #' \code{c("--scenario", "scenario.txt", "-p", "parameters.txt")}.
 #' Using the  default value (not providing the parameter) is the 
 #' easiest way to call \code{irace.cmdline}.
 #' 
-#' @return None.
-#'
 #' @details The function reads the parameters given on the command line
 #' used to invoke R, finds the name of the scenario file,
 #'  initializes the scenario from the file (with the function
-#'  \link{readScenario}) and possibly from parameters passed on
+#'  \code{\link{readScenario}}) and possibly from parameters passed on
 #'  the command line. It finally starts \pkg{irace} by calling
-#'  \link{irace.main}.
+#'  \code{\link{irace.main}}.
 #'
+#' @templateVar return_invisible TRUE
+#' @template return_irace
+#' 
 #' @seealso
 #'  \code{\link{irace.main}} to start \pkg{irace} with a given scenario.
 #' 
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
 #' @export
-irace.cmdline <- function(args = commandArgs (trailingOnly = TRUE))
+irace.cmdline <- function(argv = commandArgs (trailingOnly = TRUE))
 {
-  # Function to read command-line arguments.
-  ## FIXME: This function always consumes two arguments. This is problematic
-  ## for flags that have no arguments, like --check.
-  readArg <- function(short = "", long = "") {
-    pos <- c()
-    if (length (short) > 0) {
-      pos <- grep (paste0("^", short, "$"), args)
-      if (length (pos) == 0) {
-        pos <- grep (paste0("^", short, "="), args)
-      }
-    }
-    if (length (long) > 0 && length (pos) == 0)  {
-      pos <- grep (paste0("^", long, "$"), args)
-      if (length (pos) == 0) {
-        pos <- grep (paste0("^", long, "="), args)
-      }
-    }
-    
-    if (length (pos) == 0) {
-      return (NULL)
-    } else if (length(pos) > 0) {
-      # Allow repeated parameters
-      pos <- max(pos)
-    }
-    
-    value <- unlist(strsplit (args[pos], '=', fixed = TRUE))[2]
-    if (is.null (value) || is.na(value)) {
-      value <- args[pos + 1]
-      # We modify the caller's args
-      args <<- args[- (pos + 1)]
-    }
-    # We modify the caller's args
-    args <<- args[-pos]
-    return (value)
-  }
-
-  readCmdLineParameter <- function (paramName, default) {
-    x <- readArg (short = .irace.params.def[paramName, "short"],
-                  long  = .irace.params.def[paramName,"long"])
-    if (is.null(x)) {
-      return (if (is.null(default))
-                .irace.params.def[paramName, "default"] else default)
-    } else if (is.na(x) && .irace.params.def[paramName,"type"] != 'x' ) {
-      irace.error ("option '", .irace.params.def[paramName,"long"],
-                   "' requires an argument\n")
-    }
-    return (x)
-  }
-  
-  # Handle the case where we are given a single character string like a
-  # command-line.
-  if (!missing(args) && length(args) == 1) {
-    args <- strsplit(trim(args), " +")[[1]]
-  }
-
-  if (!is.null(readArg (short = "-h", long = "--help"))) {
+  parser <- CommandArgsParser$new(argv = argv, argsdef = .irace.params.def)
+  if (!is.null(parser$readArg (short = "-h", long = "--help"))) {
     irace.usage()
     return(invisible(NULL))
   }
 
-  if (!is.null(readArg (short = "-v", long = "--version"))) {
+  if (!is.null(parser$readArg (short = "-v", long = "--version"))) {
     cat.irace.license()
     cat ("# installed at: ", system.file(package="irace"), "\n", sep = "")
+    print(citation(package="irace"))
     return(invisible(NULL))
   }
-
   cat.irace.license()
   cat ("# installed at: ", system.file(package="irace"), "\n",
-       "# called with: ", paste(args, collapse = " "), "\n", sep = "")
+       "# called with: ", paste(argv, collapse = " "), "\n", sep = "")
   
   # Read the scenario file and the command line
-  scenarioFile <- readCmdLineParameter ("scenarioFile", default = "")
+  scenarioFile <- parser$readCmdLineParameter ("scenarioFile", default = "")
   scenario <- readScenario(scenarioFile)
   for (param in .irace.params.names) {
-    scenario[[param]] <- readCmdLineParameter (paramName = param,
-                                               default = scenario[[param]])
+    scenario[[param]] <-
+      parser$readCmdLineParameter(paramName = param,
+                                  default = scenario[[param]])
   }
  
   # Check scenario
-  if (!is.null(readArg (short = "-c", long = "--check"))) {
+  if (!is.null(parser$readArg (short = "-c", long = "--check"))) {
     checkIraceScenario(scenario)
     return(invisible(NULL))
   }
 
   # Only do testing
-  testFile <- readArg (long = "--only-test")
+  testFile <- parser$readArg (long = "--only-test")
   if (!is.null(testFile)) {
     return(invisible(testing.cmdline(testFile, scenario)))
   }
 
-  if (length(args) > 0) {
-    irace.error ("Unknown command-line options: ", paste(args, collapse = " "))
+  if (length(parser$argv) > 0) {
+    irace.error ("Unknown command-line options: ", paste(parser$argv, collapse = " "))
   }
   
   irace.main(scenario)

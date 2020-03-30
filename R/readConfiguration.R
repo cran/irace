@@ -1,23 +1,23 @@
 #' readConfigurationsFile
 #'
-#' \code{readConfigurationsFile} reads a set of target algorithms configurations 
+#' `readConfigurationsFile` reads a set of target algorithms configurations 
 #'  from a file and puts them in \pkg{irace} format. The configurations are checked 
 #'  to match the parameters description provided.
 #' 
-#' @param filename A filename from which the configurations should be read.
-#' @param parameters List of target algorithm parameters in the \pkg{irace} format.
-#' @param debugLevel Level of debug. Default: 0.
-#' @param text (optional) Character string: if file is not supplied and this is,
-#'  then parameters are read from the value of text via a text connection.
+#' @param filename (`character(1)`) \cr Filename from which the configurations should be read.
+#' @template arg_parameters
+#' @template arg_debuglevel
+#' @template arg_text
 #' 
 #' @return A data frame containing the obtained configurations. 
 #'   Each row of the data frame is a candidate configuration, 
-#'   the columns correspond to the parameter names in \code{parameters}.
+#'   the columns correspond to the parameter names in `parameters`.
 #'
 #' @seealso 
 #'   \code{\link{readParameters}} to obtain a valid parameter structure from a parameters list.
 #' 
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
+#' @md
 #' @export
 ## Read some configurations from a file.
 ## Example of an input file,
@@ -49,8 +49,8 @@ readConfigurationsFile <- function(filename, parameters, debugLevel = 0, text)
   irace.assert(is.data.frame(configurationTable))
   nbConfigurations <- nrow(configurationTable)
   # Print the table that has been read.
+  cat("# Read ", nbConfigurations, " configuration(s) from file '", filename, "'\n", sep="")
   if (debugLevel >= 2) {
-    cat("# Read ", nbConfigurations, " configurations from file '", filename, "'\n", sep="")
     print(as.data.frame(configurationTable, stringAsFactor = FALSE), digits=15)
   }
 
@@ -180,14 +180,19 @@ checkForbidden <- function(configurations, forbidden)
 compile.forbidden <- function(x)
 {
   if (is.bytecode(x)) return(x)
+  # If we are given an expression, it must be a single one.
+  irace.assert(is.language(x) && (!is.expression(x) || length(x) == 1))
+  if (is.expression(x)) x <- x[[1]]
   # When a is NA and we check a == 5, we would get NA, which is
   # always FALSE, when we actually want to be TRUE, so we test
   # is.na() first below.
   
   # We expect that there will be undefined variables, since the expressions
   # will be evaluated within a data.frame later.
-  return(compiler::compile(substitute(is.na(x) | !(x), list(x = x)),
-                           options = list(suppressUndefined=TRUE)))
+  exp <- compiler::compile(substitute(is.na(x) | !(x), list(x = x)),
+                           options = list(suppressUndefined=TRUE))
+  attr(exp, "source") <- as.character(as.expression(x))
+  return(exp)
 }
 
 readForbiddenFile <- function(filename)
@@ -221,27 +226,25 @@ buildForbiddenExp <- function(configurations, parameters)
                paste0("(", pnames[has.value]," == ", values, ")", collapse = "&"))
   }
   exps <- parse(text = lines)
-  # FIXME: We should save exps somewhere for verification
   # print(exps)
   return(sapply(exps, compile.forbidden))
 }
 
 #' readScenario
 #'
-#' \code{readScenario} reads the scenario to be used by 
-#' \pkg{irace} from a file.
+#' `readScenario` reads from a file the scenario settings to be used by
+#' \pkg{irace}..
 #' 
-#' @param filename A filename from which the scenario will be
-#'     read. If empty, the default \code{scenarioFile} is used.
-#'     An example scenario file is provided in
-#'     \code{system.file(package="irace", "templates/scenario.txt.tmpl")}.
-#' @param scenario A list where tagged elements correspond to scenario
-#'     settings for \pkg{irace}. This is an initial scenario that is
-#'     overwritten for every parameter specified in the file to be read.
-#' 
-#' @return The scenario list read from the file. The scenario parameter not
-#'   present in the file are not present in the list, that is, they are
-#'   \code{NULL}.
+#' @param filename (`character(1)`) \cr Filename from which the scenario will
+#'   be read. If empty, the default `scenarioFile` is used.  An example
+#'   scenario file is provided in `system.file(``package="irace",`
+#'   `"templates/scenario.txt.tmpl")`.
+#' @templateVar arg_appendix This is an initial scenario that is overwritten
+#'   for every setting specified in the file to be read.
+#' @template arg_scenario
+#'  
+#' @return The scenario list read from the file. The scenario settings not
+#'   present in the file are not present in the list, i.e., they are `NULL`.
 #'
 #' @seealso
 #'  \describe{
@@ -251,6 +254,7 @@ buildForbiddenExp <- function(configurations, parameters)
 #' }
 #' 
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
+#' @md
 #' @export
 readScenario <- function(filename = "", scenario = list())
 {
@@ -326,11 +330,10 @@ readScenario <- function(filename = "", scenario = list())
 
 #' Check and correct the given scenario
 #'
-#' \code{checkScenario} takes a (possibly incomplete) scenario setup of
+#' `checkScenario` takes a (possibly incomplete) scenario setup of
 #' \pkg{irace}, checks for errors and transforms it into a valid scenario.
 #' 
-#' @param scenario A list where tagged elements correspond to scenario
-#' settings of \pkg{irace}.
+#' @template arg_scenario
 #' 
 #' @return The scenario received as a parameter, possibly corrected. Unset
 #' scenario settings are set to their default values.
@@ -351,6 +354,7 @@ readScenario <- function(filename = "", scenario = list())
 #' }
 #' 
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
+#' @md
 #' @export
 ## FIXME: This function should only do checks and return TRUE/FALSE. There
 ## should be other function that does the various transformations.
@@ -360,6 +364,25 @@ checkScenario <- function(scenario = defaultScenario())
   {
     return(paste0("'", name, "' (", .irace.params.def[name, "long"], ")"))
   }
+
+  as.boolean.param <- function(x, name)
+  {
+    x <- as.integer(x)
+    if (is.na (x) || (x != 0 && x != 1)) {
+      irace.error (quote.param(name), " must be either 0 or 1.")
+    }
+    return(as.logical(x))
+  }
+
+  check.valid.param <- function(x, valid)
+  {
+    if (scenario[[x]] %!in% valid) {
+      irace.error ("Invalid value '", scenario[[x]], "' of ",
+                   quote.param(x), ", valid values are: ",
+                   paste0(valid, collapse = ", "))
+    }
+  }
+  
   
   # Fill possible unset (NULL) with default settings.
   scenario <- defaultScenario (scenario)
@@ -370,14 +393,6 @@ checkScenario <- function(scenario = defaultScenario())
     irace.error("scenario contains duplicated entries: ", names(scenario)[dups])
 
   # Boolean control parameters.
-  as.boolean.param <- function(x, name)
-  {
-    x <- as.integer(x)
-    if (is.na (x) || (x != 0 && x != 1)) {
-      irace.error (quote.param(name), " must be either 0 or 1.")
-    }
-    return(as.logical(x))
-  }
   boolParams <- .irace.params.def[.irace.params.def[, "type"] == "b", "name"]
   for (p in boolParams) {
     scenario[[p]] <- as.boolean.param (scenario[[p]], p)
@@ -386,8 +401,8 @@ checkScenario <- function(scenario = defaultScenario())
   ## Check that everything is fine with external parameters
   # Check that the files exist and are readable.
   scenario$parameterFile <- path.rel2abs(scenario$parameterFile)
-  # We don't check parameterFile here because the user may give the
-  # parameters explicitly. And it is checked in readParameters anyway.
+  # We don't read parameterFile here because the user may give the parameters
+  # explicitly.  And it is validated in readParameters anyway.
   scenario$execDir <- path.rel2abs(scenario$execDir)
   file.check (scenario$execDir, isdir = TRUE,
               text = paste0("execution directory ", quote.param("execDir")))
@@ -506,8 +521,16 @@ checkScenario <- function(scenario = defaultScenario())
     scenario$configurationsFile <- path.rel2abs(scenario$configurationsFile)
     file.check (scenario$configurationsFile, readable = TRUE,
                 text = "configurations file")
+    # We cannot read the configurations here because we need the parameters.
+    # FIXME: We should have the parameters inside scenario.
   }
-
+  
+  if (is.null.or.empty(scenario$initConfigurations)) {
+    scenario$initConfigurations <- NULL
+  } else if (!is.data.frame(scenario$initConfigurations) && !is.matrix(scenario$initConfigurations)) {
+    irace.error("if given, initConfigurations must be a matrix or data.frame")
+  }
+  
   # This prevents loading the file two times and overriding forbiddenExps if
   # the user specified them explicitly.
   if (is.null.or.empty(scenario$forbiddenExps)
@@ -621,13 +644,7 @@ checkScenario <- function(scenario = defaultScenario())
   if (scenario$batchmode != 0) {
     scenario$batchmode <- tolower(scenario$batchmode)
     # FIXME: We should encode options in the large table in main.R
-    valid.batchmode <- c("sge", "pbs", "torque", "slurm")
-    if (!(scenario$batchmode %in% valid.batchmode)) {
-      irace.error ("Invalid value '", scenario$batchmode,
-                   "' of ", quote.param("batchmode"),
-                   ", valid values are: ",
-                   paste0(valid.batchmode, collapse = ", "))
-    }
+    check.valid.param("batchmode", valid = c("sge", "pbs", "torque", "slurm"))
   }
   # Currently batchmode requires a targetEvaluator
   if (scenario$batchmode != 0 && is.null(scenario$targetEvaluator)) {
@@ -646,22 +663,10 @@ checkScenario <- function(scenario = defaultScenario())
     if (scenario$boundMax <= 0) 
       irace.error("When capping == TRUE, boundMax (", scenario$boundMax,
                   ") must be > 0")
-    valid.types <- c("median", "mean", "worst", "best")
-    if (!(scenario$cappingType %in% valid.types)) {
-      irace.error ("Invalid value '", scenario$cappingType,
-                   "' of ", quote.param("cappingType"),
-                   ", valid values are: ",
-                   paste0(valid.types, collapse = ", "))
-    }
-    
-    valid.types <- c("instance", "candidate")
-    if (!(scenario$boundType %in% valid.types)) {
-      irace.error ("Invalid value '", scenario$boundType,
-                   "' of ", quote.param("boundType"),
-                   ", valid values are: ",
-                   paste0(valid.types, collapse = ", "))
-    }
-    
+    check.valid.param("cappingType",
+                      valid = c("median", "mean", "worst", "best"))
+    check.valid.param("boundType", valid = c("instance", "candidate"))
+        
     if (scenario$boundPar < 1)
       irace.error("Invalid value boundPar (", scenario$boundPar,
                   ") must be >= 1")
@@ -689,19 +694,15 @@ checkScenario <- function(scenario = defaultScenario())
            "t.holm" = "t.holm",
            "t-test-bonferroni" =, # Fall-through,
            "t.bonferroni" = "t.bonferroni",
-           irace.error ("Invalid value '", scenario$testType,
-                        "' of ", quote.param("testType"),
-                        ", valid values are: ",
-                        "F-test, t-test, t-test-holm, t-test-bonferroni"))
-                        
-
+           check.valid.param("testType",
+                             c("F-test, t-test, t-test-holm, t-test-bonferroni")))
+  
   return (scenario)
 }
 
 #' Prints the given scenario
 #'
-#' @param scenario A list where tagged elements correspond to scenario
-#'    settings of \pkg{irace}.
+#' @template arg_scenario
 #' 
 #' @seealso
 #'  \describe{
@@ -712,12 +713,17 @@ checkScenario <- function(scenario = defaultScenario())
 #' }
 #' 
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
+#' @md
 #' @export
 printScenario <- function(scenario)
 {
   cat("## irace scenario:\n")
   for (param in .irace.params.names) {
-    cat(param, " = ", deparse(scenario[[param]]), "\n", sep = "")
+    if (param == "forbiddenExps")
+      extra <- paste0(" = expression(", paste0(collapse=", ",
+                                  sapply(scenario[[param]], attr, "source")), ")")
+    else extra <- ""
+    cat(param, " = ", deparse(scenario[[param]]), extra, "\n", sep = "")
   }
   cat("## end of irace scenario\n")
 }
@@ -726,8 +732,7 @@ printScenario <- function(scenario)
 #'
 #' Return scenario with default values.
 #' 
-#' @param scenario A list where tagged elements correspond to scenario
-#' settings of \pkg{irace}.
+#' @template arg_scenario
 #' 
 #' @return A list indexed by the \pkg{irace} parameter names,
 #' containing the default values for each parameter, except for those
@@ -785,7 +790,8 @@ printScenario <- function(scenario)
 #'    }
 #'  \item Initial configurations:
 #'    \describe{
-#'      \item{\code{configurationsFile}}{File that contains a set of initial configurations. If empty or \code{NULL}, all initial configurations are randomly generated. (Default: \code{""})}
+#'      \item{\code{initConfigurations}}{Data frame describing initial configurations (usually read from a file using \code{readConfigurations}). (Default: \code{""})}
+#'      \item{\code{configurationsFile}}{File that contains a table of initial configurations. If empty or \code{NULL}, all initial configurations are randomly generated. (Default: \code{""})}
 #'    }
 #'  \item Training instances:
 #'    \describe{

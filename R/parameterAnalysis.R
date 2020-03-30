@@ -6,9 +6,8 @@
 #'  \code{cols} parameters being shown per plot.  If a filename is provided the
 #'  plots are saved in one or more files.
 #'   
-#' @param configurations Data frame containing target algorithms configurations 
-#'   in the format used by \pkg{irace}.
-#' @param parameters List of target algorithm parameters in the \pkg{irace} format.
+#' @template arg_configurations
+#' @template arg_parameters
 #' @param rows Number of plots per column.
 #' @param cols Number of plots per row.
 #' @param filename Filename prefix to generate the plots. If \code{NULL} the plot 
@@ -140,9 +139,10 @@ parcoordlabel <- function (configurations, parameters, col = "green", lty = 1,
                            lblcol="blue", title="Parameters parallel coordinates", ...)
 {
   replace.cat <- function(y, vals){
+    x <- rep(NA, length(y))
     for(i in 1:length(vals))
-      y[y %in% vals[i]] <- i
-    return(y)
+      x[y %in% vals[i]] <- i
+    return(x)
   }
     
   replace.na <- function(x,r) {
@@ -162,12 +162,11 @@ parcoordlabel <- function (configurations, parameters, col = "green", lty = 1,
   }
     
   param.names <- colnames(configurations)
-    
   bound.num <- parameters$domain   
   # Categorical -> Numerical
   for (i in 1:ncol(configurations)) {
     pname <- param.names[i]
-    if (parameters$types[[pname]] == "c") {
+    if (parameters$types[[pname]] %in% c("c","o")) {
       configurations[,i]<- as.numeric(replace.cat(configurations[,i], bound.num[[pname]]))
       bound.num[[pname]] <- seq(1,length(bound.num[[pname]]))
     }
@@ -208,9 +207,8 @@ parcoordlabel <- function (configurations, parameters, col = "green", lty = 1,
 #' \code{parallelCoordinatesPlot}  plots a set of parameter configurations in 
 #'   parallel coordinates.
 #'   
-#' @param configurations Data frame containing target algorithms configurations 
-#'   in the format used by \pkg{irace}.
-#' @param parameters List of target algorithm parameters in the \pkg{irace} format.
+#' @template arg_configurations
+#' @template arg_parameters
 #' @param param_names Parameters names that should be included. Default: parameters$names.
 #' @param hierarchy If \code{TRUE} conditional parameters will be displayed in a different 
 #'   plot. Default \code{TRUE}.
@@ -295,9 +293,7 @@ parallelCoordinatesPlot <-
     
     dep <- aux$dependencies
     dnames <- names(dep) 
-
-
-    for(i in 1:length(dep)){
+    for(i in seq_along(dep)){
       if(length(dep[[i]]) < 2){
         cat("Skipping parameters",dnames[i],"\n")
         next
