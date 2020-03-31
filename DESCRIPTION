@@ -5,7 +5,9 @@ Description: Iterated race is an extension of the Iterated F-race method for
              the automatic configuration of optimization algorithms, that is,
              (offline) tuning their parameters by finding the most appropriate
              settings given a set of instances of an optimization problem.
-Version: 3.4
+             M. López-Ibáñez, J. Dubois-Lacoste, L. Pérez Cáceres, T. Stützle,
+             and M. Birattari (2016) <doi:10.1016/j.orp.2016.09.002>.
+Version: 3.4.1
 Authors@R: c(person("Manuel", "López-Ibáñez", role = c("aut", "cre"),
                               email = "manuel.lopez-ibanez@manchester.ac.uk",
                               comment = c(ORCID = "0000-0001-9974-1295")),
@@ -19,7 +21,7 @@ Authors@R: c(person("Manuel", "López-Ibáñez", role = c("aut", "cre"),
 Depends: R (>= 3.2.0)
 Imports: stats, utils, compiler, R6
 Suggests: Rmpi (>= 0.6.0), parallel, knitr, testthat, withr, mlr (>=
-        2.15.0), ParamHelpers, devtools, rhub
+        2.15.0), ParamHelpers, devtools
 VignetteBuilder: knitr
 License: GPL (>= 2)
 URL: http://iridia.ulb.ac.be/irace,
@@ -29,8 +31,9 @@ ByteCompile: yes
 LazyData: yes
 Encoding: UTF-8
 RoxygenNote: 6.1.1
+SystemRequirements: GNU make
 NeedsCompilation: yes
-Packaged: 2020-03-30 11:22:35 UTC; manu
+Packaged: 2020-03-31 08:07:18 UTC; manu
 Author: Manuel López-Ibáñez [aut, cre]
     (<https://orcid.org/0000-0001-9974-1295>),
   Jérémie Dubois-Lacoste [aut],
@@ -42,4 +45,4 @@ Author: Manuel López-Ibáñez [aut, cre]
   Nguyen Dang [ctb]
 Maintainer: Manuel López-Ibáñez <manuel.lopez-ibanez@manchester.ac.uk>
 Repository: CRAN
-Date/Publication: 2020-03-30 12:30:02 UTC
+Date/Publication: 2020-03-31 13:40:03 UTC

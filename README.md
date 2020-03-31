@@ -1,7 +1,8 @@
 **irace**: Iterated Racing for Automatic Algorithm Configuration
 ================================================================
 
-[![CRAN Status](https://www.r-pkg.org/badges/version-last-release/irace)](https://cran.r-project.org/package=irace) [![CRAN Downloads](https://cranlogs.r-pkg.org/badges/grand-total/irace)](https://CRAN.R-project.org/package=irace) 
+[![CRAN Status](https://www.r-pkg.org/badges/version-last-release/irace)](https://cran.r-project.org/package=irace) [![CRAN Downloads](https://cranlogs.r-pkg.org/badges/grand-total/irace)](https://CRAN.R-project.org/package=irace) [![Travis Build
+Status](https://travis-ci.org/MLopez-Ibanez/irace.svg?branch=master)](https://travis-ci.org/MLopez-Ibanez/irace)
 
 [ [**Homepage**](http://iridia.ulb.ac.be/irace/) ] [ [**User Guide (PDF)**](https://cran.r-project.org/package=irace/vignettes/irace-package.pdf) ] 
 
@@ -33,8 +34,7 @@ It builds upon the race package by Birattari and it is implemented in R.
     M. Birattari. [The irace package: Iterated Racing for Automatic Algorithm Configuration.](http://dx.doi.org/10.1016/j.orp.2016.09.002).
 *Operations Research Perspectives*, 3:43–58, 2016.<br>
     [ [bibtex](http://lopez-ibanez.eu/LopezIbanez_bib.html#LopDubPerStuBir2016irace) 
-    |
-    doi:[10.1016/j.orp.2016.09.002](http://dx.doi.org/10.1016/j.orp.2016.09.002) ]
+    | doi: [10.1016/j.orp.2016.09.002](http://dx.doi.org/10.1016/j.orp.2016.09.002) ]
 
  2. Manuel López-Ibáñez, Jérémie Dubois-Lacoste, Thomas Stützle, and Mauro
     Birattari. [The irace package, Iterated Race for Automatic Algorithm Configuration](http://iridia.ulb.ac.be/IridiaTrSeries/IridiaTr2011-004.pdf).
@@ -54,7 +54,7 @@ Requisites
 
  * R (<https://www.r-project.org>) is required for running irace, but
    you don't need to know the R language to use it.
-   Versions that work: >= 2.15.0
+
 
 User guide
 ----------
@@ -288,8 +288,8 @@ parallel. See the [user guide](https://cran.r-project.org/package=irace/vignette
 License
 =======
 
-This software is Copyright (C) 2011-2018 Manuel López-Ibáñez and Jérémie
-Dubois-Lacoste.
+**irace** is Copyright (C) 2010-2020 Manuel López-Ibáñez, Jérémie Dubois-Lacoste
+and Leslie Pérez-Cáceres.
 
 This program is free software (software libre); you can redistribute it and/or
 modify it under the terms of the GNU General Public License as published by the
@@ -308,12 +308,16 @@ scientist to (a) mention the fashion in which this software was used in the
 Methods section; (b) mention the algorithm in the References section. The
 appropriate citation is:
 
-> Manuel López-Ibáñez, Jérémie Dubois-Lacoste, Leslie Pérez Cáceres, Thomas
-> Stützle, and Mauro Birattari.
-> [**The irace package: Iterated Racing for Automatic Algorithm Configuration.**](http://dx.doi.org/10.1016/j.orp.2016.09.002)
-> _Operations Research Perspectives_, 2016.
+ * Manuel López-Ibáñez, Jérémie Dubois-Lacoste, Leslie Pérez Cáceres, Thomas
+  Stützle, and Mauro Birattari.  [**The irace package: Iterated Racing for
+  Automatic Algorithm
+  Configuration.**](http://dx.doi.org/10.1016/j.orp.2016.09.002) _Operations
+  Research Perspectives_, 2016. doi: 10.1016/j.orp.2016.09.002
 
-The race package is Copyright (C) 2003 Mauro Birattari, used under the GPL.
+The **irace** package uses code under the GPL from the [race
+package](https://CRAN.R-project.org/package=race) is Copyright (C) 2003 Mauro
+Birattari.
+
 
 Frequently Asked Questions
 ==========================
