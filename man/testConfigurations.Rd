@@ -2,7 +2,8 @@
 % Please edit documentation in R/testing.R
 \name{testConfigurations}
 \alias{testConfigurations}
-\title{testConfigurations}
+\title{Execute the given configurations on the testing instances specified in the
+scenario}
 \usage{
 testConfigurations(configurations, scenario, parameters)
 }
@@ -12,7 +13,7 @@ target algorithm (one per row).}
 
 \item{scenario}{(\code{list()}) \cr Data structure containing \pkg{irace}
 settings. The data structure has to be the one returned by the function
-\code{\link{defaultScenario}} or \code{\link{readScenario}}.}
+\code{\link[=defaultScenario]{defaultScenario()}} or \code{\link[=readScenario]{readScenario()}}.}
 
 \item{parameters}{(\code{list()}) \cr Data structure containing the parameter
 space definition. The data structure has to similar to the one returned by the
@@ -20,20 +21,20 @@ function \code{\link{readParameters}}.}
 }
 \value{
 A list with the following elements:
-  \describe{
-    \item{\code{experiments}}{Experiments results.}
-    \item{\code{seeds}}{Array of the instance seeds used in the experiments.}
-  }
+\describe{
+\item{\code{experiments}}{Experiments results.}
+\item{\code{seeds}}{Array of the instance seeds used in the experiments.}
+}
 }
 \description{
-\code{testConfigurations} executes the given configurations on the
-testing instances specified in the scenario.
+Execute the given configurations on the testing instances specified in the
+scenario
 }
 \details{
-A test instance set must be provided through \code{scenario$testInstances}.
+A test instance set must be provided through \code{scenario[["testInstances"]]}.
 }
 \seealso{
-\code{\link{testing.main}}
+\code{\link[=testing_fromlog]{testing_fromlog()}}
 }
 \author{
 Manuel López-Ibáñez

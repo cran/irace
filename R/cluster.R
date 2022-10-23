@@ -1,17 +1,11 @@
 ### Submit/wait for jobs in batch clusters.
 sge.job.finished <- function(jobid)
-{
-  return(system (paste0("qstat -j ", jobid),
-                 ignore.stdout = TRUE, ignore.stderr = TRUE,
-                 intern = FALSE, wait = TRUE))
-}
+  system (paste0("qstat -j ", jobid), ignore.stdout = TRUE, ignore.stderr = TRUE,
+          intern = FALSE, wait = TRUE)
 
 pbs.job.finished <- function(jobid)
-{
-  return(system (paste0("qstat ", jobid),
-                 ignore.stdout = TRUE, ignore.stderr = TRUE,
-                 intern = FALSE, wait = TRUE))
-}
+  system (paste0("qstat ", jobid), ignore.stdout = TRUE, ignore.stderr = TRUE,
+          intern = FALSE, wait = TRUE)
 
 torque.job.finished <- function(jobid)
 {
@@ -32,7 +26,7 @@ torque.job.finished <- function(jobid)
   # output. If the 5th token in the last line is a 'C', then the job has
   # terminated and its output files can be processed. Otherwise the job is not
   # completed (queued, running, exiting...)
-  return(any(grepl(paste0(jobid, ".*\\sC\\s"), output)))
+  any(grepl(paste0(jobid, ".*\\sC\\s"), output))
 }
 
 slurm.job.finished <- function(jobid)
@@ -44,7 +38,14 @@ slurm.job.finished <- function(jobid)
   if (!is.null(attr(output, "status"))) return(TRUE)
   # If may return zero, but the job is not in the system anymore because it
   # completed. This is different from the Torque case.
-  return (!any(grepl(paste0("\\s", jobid, "\\s"), output)))
+  !any(grepl(paste0("\\s", jobid, "\\s"), output))
+}
+
+htcondor.job.finished <- function(jobid)
+{
+  output <- suppressWarnings(system2("condor_q", jobid, stdout = TRUE, stderr = TRUE))
+  # Check if job is still in the queue, otherwise it is considered finished
+  !any(grepl(paste0("ID:\\s", jobid), output))
 }
 
 ## Launch a job with qsub and return its jobID. This function does not
@@ -52,29 +53,18 @@ slurm.job.finished <- function(jobid)
 ## invokes qsub and returns a jobID.
 target.runner.qsub <- function(experiment, scenario)
 {
-  debugLevel       <- scenario$debugLevel
-  configuration.id <- experiment$id.configuration
-  instance.id      <- experiment$id.instance
-  seed             <- experiment$seed
-  configuration    <- experiment$configuration
-  instance         <- experiment$instance
-  switches         <- experiment$switches
-  
-  targetRunner <- scenario$targetRunner
-  if (as.logical(file.access(targetRunner, mode = 1))) {
-    irace.error ("targetRunner ", shQuote(targetRunner), " cannot be found or is not executable!\n")
-  }
-
-  args <- paste(configuration.id, instance.id, seed, instance,
-                buildCommandLine(configuration, switches))
-  output <- runcommand(targetRunner, args, configuration.id, debugLevel)
+  debugLevel   <- scenario$debugLevel
+  res <- run_target_runner(experiment, scenario)
+  cmd <- res$cmd
+  output <- res$output
+  args <- res$args
 
   jobID <- NULL
   outputRaw <- output$output
   err.msg <- output$error
   if (is.null(err.msg)) {
     # We cannot use parse.output because that tries to convert to numeric.
-    if (scenario$debugLevel >= 2) { cat (outputRaw, sep = "\n") }
+    if (debugLevel >= 2) { cat (outputRaw, sep = "\n") }
     # Initialize output as raw. If it is empty stays like this.
     # strsplit crashes if outputRaw == character(0)
     if (length(outputRaw) > 0) {
@@ -85,8 +75,8 @@ target.runner.qsub <- function(experiment, scenario)
       jobID <- NULL
     }
   }
-  return(list(jobID = jobID, error = err.msg, outputRaw = outputRaw,
-              call = paste(targetRunner, args)))
+  list(jobID = jobID, error = err.msg, outputRaw = outputRaw,
+       call = paste(cmd, args))
 }
 
 cluster.lapply <- function(X, scenario, poll.time = 2)
@@ -99,6 +89,7 @@ cluster.lapply <- function(X, scenario, poll.time = 2)
            pbs = pbs.job.finished,
            torque = torque.job.finished,
            slurm = slurm.job.finished,
+           htcondor = htcondor.job.finished,
            irace.error ("Invalid value of scenario$batchmode = ", scenario$batchmode))
 
   # Parallel controls how many jobs we send at once. Some clusters have low
@@ -131,5 +122,5 @@ cluster.lapply <- function(X, scenario, poll.time = 2)
       }
     }
   }
-  return(output)
+  output
 }

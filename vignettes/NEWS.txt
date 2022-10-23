@@ -1,3 +1,160 @@
+# irace 3.5
+
+## New features and improvements
+
+ * Handling of dependent parameter domains: These should be specified in the
+   parameter domain definition and, for now, only numerical parameter can
+   define dependent domains. A numerical domain can be dependent on one bound,
+   e.g. `(1, "param1*2")`, where the dependent bound can include basic
+   arithmetic operators.          (Leslie Pérez Cáceres, Manuel López-Ibáñez)
+
+ * The package now provides an `ablation` executable (`ablation.exe` in
+   Windows) that makes easier to perform ablation analysis without having any R
+   knowledge.
+   
+ * The interface to functions `ablation()` and `plotAblation()` has been
+   simplified. The `ablation()` function now allows overriding scenario
+   settings. The `plotAblation()` function will not create the plot if the
+   ablation log does not contain a complete ablation.
+                                                    (Manuel López-Ibáñez)
+
+ * The argument `n.instances` of `ablation()` has been renamed to `n_instances` and it is now a factor that multiplies `scenario$firstTest`.
+                                                         (Manuel López-Ibáñez)
+ 
+ * New command-line option `--quiet` to run without producing any output
+   except errors (also available as a scenario option).
+                                                     (Manuel López-Ibáñez)
+
+ * New command-line option `--init` to initialize a scenario. (Deyao Chen)
+ 
+ * Added support for HTCondor cluster framework to `--batchmode`.
+                                                     (Filippo Bistaffa)
+
+ * `--check` now also check the contents of `configurationsFile` and runs
+   configurations provided via `initConfigurations`. 
+                          (Manuel López-Ibáñez, reported by Andreea Avramescu)
+
+ * New scenario options `targetRunnerLauncher` and `targetRunnerLauncherArgs`
+   to help in cases where the target-runner must be invoked via another
+   software with particular options (such as `python.exe` in Windows).
+                                                           (Manuel López-Ibáñez)
+
+ * New scenario option `minMeasurableTime`.
+                                                     (Manuel López-Ibáñez)
+ 
+ * An error is produced if a variable set in the scenario file is not known to
+   irace.  If your scenario file contains R code, then use variable names
+   beginning with a dot `'.'`, which will be ignored by irace.
+                                                    (Manuel López-Ibáñez)
+                                                    
+ * Plotting functions have been moved to the new package
+   [iraceplot](https://auto-optimization.github.io/iraceplot/).  In particular,
+   `configurationsBoxplot()` is replaced by `iraceplot::boxplot_training()` and
+   `iraceplot::boxplot_test()`; `parallelCoordinatesPlot()` is replaced by
+   `iraceplot::parallel_cat()` and `iraceplot::parallel_coord()`; and
+   `parameterFrequency()` is replaced by `iraceplot::sampling_frequency()`.
+                                     (Leslie Pérez Cáceres, Manuel López-Ibáñez)
+
+ * The user-guide now contains a detailed section on "Hyper-parameter
+   optimization of machine learning methods".
+                                                     (Manuel López-Ibáñez)
+
+ * When `testType="F-test"` and only two configurations remain, the elimination
+   test now uses the pseudo-median estimated by the Wilcoxon signed-rank test
+   to decide which configuration is the best one instead of comparing the
+   median difference.
+                                                       (Manuel López-Ibáñez)
+
+ * New functions `testing_fromlog()` and `testing_fromfile()` for independently
+   executing the testing phase. The function `testing.main()` was removed as it
+   is superseded by the new ones. 
+                                                      (Manuel López-Ibáñez)
+
+ * New function `read_logfile()` to easily read the log file produced by irace.
+                                                       (Manuel López-Ibáñez)
+
+ * New function `printParameters()` that prints a parameters R object as a valid input text.
+                                                       (Manuel López-Ibáñez)
+
+ * `irace2pyimp` moved to its own R package.
+                                                     (Manuel López-Ibáñez)
+
+ * Generating the file `irace.Rdata` may be disabled by setting `logFile=""`.
+                               (Manuel López-Ibáñez, reported by Johann Dreo)
+ 
+ * `path_rel2abs()` and `checkParameters()` are now exported so that other
+   packages may use them.
+                                                       (Manuel López-Ibáñez)
+ 
+ * `path_rel2abs()` also searches in system paths.     (Manuel López-Ibáñez)
+
+ * `readConfigurationsFile()` will now detect duplicated configurations and
+   error.                                         (Manuel López-Ibáñez)
+        
+ * The interface to functions `getFinalElites()`, `getConfigurationById()` and
+   `getConfigurationByIteration()` has been simplified.
+   
+ * The package provides a `irace.sindef` file that may be used for building a
+   standalone container of irace using Singularity. See the `README.md` file
+   for instructions.                                (Contributed by Johann Dreo)
+        
+ * New example `examples/target-runner-python/target-runner-python-win.bat`
+   contributed by Levi Ribeiro.
+
+ * New helper script in `bin/parallel-irace-slurm` to launch `irace` in [SLURM](https://slurm.schedmd.com/) computer clusters.
+                                                       (Manuel López-Ibáñez)
+
+ * Rename `scenario.update.paths()` to `scenario_update_paths()`. The old name is deprecated. (Manuel López-Ibáñez)
+
+## Fixes
+
+ * Correctly handle clear out-performance cases despite strong bi-modality.
+                                            (Reported by Nguyen Dang,
+                                            fixed by Manuel López-Ibáñez)
+
+ * Fix error when recovering from a parallel run on Windows.
+                            (Manuel López-Ibáñez, reported by Tarek Gamal)
+
+ * `testNbElites` now controls how many iteration elites are tested when
+   `testIterationElites=1`. This is the documented behavior in the user guide.
+                           (Manuel López-Ibáñez, reported by Marcelo de Souza)
+
+ * Fixes to the Matlab example. (Manuel López-Ibáñez)
+ 
+ * The default of `testType` is now set to `t-test` when capping is enabled. 
+                          (Manuel López-Ibáñez, reported by Jovana Radjenovic)
+
+ * Fix various issues in the user guide.
+                          (Manuel López-Ibáñez, reported by Jovana Radjenovic)
+
+ * Remove duplicated elites.
+                          (Manuel López-Ibáñez, reported by Federico Naldini)
+                                                        
+ * Fix (#7): warnings with partial matched parameters.
+                                  (Manuel López-Ibáñez, reported by Marc Becker)
+                               
+ * Fix (#10): wrong assert with `elitist=0`.             (Manuel López-Ibáñez)
+
+ * Fix (#12): irace can be run with [FastR](https://www.graalvm.org/22.1/docs/getting-started/#run-r).
+ 
+ * Fix (#13): Maximum number configurations immediately rejected reached.
+                                                           (Manuel López-Ibáñez)
+
+ * Fix: when setting the scenario file in the command-line, `scenarioFile` was
+   not set correctly. The correct scenario was used, however, the debug output
+   and the value stored in the log / recovery file was wrong.
+                         (Manuel López-Ibáñez, reported by Richard Schoonhoven)
+
+ * With `sampleInstances = FALSE`, elitist irace does not change the order of
+   instances already seen.  However, if you want to make sure that the order of
+   the instances is enforced, you also need to set `elitistNewInstances=0`.
+  
+ * The function `irace.usage()` was removed. It was not really useful for R
+   users as the same result can be obtained by calling
+   `irace.cmdline("--help")`.
+                                                         (Manuel López-Ibáñez)
+ 
+ 
 # irace 3.4.1  (31/03/2020)
 
  * `NEWS` converted to markdown.
@@ -21,7 +178,7 @@
    versions.
                                                    (Manuel López-Ibáñez)
  * Fix invalid assert with ordered parameters:        (Leslie Pérez Cáceres)
- 
+
     ```
     value >= 1L && value <= length(possibleValues) is not TRUE
     ```
@@ -30,10 +187,10 @@
    of a script. On Windows, `irace.exe` replaces `irace.bat`
                                                    (Manuel López-Ibáñez)
 
- * inst/examples/Spear contains the Spear (SAT solver) configuration scenario.
+ * `inst/examples/Spear` contains the Spear (SAT solver) configuration scenario.
                                                    (Manuel López-Ibáñez)
 
- * Fixed bug when reporting minimum maxTime required.
+ * Fixed bug when reporting minimum `maxTime` required.
                                            (Reported by Luciana Salete Buriol,
                                             fixed by Manuel López-Ibáñez)
 
@@ -42,7 +199,7 @@
     ```R
     all(apply(!is.na(elite.data$experiments), 1, any)) is not TRUE
     ```
-   
+
      (Reported by Maxim Buzdalov, fixed by Manuel López-Ibáñez)
 
 
@@ -61,7 +218,7 @@
    satisfy `digits` (up to `digits=15`).
                                                         (Manuel López-Ibáñez)
 
- * It is possible to specify boundMax without capping.
+ * It is possible to specify `boundMax` without capping.
                                     (Leslie Pérez Cáceres, Manuel López-Ibáñez)
 
  * `irace --check` will exit with code 1 if the check is unsuccessful
@@ -69,7 +226,7 @@
 
  * Print where irace is installed with `--help`.          (Manuel López-Ibáñez)
 
- * irace will now complain if the output of target-runner or target-evaluator
+ * irace will now complain if the output of `target-runner` or `target-evaluator`
    contains extra lines even if the first line of output is correct. This is to
    avoid parsing the wrong output. Unfortunately, this may break setups that
    relied on this behavior. The solution is to only print the output that irace
@@ -82,8 +239,8 @@
 
  * New option `aclib=` (`--aclib 1`) enables compatibility with the
    GenericWrapper4AC (https://github.com/automl/GenericWrapper4AC/) used by
-   AClib (http://aclib.net/). This is EXPERIMENTAL.
-   `--aclib 1` also sets digits to 15 for compatibility with AClib defaults.
+   AClib (http://aclib.net/). This is EXPERIMENTAL. `--aclib 1` also sets
+   digits to 15 for compatibility with AClib defaults.
                                                          (Manuel López-Ibáñez)
 
  * Fix printing of output when capping is enabled.
@@ -108,7 +265,7 @@
  * Fix bug in `checkTargetFiles()` (`--check`) with capping.
                                                         (Leslie Pérez Cáceres)
 
- * Clarify a few errors/warnings when `maxTime` > 0.
+ * Clarify a few errors/warnings when `maxTime > 0`.
                      (Manuel López-Ibáñez, suggested by Haroldo Gambini Santos)
 
 
@@ -191,20 +348,20 @@
    evaluation noticeably faster.
                                                       (Manuel López-Ibáñez)
 
- * The argument 'experiment' passed to the R function targetRunner does not
-   contain anymore an element 'extra.params'. Similarly, the 'scenario'
-   structure does not contain anymore the elements 'instances.extra.params' and
-   'testInstances.extra.params'. Any instance-specific parameters values now
+ * The argument `'experiment'` passed to the R function `targetRunner` does not
+   contain anymore an element `'extra.params'`. Similarly, the `'scenario'`
+   structure does not contain anymore the elements `'instances.extra.params'` and
+   `'testInstances.extra.params'`. Any instance-specific parameters values now
    form part of the character string that defines an instance and it is up to
-   the user-defined targetRunner to parse them appropriately. These changes
+   the user-defined `targetRunner` to parse them appropriately. These changes
    make no difference when targetRunner is an external script, or when
    instances and instance-specific parameter values are read from a file.
                                                         (Manuel López-Ibáñez)
 
 # irace 2.3
 
- * Fix bug that will cause iraceResults$experimentLog to count calls to
-   targetEvaluator as experiments, even if no call to targetRunner was
+ * Fix bug that will cause `iraceResults$experimentLog` to count calls to
+   `targetEvaluator` as experiments, even if no call to `targetRunner` was
    performed. This does not affect the computation of the budget consumed and,
    thus, it does not affect the termination criteria of irace. The bug triggers
    an assertion that terminates irace, thus no run that was successful with
@@ -222,8 +379,8 @@
 
  * The option `--sge-cluster` (`sgeCluster`) was removed and replaced by
    `--batchmode` (`batchmode`). It is now the responsibility of the target-runner
-   to parse the output of the batch job submission command (e.g., qsub or
-   squeue), and return just the job ID. Values supported are: "sge", "torque",
+   to parse the output of the batch job submission command (e.g., `qsub` or
+   `squeue`), and return just the job ID. Values supported are: "sge", "torque",
    "pbs" and "slurm".                                     (Manuel López-Ibáñez)
 
  * The option `--parallel` can now be combined with `--batchmode` to limit the
@@ -240,7 +397,7 @@
     ```R
     eval.parent(source("scenario-common.txt", chdir = TRUE, local = TRUE))
     ```
-   
+
      This feature is VERY experimental and the syntax is likely to change in the
      future.                                             (Manuel López-Ibáñez)
 
@@ -257,20 +414,21 @@
    (Manuel López-Ibáñez, Leslie Pérez Cáceres)
 
  * Update manual and vignette with details about the expected arguments and
-   return value of targetRunner and targetEvaluator. (Manuel López-Ibáñez)
+   return value of `targetRunner` and `targetEvaluator`. (Manuel López-Ibáñez)
 
  * Many updates to the User Guide vignette. (Manuel López-Ibáñez)
 
- * Fix \dontrun example in irace-package.Rd (Manuel López-Ibáñez)
+ * Fix `\dontrun` example in `irace-package.Rd` (Manuel López-Ibáñez)
 
  * Fix bug: If testInstances contains duplicates, results of testing are not
-   correctly saved in iraceResults$testing$experiments nor reported correctly
-   at the end of a run. Now unique IDs of the form 1t, 2t, ... are used for
+   correctly saved in `iraceResults$testing$experiments` nor reported correctly
+   at the end of a run. Now unique IDs of the form `1t, 2t, ...` are used for
    each testing instance. These IDs are used for the rownames of
-   iraceResults$testing$experiments and the names of the scenario$testInstances
-   and iraceResults$testing$seeds vectors.  (Manuel López-Ibáñez)
+   `iraceResults$testing$experiments` and the names of the
+   `scenario$testInstances`
+   and `iraceResults$testing$seeds` vectors.  (Manuel López-Ibáñez)
 
- * Fix bug where irace keeps retrying the target-runner call even if it
+ * Fix bug where irace keeps retrying the `target-runner` call even if it
    succeeds. (Manuel López-Ibáñez)
 
  * New command-line parameter
@@ -281,7 +439,7 @@
    instances defined by the scenario. Useful if you decide on the testing
    instances only after running irace.    (Manuel López-Ibáñez)
 
- * Bugfix: When using maxTime != 0, the number of experiments performed may be
+ * Bugfix: When using `maxTime != 0`, the number of experiments performed may be
    miscounted in some cases.              (Manuel López-Ibáñez)
 
 
@@ -305,10 +463,10 @@
                         comparisons),
    - `t-test-holm` (t-test with Holm's correction for multiple comparisons)
 
- * MPI does not create log files with --debug-level 0.
+ * MPI does not create log files with `--debug-level 0`.
    (Manuel López-Ibáñez)
 
- * For simplicity, the parallel-irace-* scripts do not use an auxiliary
+ * For simplicity, the `parallel-irace-*` scripts do not use an auxiliary
    `tune-main` script.  For customizing them, make a copy and edit them
    directly.
    (Manuel López-Ibáñez)
@@ -317,7 +475,7 @@
 ```
 --target-runner-retries : Retry target-runner this many times in case of error.
 ```
-                                                   
+
 
  * We print diversity measures after evaluating on each instance:
    (Leslie Pérez Cáceres)
@@ -380,10 +538,10 @@
 
  * The best configurations found, either at the end or at each iteration of an
    irace run, can now be applied to a set of test instances different from the
-   training instances. See options testInstanceDir, testInstanceFile,
-   testNbElites, and testIterationElites. (Leslie Pérez Cáceres, Manuel López-Ibáñez)
+   training instances. See options `testInstanceDir`, `testInstanceFile`,
+   `testNbElites`, and `testIterationElites`. (Leslie Pérez Cáceres, Manuel López-Ibáñez)
 
- * The R interfaces of hookRun, hookEvaluate and hookRunParallel have changed.
+ * The R interfaces of `hookRun`, `hookEvaluate` and `hookRunParallel` have changed.
    See `help(hook.run.default)` and `help(hook.evaluate.default)` for examples of
    the new interfaces.
 
@@ -391,7 +549,7 @@
    IDs, and numbers are printed in a more human-readable format.
    (Leslie Pérez Cáceres, Manuel López-Ibáñez)
 
- * Reduce memory use for very large values of maxExperiments.
+ * Reduce memory use for very large values of `maxExperiments`.
    (Manuel López-Ibáñez, thanks to Federico Caselli for identifying the issue)
 
  * New option `--load-balancing` (`loadBalancing`) for disabling load-balancing
@@ -418,13 +576,12 @@
 
  * New configuration options, mainly for R users:
 
-   - hookRunParallel: Optional R function to provide custom
-     parallelization of hook.run.
+    - `hookRunParallel`: Optional R function to provide custom
+      parallelization of `hook.run`.
 
-   - hookRunData: Optional data passed to hookRun. This is ignored by
-     the default hookRun function, but it may be used by custom hookRun R
-     functions to pass persistent data around.
-   (Manuel López-Ibáñez)
+    - `hookRunData`: Optional data passed to `hookRun`. This is ignored by the
+      default `hookRun` function, but it may be used by custom `hookRun` R
+      functions to pass persistent data around.  (Manuel López-Ibáñez)
 
 # irace 1.05
 
@@ -449,7 +606,7 @@
    See `--forbidden-file` and `inst/templates/forbidden.tmpl`.
    (Manuel López-Ibáñez)
 
- * New option `--recovery-file` (recoveryFile) allows resuming a
+ * New option `--recovery-file` (`recoveryFile`) allows resuming a
    previous irace run. (Leslie Pérez Cáceres)
 
  * The confidence level for the elimination test is now
@@ -470,7 +627,7 @@
  * Print elapsed time for calls to hook-run if `debugLevel >=1`.
    (Manuel López-Ibáñez)
 
- * `examples/hook-run-python/hook-run`: A multi-purpose hook-run written
+ * `examples/hook-run-python/hook-run`: A multi-purpose `hook-run` written
    in Python. (Franco Mascia)
 
  * Parallel mode in an SGE cluster (`--sge-cluster`) is more
@@ -500,13 +657,13 @@
 
  * More concise output.
 
- * The parameters expName and expDescription are now useless and they
+ * The parameters `expName` and `expDescription` are now useless and they
    were removed.
 
  * Faster computation of similar candidates (Jeremie Dubois-Lacoste
    and Leslie Pérez Cáceres).
 
- * Fix bug when saving instances in tunerResults$experiments.
+ * Fix bug when saving instances in `tunerResults$experiments`.
 
  * `irace.cmdline ("--help")` does not try to quit R anymore.
 

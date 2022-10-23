@@ -30,9 +30,8 @@
 #' @examples
 #' \dontrun{
 #'   # Execute the postselection automatically after irace
+#'   scenario <- readScenario(filename="scenario.txt")
 #'   parameters <- readParameters("parameters.txt")
-#'   scenario <- readScenario(filename="scenario.txt", 
-#'                            scenario=defaultScenario())
 #'   # Use 10% of the total budget
 #'   scenario$postselection <- 0.1
 #'   irace(scenario=scenario, parameters=parameters)
@@ -42,8 +41,6 @@
 #'
 #' @author Leslie Pérez Cáceres
 #' @export
-# This function executes a post selection race
-# elites: test all elites
 psRace <- function(iraceLogFile=NULL, iraceResults=NULL, conf.ids=NULL,
                    postselection=NULL, max.experiments=NULL, elites=FALSE, seed=1234567)
 {
@@ -51,13 +48,13 @@ psRace <- function(iraceLogFile=NULL, iraceResults=NULL, conf.ids=NULL,
   if (is.null(iraceLogFile) && is.null(iraceResults)) 
     irace.error("You must provide a Rdata file or an iraceResults object.")
     
-  irace.note ("Stating post-selection:\n# Seed:", seed, "\n")
+  irace.note ("Starting post-selection:\n# Seed:", seed, "\n")
   if (!is.null(iraceLogFile))
     cat("# Log file:",iraceLogFile,"\n")
   
   # Load the data of the log file
   if (!is.null(iraceLogFile)) 
-    load(iraceLogFile)
+    iraceResults <- read_logfile(iraceLogFile)
  
   parameters <- iraceResults$parameters
   scenario   <- iraceResults$scenario
@@ -66,7 +63,7 @@ psRace <- function(iraceLogFile=NULL, iraceResults=NULL, conf.ids=NULL,
   if (!is.null(conf.ids)) {
     if (!all(conf.ids %in% iraceResults$allConfigurations$.ID.)) 
       irace.error("Configuration ids provided", conf.ids,"cannot be found in the configurations.")
-    configurations <- iraceResults$allConfigurations[iraceResults$allConfigurations$.ID.%in% conf.ids,,drop=FALSE] 	
+    configurations <- iraceResults$allConfigurations[iraceResults$allConfigurations$.ID.%in% conf.ids,,drop=FALSE]
   } else {
     which.elites <- if (elites) unlist(iraceResults$allElites) else iraceResults$iterationElites
     which.elites <- unique(which.elites)
@@ -113,7 +110,8 @@ psRace <- function(iraceLogFile=NULL, iraceResults=NULL, conf.ids=NULL,
                       elitistNewInstances = 0)
   experiments <- race.output$experiments
   
-  elite.configurations <- extractElites(race.output$configurations,
+  elite.configurations <- extractElites(scenario, parameters,
+                                        race.output$configurations,
                                         min(race.output$nbAlive, 1))
   irace.note("Elite configurations (first number is the configuration ID;",
                " listed from best to worst according to the ",

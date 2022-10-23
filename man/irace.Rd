@@ -9,7 +9,7 @@ irace(scenario, parameters)
 \arguments{
 \item{scenario}{(\code{list()}) \cr Data structure containing \pkg{irace}
 settings. The data structure has to be the one returned by the function
-\code{\link{defaultScenario}} or \code{\link{readScenario}}.}
+\code{\link[=defaultScenario]{defaultScenario()}} or \code{\link[=readScenario]{readScenario()}}.}
 
 \item{parameters}{(\code{list()}) \cr Data structure containing the parameter
 space definition. The data structure has to similar to the one returned by the
@@ -22,7 +22,7 @@ A data frame with the set of best algorithm configurations found by \pkg{irace}.
 The data frame has the following columns:
 \itemize{
 \item \code{.ID.} : Internal id of the candidate configuration.
-\item \code{Parameter names} : One column per parameter name in \code{parameters}.
+\item \verb{Parameter names} : One column per parameter name in \code{parameters}.
 \item \code{.PARENT.} : Internal id of the parent candidate configuration.
 }
 
@@ -84,35 +84,36 @@ each experiment.}
 }
 }
 \description{
-\code{irace} implements iterated Race. It receives some parameters to be tuned 
-  and returns the best configurations found, namely, the elite configurations 
-  obtained from the last iterations (and sorted by rank).
+\code{irace} implements iterated Race. It receives some parameters to be tuned
+and returns the best configurations found, namely, the elite configurations
+obtained from the last iterations (and sorted by rank).
 }
 \details{
-The function \code{irace} executes the tuning procedure using 
- the information provided in \code{scenario} and \code{parameters}. Initially it checks 
- the correctness of \code{scenario} and recovers a previous execution if 
- \code{scenario$recoveryFile} is set. A R data file log of the execution is created 
- in \code{scenario$logFile}.
+The function \code{irace} executes the tuning procedure using
+the information provided in \code{scenario} and \code{parameters}. Initially it checks
+the correctness of \code{scenario} and recovers a previous execution if
+\code{scenario$recoveryFile} is set. A R data file log of the execution is created
+in \code{scenario$logFile}.
 }
 \examples{
 \dontrun{
 parameters <- readParameters("parameters.txt")
-scenario <- readScenario(filename = "scenario.txt",
-                         scenario = defaultScenario())
+scenario <- readScenario(filename = "scenario.txt")
 irace(scenario = scenario, parameters = parameters)
 }
 
 }
 \seealso{
 \describe{
- \item{\code{\link{irace.main}}}{a higher-level command-line interface to \code{irace}.}
- \item{\code{\link{readScenario}}}{for reading a configuration scenario from a file.}
- \item{\code{\link{readParameters}}}{read the target algorithm parameters from a file.}
- \item{\code{\link{defaultScenario}}}{returns the default scenario settings of \pkg{irace}.}
- \item{\code{\link{checkScenario}}}{to check that the scenario is valid.}
+\item{\code{\link[=irace.main]{irace.main()}}}{a higher-level interface to \code{irace}.}
+\item{\code{\link[=irace.cmdline]{irace.cmdline()}}}{a command-line interface to \code{irace}.}
+\item{\code{\link[=readScenario]{readScenario()}}}{for reading a configuration scenario from a file.}
+\item{\code{\link[=readParameters]{readParameters()}}}{read the target algorithm parameters from a file.}
+\item{\code{\link[=defaultScenario]{defaultScenario()}}}{returns the default scenario settings of \pkg{irace}.}
+\item{\code{\link[=checkScenario]{checkScenario()}}}{to check that the scenario is valid.}
 }
 }
 \author{
 Manuel López-Ibáñez and Jérémie Dubois-Lacoste
 }
+\concept{running}

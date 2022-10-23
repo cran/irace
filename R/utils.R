@@ -10,8 +10,6 @@ irace.reload.debug <- function(package = "irace")
           quote(utils::dump.frames("iracedump", TRUE)))
 }
 
-.irace.prefix <- "== irace == "
-
 irace.print.memUsed <- function(objects)
 {
   object.size.kb <- function (name, envir) {
@@ -42,7 +40,8 @@ irace.print.memUsed <- function(objects)
 # cannot help the user to understand why the program failed.
 irace.warning <- function(...)
 {
-  cat(sep="", "WARNING: ", ..., "\n")
+  if (getOption(".irace.quiet", default=FALSE)) return()
+  cat(sep="", .msg.prefix, "WARNING: ", ..., "\n")
 }
 
 # Print a user-level fatal error message, when the calling context
@@ -53,11 +52,14 @@ irace.error <- function(...)
   # value allowed up to R 3.0.2
   op <- options(warning.length = 8170)
   on.exit(options(op))
-  stop (.irace.prefix, ..., call. = FALSE)
+  stop (.msg.prefix, ..., call. = FALSE)
 }
 
-## utils::dump.frames is broken and cannot be used with bquote, so we need a wrapper.
-## See help(dump.frames)
+## utils::dump.frames is broken and cannot be used with bquote, so we need a wrapper. When irace crashes, it generates a file "iracedump.rda". To debug the crash use:
+## R> load("iracedump.rda")
+## R> debugger(iracedump)
+##
+## See help(dump.frames) for more details.
 irace.dump.frames <- function()
 {
   execDir <- getOption(".irace.execdir")
@@ -80,7 +82,7 @@ irace.internal.error <- function(...)
 {
   .irace.bug.report <-
     paste0("An unexpected condition occurred. ",
-           "Please report this bug to the authors of the irace package <http://iridia.ulb.ac.be/irace>")
+           "Please report this bug to the authors of the irace package <https://github.com/MLopez-Ibanez/irace/issues>")
 
   op <- options(warning.length = 8170,
                 error = if (interactive()) utils::recover
@@ -89,9 +91,9 @@ irace.internal.error <- function(...)
   # 6 to not show anything below irace.assert()
   bt <- capture.output(traceback(6))
   warnings()
-  stop (.irace.prefix, paste0(..., collapse = "\n"),
+  stop (.msg.prefix, paste0(..., collapse = "\n"),
         paste0(bt, collapse= "\n"), "\n",
-        .irace.prefix, "\n", .irace.bug.report, call. = FALSE)
+        .msg.prefix, "\n", .irace.bug.report, call. = FALSE)
   invisible()
 }
 
@@ -104,7 +106,7 @@ irace.assert <- function(exp, eval.after = NULL)
   msg <- paste0(deparse(mc), " is not TRUE\n")
   if (!is.null(eval.after)) {
     msg.after <- eval.parent(capture.output(eval.after))
-    msg <- paste0(msg, "\n", msg.after)
+    msg <- paste0(msg, "\n", paste0(msg.after, collapse="\n"))
   }
   irace.internal.error(msg)
   invisible()
@@ -112,6 +114,9 @@ irace.assert <- function(exp, eval.after = NULL)
 
 irace.note <- function(...)
 {
+  # FIXME: If this was a function within an irace object, we could replace it
+  # when using quiet.
+  if (getOption(".irace.quiet", default=FALSE)) return()
   cat ("# ", format(Sys.time(), usetz=TRUE), ": ",
        paste0(..., collapse = ""), sep = "")
 }
@@ -127,7 +132,7 @@ file.check <- function (file, executable = FALSE, readable = executable,
   if (!is.character(file) || is.null.or.empty(file)) {
     irace.error (text, " ", shQuote(file), " is not a vaild filename")
   }
-  file <- path.rel2abs(file)
+  file <- path_rel2abs(file)
   ## The above should remove the trailing separator if present for windows OS
   ## compatibility, except when we have just C:/, where the trailing separator
   ## must remain.
@@ -204,6 +209,11 @@ is.null.or.empty <- function(x)
   (length(x) == 0) || (length(x) == 1 && !suppressWarnings(is.na(x)) && is.character(x) && x == "")
 }
 
+is_null_or_empty_or_na <- function(x)
+{
+  (length(x) == 0) || is.na.nowarn(x) || (length(x) == 1 && !suppressWarnings(is.na(x)) && is.character(x) && x == "")
+}
+
 is.function.name <- function(FUN)
 {
   # FIXME: Is there a simpler way to do this check?
@@ -244,117 +254,6 @@ strcat <- function(...)
   do.call(paste0, args = list(..., collapse = NULL))
 }
 
-# Function to convert a relative to an absolute path. CWD is the
-# working directory to complete relative paths. It tries really hard
-# to create canonical paths.
-path.rel2abs <- function (path, cwd = getwd())
-{
-  # Keep doing gsub as long as x keeps changing.
-  gsub.all <- function(pattern, repl, x, ...) {
-    repeat {
-      newx <- gsub(pattern, repl, x, ...)
-      if (newx == x) return(newx)
-      x <- newx
-    }
-  }
-  irace.normalize.path <- function(path) {
-    return(suppressWarnings(normalizePath(path, winslash = "/", mustWork = NA)))
-  }
-    
-  if (is.null.or.na(path)) {
-    return (NULL)
-  } else if (path == "") {
-    return ("")
-  }
-  # Using .Platform$file.sep is too fragile. Better just use "/" everywhere.
-  s <- "/"
-
-  # Possibly expand ~/path to /home/user/path.
-  path <- path.expand(path)
-  # Remove winslashes if given.
-  path <- gsub("\\", s, path, fixed = TRUE)
-
-  # Detect a Windows drive
-  windrive.regex <- "^[A-Za-z]:"
-  windrive <- ""
-  if (grepl(paste0(windrive.regex, "($|", s, ")"), path)) {
-    m <- regexpr(windrive.regex, path)
-    windrive <- regmatches(path, m)
-    path <- sub(windrive.regex, "", path)
-  }
-
-  
-  # Change "/./" to "/" to get a canonical form 
-  path <- gsub.all(paste0(s, ".", s), s, path, fixed = TRUE)
-  # Change "//" to "/" to get a canonical form 
-  path <- gsub(paste0(s, s, "+"), s, path)
-  # Change "/.$" to "/" to get a canonical form 
-  path <- sub(paste0(s, "\\.$"), s, path)
-  # Drop final "/"
-  path <- sub(paste0(s, "$"), "", path)
-  if (path == "") path <- s
-  
-  # Prefix the current cwd to the path if it doesn't start with
-  # / \\ or whatever separator.
-  if (path == "." || !grepl(paste0("^",s), path)) {
-    # There is no need to normalize cwd if it was returned by getwd()
-    if (!missing(cwd)) {
-      # Recurse to get absolute cwd
-      cwd <- path.rel2abs(cwd)
-    }
-
-    # Speed-up the most common cases.
-    # If it is just "."
-    if (path == ".") {
-      return (irace.normalize.path(cwd))
-    }
-    # Remove "./" from the start of path.
-    path <- sub(paste0("^\\.", s), "", path)
-    # Make it absolute but avoid doubling s
-    if (substring(cwd, nchar(cwd)) == s) path <- paste0(cwd, path)
-    else path <- paste0(cwd, s, path)
-    # If it is just a path without ".." inside
-    if (!grepl(paste0(s,"\\.\\."), path)) {
-      return (irace.normalize.path(path))
-    }
-    # Detect a Windows drive
-    if (grepl(paste0(windrive.regex, "($|", s, ")"), path)) {
-      m <- regexpr(windrive.regex, path)
-      windrive <- regmatches(path, m)
-      path <- sub(windrive.regex, "", path)
-    }
-  }
-  # else
-
-  # Change "/x/.." to "/" to get a canonical form 
-  prevdir.regex <- paste0(s, "[^", s,"]+", s, "\\.\\.")
-  repeat {
-    # We need to do it one by one so "a/b/c/../../../" is not converted to "a/b/../"
-    tmp <- sub(paste0(prevdir.regex, s), s, path)
-    if (tmp == path) break
-    path <- tmp
-  }
-  # Handle "/something/..$" to "/" that is, when ".." is the last thing in the path.
-  path <- sub(paste0(prevdir.regex, "$"), s, path)
-
-  # Handle "^/../../.." to "/" that is, going up at the root just returns the root.
-  repeat {
-    # We need to do it one by one so "a/b/c/../../../" is not converted to "a/b/../"
-    tmp <- sub(paste0("^", s, "\\.\\.", s), s, path)
-    if (tmp == path) break
-    path <- tmp
-  }
-  # Handle "^/..$" to "/" that is, when ".." is the last thing in the path.
-  path <- sub(paste0("^", s, "\\.\\.$"), s, path)
-
-  # Add back Windows drive, if any.
-  path <- paste0(windrive, path)
-
-  # We use normalizePath, which will further simplify the path if
-  # the path exists.
-  return (irace.normalize.path(path))
-}
-
 #' Update filesystem paths of a scenario consistently.
 #'
 #' This function should be used to change the filesystem paths stored in a
@@ -362,88 +261,81 @@ path.rel2abs <- function (path, cwd = getwd())
 #'
 #' @template arg_scenario
 #' @param from character string containing a regular expression (or character
-#'   string for \code{fixed = TRUE}) to be matched.
-#' @param to the replacement string.character string. For \code{fixed = FALSE}
-#'   this can include backreferences \code{"\1"} to \code{"\9"} to
-#'   parenthesized subexpressions of \code{from}.
-#' @param fixed logical.  If \code{TRUE}, \code{from} is a string to be matched
+#'   string for `fixed = TRUE`) to be matched.
+#' @param to the replacement string.character string. For `fixed = FALSE`
+#'   this can include backreferences `"\1"` to `"\9"` to
+#'   parenthesized subexpressions of `from`.
+#' @param fixed logical.  If `TRUE`, `from` is a string to be matched
 #'   as is.
 #' @return The updated scenario
 #' @examples
 #' \dontrun{
 #' scenario <- readScenario(filename = "scenario.txt")
-#' scenario <- scenario.update.paths(scenario, from = "/home/manuel/", to = "/home/leslie")
+#' scenario <- scenario_update_paths(scenario, from = "/home/manuel/", to = "/home/leslie")
 #' }
-#' @seealso \code{\link[base]{grep}}
+#' @seealso [base::grep()]
 #' @export
-scenario.update.paths <- function(scenario, from, to, fixed = TRUE)
+scenario_update_paths <- function(scenario, from, to, fixed = TRUE)
 {
   pathParams <- .irace.params.def[.irace.params.def[, "type"] == "p", "name"]
   # Only consider the ones that actually appear in scenario.
   pathParams <- intersect(pathParams, names(scenario))
   scenario[pathParams] <- lapply(scenario[pathParams], sub, pattern = from, replacement = to, fixed = fixed)
-  return(scenario)
+  scenario
+}
+
+#' @rdname scenario_update_paths
+#' @export
+scenario.update.paths <- function(scenario, from, to, fixed = TRUE)
+{
+  .Deprecated("scenario_update_paths")
+  scenario_update_paths(scenario=scenario, from=from, to=to, fixed=fixed)
 }
 
 # This function is used to trim potentially large strings for printing, since
 # the maximum error/warning length is 8170 characters (R 3.0.2)
 strlimit <- function(str, limit = 5000)
 {
-  if (nchar(str) > limit) {
-    return(paste0(substr(str, 1, limit - 3), "..."))
-  }
+  if (nchar(str) > limit) return(paste0(substr(str, 1, limit - 3), "..."))
   return(str)
 }
 
 test.type.order.str <- function(test.type)
 {
-  return (switch(test.type,
-                 friedman = "sum of ranks",
-                 t.none =, # Fall-throught
-                 t.holm =, # Fall-throught
-                 t.bonferroni = "mean value",
-                 irace.internal.error ("test.type.order.str() Invalid value '",
-                                       test.type, "' of test.type")))
+  switch(test.type,
+         friedman = "sum of ranks",
+         t.none =, # Fall-throught
+         t.holm =, # Fall-throught
+         t.bonferroni = "mean value",
+         irace.internal.error ("test.type.order.str() Invalid value '",
+                               test.type, "' of test.type"))
 }
 
 trim.leading <- function(str)
-{
-  return (sub('^[[:space:]]+', '', str)) ## white space, POSIX-style
-}
+  sub('^[[:space:]]+', '', str) ## white space, POSIX-style
+
 trim.trailing <- function(str)
-{
-  return (sub('[[:space:]]+$', '', str)) ## white space, POSIX-style
-}
+  sub('[[:space:]]+$', '', str) ## white space, POSIX-style
+
 # remove leading and trailing white space characters
-trim <- function(str)
-{
-  return (trim.trailing(trim.leading(str)))
-}
+trim <- function(str) trim.trailing(trim.leading(str))
 
 isFixed <- function (paramName, parameters)
-{
-  return (as.logical(parameters$isFixed[paramName]))
-}
+  as.logical(parameters$isFixed[paramName])
 
 paramDomain <- function (paramName, parameters)
-{
-  return (parameters$domain[[paramName]])
-}
+  parameters$domain[[paramName]]
 
 paramLowerBound <- function (paramName, parameters)
-{
-  return (as.numeric(parameters$domain[[paramName]][1]))
-}
+  as.numeric(parameters$domain[[paramName]][1])
 
 paramUpperBound <- function (paramName, parameters)
-{
-  return (as.numeric(parameters$domain[[paramName]][2]))
-}
+  as.numeric(parameters$domain[[paramName]][2])
 
-nbParam <- function (parameters)
-{
-  return (length(parameters$names))
-}
+
+inNumericDomain <- function(value, domain) (value >= domain[1] && value <= domain[2])
+
+nbParam <- function (parameters) length(parameters$names)
 
 ## This function takes two matrices x and y and merges them such that the
 ## resulting matrix z has:
@@ -481,18 +373,34 @@ merge.matrix <- function(x, y)
 # Input: the configurations with the .RANK. field filled.
 #        the number of elites wished
 # Output: nbElites elites, sorted by ranks, with the weights assigned.
-extractElites <- function(configurations, nbElites)
+extractElites <- function(scenario, parameters, configurations, nbElites)
 {
+  # Keep only alive configurations.
+  ## FIXME: Shouldn't this be done by the caller?
+  configurations <- configurations[configurations$.ALIVE., , drop = FALSE]
   if (nbElites < 1) {
-    ## FIXME: Should this be an error or should we handle it in some other way?
-    irace.error("nbElites is lower or equal to zero.") 
+    irace.internal.error("nbElites is lower or equal to zero.") 
   }
+  # Remove duplicated. Duplicated configurations may be generated, however, it
+  # is too slow to check at generation time. Nevertheless, we can check now
+  # since we typically have very few elites.
+  ## FIXME: Use a variant of similarConfigurations.
+  configurations <- configurations[order(configurations$.ID.), , drop = FALSE]
+  before <- nrow(configurations)
+  configurations <- configurations[!duplicated(removeConfigurationsMetaData(configurations)),
+                                 , drop = FALSE]
+  after <- nrow(configurations)
+  if (after < before && scenario$debugLevel >= 1) {
+    irace.note("Dropped ", before - after, " duplicated elites\n")
+  }
+
+  nbElites <- min(after, nbElites)
   # Sort by rank.
-  elites <- configurations[order(as.numeric(configurations$.RANK.)), , drop = FALSE]
+  elites <- configurations[order(configurations$.RANK.), , drop = FALSE]
   elites <- elites[1:nbElites, , drop = FALSE]
   elites[, ".WEIGHT."] <- ((nbElites - (1:nbElites) + 1)
                            / (nbElites * (nbElites + 1) / 2))
-  return (elites)
+  elites
 }
 
 #' removeConfigurationsMetaData
@@ -508,8 +416,8 @@ extractElites <- function(configurations, nbElites)
 #' @return The same matrix without the "metadata".
 #'    
 #' @seealso 
-#'   \code{\link{configurations.print.command}} to print the configurations as command lines.
-#'   \code{\link{configurations.print}} to print the configurations as a data frame.
+#'   [configurations.print.command()] to print the configurations as command lines.
+#'   [configurations.print()] to print the configurations as a data frame.
 #' 
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
 #' @export
@@ -517,8 +425,8 @@ extractElites <- function(configurations, nbElites)
 removeConfigurationsMetaData <- function(configurations)
 {
   # Meta-data colnames begin with "."
-  return (configurations[, grep("^\\.", colnames(configurations), invert = TRUE),
-                     drop = FALSE])
+  configurations[, grep("^\\.", colnames(configurations), invert = TRUE),
+                     drop = FALSE]
 }
 
 #' Print configurations as a data frame
@@ -531,7 +439,7 @@ removeConfigurationsMetaData <- function(configurations)
 #' @return None.
 #'
 #' @seealso
-#'  \code{\link{configurations.print.command}} to print the configurations as command-line strings.
+#'  [configurations.print.command()] to print the configurations as command-line strings.
 #' 
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
 #' @export
@@ -555,7 +463,7 @@ configurations.print <- function(configurations, metadata = FALSE)
 #' @return None.
 #'
 #' @seealso
-#'  \code{\link{configurations.print}} to print the configurations as a data frame.
+#'  [configurations.print()] to print the configurations as a data frame.
 #' 
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
 #' @export
@@ -749,7 +657,9 @@ runcommand <- function(command, args, id, debugLevel)
                 formatC(proc.time()["elapsed"] - elapsed,
                         format = "f", digits = 2), "\n")
   }
-  return(list(output = output, error = NULL))
+  # TODO: Return elapsed time so that we can report at the end the total
+  # elapsed time taken by irace vs the time taken by the target-runner.
+  list(output = output, error = NULL)
 }
 
 # Safe sampling of vector: 
@@ -778,12 +688,10 @@ ceiling.digits <- function(x, digits)
 # }
 
 is.file.extension <- function(filename, ext)
-{
-  return(substring(filename, nchar(filename) + 1 - nchar(ext)) == ext)
-}
+  substring(filename, nchar(filename) + 1 - nchar(ext)) == ext
 
 # Same as !(x %in% table)
-"%!in%" <- function (x, table) match(x, table, nomatch = 0L) == 0L
+"%!in%" <- function(x, table) match(x, table, nomatch = 0L) == 0L
 
 irace_save_logfile <- function(iraceResults, scenario)
 {
@@ -791,6 +699,38 @@ irace_save_logfile <- function(iraceResults, scenario)
   cwd <- setwd(scenario$execDir)
   # FIXME: Use saveRDS
   # FIXME: Bump to version=3 when we bump the minimum R version to >=3.6
-  save (iraceResults, file = scenario$logFile, version = 2)
-  setwd (cwd)
+  save(iraceResults, file = scenario$logFile, version = 2)
+  setwd(cwd)
 }
+
+valid_iracelog <- function(x)
+{
+  is.list(x) && ("scenario" %in% names(x))
+}
+
+#' Read the log file produced by irace (`irace.Rdata`).
+#'
+#' @param filename Filename that contains the log file saved by irace. Example: `irace.Rdata`.
+#'
+#' @param name Optional argument that allows overriding the default name of the object in the file.
+#' 
+#' @return (`list()`)
+#' @concept analysis
+#' @export
+read_logfile <- function(filename, name = "iraceResults")
+{
+  # If filename is already the iraceResults object, just return it.
+  if (valid_iracelog(filename)) return(filename)
+
+  if (file.access(filename, mode=4) != 0)
+    stop("read_logfile: Cannot read file '", filename, "'")
+  
+  load(filename)
+  iraceResults <- get0(name, inherits=FALSE)
+  if (!valid_iracelog(iraceResults))
+    stop("The file '", filename, "' does not contain the '", name, "' object.")
+  
+  iraceResults
+}
+
+do_nothing <- function(...) invisible()

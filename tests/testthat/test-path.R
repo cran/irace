@@ -1,6 +1,6 @@
-context("path.rel2abs")
+context("path_rel2abs")
 
-test_that("test.path.rel2abs", {
+test_that("test.path_rel2abs", {
   # Try to set wd; otherwise fail silently.
   old.cwd <- getwd()
   skip_if(is.null(old.cwd))
@@ -41,12 +41,17 @@ test_that("test.path.rel2abs", {
 "../../../data"             "./"    "/data"
 "../../../data"             "/tmp/a/b/c/" "/tmp/data"
 "..//a"                     ".//"   "/a"
+"R"                         "/tmp/" "Sys.which"
 ', stringsAsFactors=FALSE)
   for(i in 1:nrow(testcases)) {
     orig <- testcases[i,1]
     cwd <-  testcases[i,2]
-    res <- irace:::path.rel2abs(testcases[i,1], cwd)
-    exp <- gsub("\\", "/", path.expand(testcases[i,3]), fixed = TRUE)
+    res <- irace:::path_rel2abs(testcases[i,1], cwd)
+    if (testcases[i,3] == "Sys.which") {
+      exp <- normalizePath(Sys.which(testcases[i,1]), winslash = "/", mustWork = NA)
+    } else {
+      exp <- gsub("\\", "/", path.expand(testcases[i,3]), fixed = TRUE)
+    }
     if (res == exp) {
       # cat("[OK] (", orig, ", ", cwd, ") -> ", res, "\n", sep="")
     } else {
@@ -56,7 +61,7 @@ test_that("test.path.rel2abs", {
   }
 })
 
-test_that("test.path.rel2abs for windows", {
+test_that("test.path_rel2abs for windows", {
 
   testcases <- read.table(text='
 .                         N:\\\\tmp  N:/tmp
@@ -163,16 +168,21 @@ leslie/leslie/../../irace N:/tmp  N:/tmp/irace
 x.r                       N:/tmp  N:/tmp/x.r
 ~/irace/../x.r            N:/tmp  ~/x.r
 ~/x.r                     N:/tmp  ~/x.r
+"R"                       "/tmp/" "Sys.which"
 ', stringsAsFactors=FALSE)
   for(i in 1:nrow(testcases)) {
     orig <- testcases[i,1]
     cwd <-  testcases[i,2]
-    res <- irace:::path.rel2abs(testcases[i,1], cwd)
-    exp <- gsub("\\", "/", path.expand(testcases[i,3]), fixed = TRUE)
-    if (res == exp) {
-      #cat("[OK] ", i, ": path.rel2abs(\"", orig, "\", \"", cwd, "\") -> ", res, "\n", sep="")
+    res <- path_rel2abs(testcases[i,1], cwd)
+    if (testcases[i,3] == "Sys.which") {
+      exp <- normalizePath(Sys.which(testcases[i,1]), winslash = "/", mustWork = NA)
     } else {
-      cat("[FAILED] ", i, ": path.rel2abs(\"", orig, "\", \"", cwd, "\") -> ", res, " but expected: ", exp, "\n")
+      exp <- gsub("\\", "/", path.expand(testcases[i,3]), fixed = TRUE)
+    }
+    if (res == exp) {
+      #cat("[OK] ", i, ": path_rel2abs(\"", orig, "\", \"", cwd, "\") -> ", res, "\n", sep="")
+    } else {
+      cat("[FAILED] ", i, ": path_rel2abs(\"", orig, "\", \"", cwd, "\") -> ", res, " but expected: ", exp, "\n")
     }
     expect_match(res, exp, fixed = TRUE)
   }

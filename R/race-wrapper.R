@@ -34,12 +34,12 @@
 #' irace.logfile <- file.path(system.file(package="irace"),
 #'                            "exdata", "irace-acotsp.Rdata")
 #' load(irace.logfile)
-#' attach(iraceResults)
+#' allConfigurations <- iraceResults$allConfigurations
+#' parameters <- iraceResults$parameters
 #' apply(allConfigurations[1:10, unlist(parameters$names)], 1, buildCommandLine,
 #'       unlist(parameters$switches))
 #' 
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
-#' @md
 #' @export
 buildCommandLine <- function(values, switches)
 {
@@ -78,11 +78,11 @@ target.error <- function(err.msg, output, scenario, target.runner.call,
                          target.evaluator.call = NULL)
 {
   if (!is.null(target.evaluator.call)) {
-    err.msg <- paste0(err.msg, "\n", .irace.prefix,
+    err.msg <- paste0(err.msg, "\n", .msg.prefix,
                       "The call to targetEvaluator was:\n", target.evaluator.call)
   }
   if (!is.null(target.runner.call)) {
-    err.msg <- paste0(err.msg, "\n", .irace.prefix,
+    err.msg <- paste0(err.msg, "\n", .msg.prefix,
                       "The call to targetRunner was:\n", target.runner.call)
   }
   if (is.null(output$outputRaw)) {
@@ -101,9 +101,9 @@ target.error <- function(err.msg, output, scenario, target.runner.call,
       " Try to run the command(s) above from the execution directory '",
       scenario$execDir, "' to investigate the issue. See also Appendix B (targetRunner troubleshooting checklist) of the User Guide (https://cran.r-project.org/package=irace/vignettes/irace-package.pdf).")
   }
-  irace.error(err.msg, "\n", .irace.prefix,
+  irace.error(err.msg, "\n", .msg.prefix,
               "The output was:\n", paste(output$outputRaw, collapse = "\n"),
-              "\n", .irace.prefix, advice.txt)
+              "\n", .msg.prefix, advice.txt)
 }
 
 check.output.target.evaluator <- function (output, scenario, target.runner.call = NULL)
@@ -146,7 +146,7 @@ exec.target.evaluator <- function (experiment, num.configurations, all.conf.id,
                                     scenario, target.runner.call)
   check.output.target.evaluator (output, scenario, target.runner.call = target.runner.call)
   # Fix too small time.
-  output$time <- if (is.null(output$time)) NA else max(output$time, 0.01)
+  output$time <- if (is.null(output$time)) NA else max(output$time, scenario$minMeasurableTime)
   return (output)
 }
 
@@ -194,7 +194,6 @@ exec.target.evaluator <- function (experiment, num.configurations, all.conf.id,
 #'
 #' 
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
-#' @md
 #' @export
 target.evaluator.default <- function(experiment, num.configurations, all.conf.id,
                                      scenario, target.runner.call)
@@ -212,8 +211,7 @@ target.evaluator.default <- function(experiment, num.configurations, all.conf.id
   }
 
   cwd <- setwd (scenario$execDir)
-  # FIXME: I think we don't even need to paste the args, since system2 handles this by itself.
-  args <- paste(configuration.id, instance.id, seed, instance, num.configurations, all.conf.id)
+  args <- c(configuration.id, instance.id, seed, instance, num.configurations, all.conf.id)
   output <- runcommand(targetEvaluator, args, configuration.id, debugLevel)
   setwd (cwd)
 
@@ -234,7 +232,7 @@ target.evaluator.default <- function(experiment, num.configurations, all.conf.id
   }
   return(list(cost = cost, time = time,
               error = err.msg, outputRaw = output$output,
-              call = paste(targetEvaluator, args)))
+              call = paste(targetEvaluator, args, collapse=" ")))
 }
 
 check.output.target.runner <- function (output, scenario)
@@ -290,7 +288,7 @@ check.output.target.runner <- function (output, scenario)
     target.error (err.msg, output, scenario, target.runner.call = output$call)
   }
   # Fix too small time.
-  output$time <- if (is.null(output$time)) NA else max(output$time, 0.01)
+  output$time <- if (is.null(output$time)) NA else max(output$time, scenario$minMeasurableTime)
   return (output)
 }
 
@@ -302,7 +300,7 @@ exec.target.runner <- function(experiment, scenario, target.runner)
   doit <- function(experiment, scenario)
   {
     x <- target.runner(experiment, scenario)
-    return (check.output.target.runner (x, scenario))
+    return (check.output.target.runner(x, scenario))
   }
   
   retries <- scenario$targetRunnerRetries
@@ -354,6 +352,40 @@ parse.aclib.output <- function(outputRaw)
 
 target.runner.aclib <- function(experiment, scenario)
 {
+  debugLevel   <- scenario$debugLevel
+  res <- run_target_runner(experiment, scenario)
+  cmd <- res$cmd
+  output <- res$output
+  args <- res$args
+  
+  err.msg <- output$error
+  if (is.null(err.msg)) {
+    return(c(parse.aclib.output(output$output),
+             list(outputRaw = output$output, call = paste(cmd, args))))
+  }
+  
+  list(cost = NULL, time = NULL, error = err.msg,
+       outputRaw = output$output, call = paste(cmd, args))
+}
+
+check_launcher_args <- function(targetRunnerLauncherArgs)
+{
+  if (!grepl("{targetRunner}", targetRunnerLauncherArgs, fixed=TRUE))
+    irace.error("targetRunnerLauncherArgs '", targetRunnerLauncherArgs, "' must contain '{targetRunner}'") 
+  if (!grepl("{targetRunnerArgs}", targetRunnerLauncherArgs, fixed=TRUE))
+    irace.error("targetRunnerLauncherArgs '", targetRunnerLauncherArgs, "' must contain '{targetRunnerArgs}'")
+}
+
+process_launcher_args <- function(targetRunnerLauncherArgs, targetRunner, args)
+{
+  check_launcher_args(targetRunnerLauncherArgs)
+  targetRunnerLauncherArgs <- gsub("{targetRunner}", targetRunner, targetRunnerLauncherArgs, fixed=TRUE)
+  targetRunnerLauncherArgs <- gsub("{targetRunnerArgs}", args, targetRunnerLauncherArgs, fixed=TRUE)
+  targetRunnerLauncherArgs
+}
+  
+run_target_runner <- function(experiment, scenario)
+{
   configuration.id <- experiment$id.configuration
   instance.id      <- experiment$id.instance
   seed             <- experiment$seed
@@ -362,39 +394,43 @@ target.runner.aclib <- function(experiment, scenario)
   switches         <- experiment$switches
   bound            <- experiment$bound
   
-  debugLevel   <- scenario$debugLevel
   targetRunner <- scenario$targetRunner
-  if (as.logical(file.access(targetRunner, mode = 1))) {
-    irace.error ("targetRunner ", shQuote(targetRunner), " cannot be found or is not executable!\n")
-  }
+  debugLevel <- scenario$debugLevel
 
-  has_value <- !is.na(configuration)
-  # <executable> [<arg>] [<arg>] ... [--cutoff <cutoff time>] [--instance <instance name>] 
-  # [--seed <seed>] --config [-param_name_1 value_1] [-param_name_2 value_2] ...
-  args <- paste("--instance", instance, "--seed", seed, "--config",
-                paste0("-", switches[has_value], " ", configuration[has_value],
-                       collapse = " "))
-  if (!is.null.or.na(bound))
-    args <- paste("--cutoff", bound, args)
-  
-  output <- runcommand(targetRunner, args, configuration.id, debugLevel)
-
-  err.msg <- output$error
-  if (is.null(err.msg)) {
-    return(c(parse.aclib.output (output$output),
-             list(outputRaw = output$output, call = paste(targetRunner, args))))
+  if (scenario$aclib) {
+    has_value <- !is.na(configuration)
+    # <executable> [<arg>] [<arg>] ... [--cutoff <cutoff time>] [--instance <instance name>] 
+    # [--seed <seed>] --config [-param_name_1 value_1] [-param_name_2 value_2] ...
+    args <- paste("--instance", instance, "--seed", seed, "--config",
+                  paste0("-", switches[has_value], " ", configuration[has_value],
+                         collapse = " "))
+    if (!is.null.or.na(bound))
+      args <- paste("--cutoff", bound, args)
+  } else {
+    args <- paste(configuration.id, instance.id, seed, instance, bound,
+                  buildCommandLine(configuration, switches))
   }
   
-  return(list(cost = NULL, time = NULL, error = err.msg,
-              outputRaw = output$output, call = paste(targetRunner, args)))
+  targetRunnerLauncher <- scenario$targetRunnerLauncher
+  if (is.null.or.empty(scenario$targetRunnerLauncher)) {
+    if (as.logical(file.access(targetRunner, mode = 1))) {
+      irace.error ("targetRunner ", shQuote(targetRunner), " cannot be found or is not executable!\n")
+    }
+    output <- runcommand(targetRunner, args, configuration.id, debugLevel)
+    return(list(cmd=targetRunner, output=output, args=args))
+  }
+  if (as.logical(file.access(targetRunnerLauncher, mode = 1))) {
+    irace.error ("targetRunnerLauncher ", shQuote(targetRunnerLauncher), " cannot be found or is not executable!\n")
+  }
+  
+  args <- process_launcher_args(scenario$targetRunnerLauncherArgs, targetRunner, args)
+  output <- runcommand(targetRunnerLauncher, args, configuration.id, debugLevel)
+  return(list(cmd=targetRunnerLauncher, output=output, args=args))
 }
 
-
-#' target.runner.default
+#' Default `targetRunner` function.
 #'
-#' `target.runner.default` is the default targetRunner function. 
-#' You can use it as an advanced example of how to create your own targetRunner 
-#' function.
+#' Use it as an advanced example of how to create your own `targetRunner` function.
 #' 
 #' @param experiment A list describing the experiment. It contains at least:
 #'    \describe{
@@ -431,32 +467,19 @@ target.runner.aclib <- function(experiment, scenario)
 #'
 #' 
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
-#' @md
 #' @export
 target.runner.default <- function(experiment, scenario)
 {
-  configuration.id <- experiment$id.configuration
-  instance.id      <- experiment$id.instance
-  seed             <- experiment$seed
-  configuration    <- experiment$configuration
-  instance         <- experiment$instance
-  switches         <- experiment$switches
-  bound            <- experiment$bound
+  res <- run_target_runner(experiment, scenario)
+  cmd <- res$cmd
+  output <- res$output
+  args <- res$args
   
-  debugLevel   <- scenario$debugLevel
-  targetRunner <- scenario$targetRunner
-  if (as.logical(file.access(targetRunner, mode = 1))) {
-    irace.error ("targetRunner ", shQuote(targetRunner), " cannot be found or is not executable!\n")
-  }
-
-  args <- paste(configuration.id, instance.id, seed, instance, bound,
-                buildCommandLine(configuration, switches))
-  output <- runcommand(targetRunner, args, configuration.id, debugLevel)
-
+  debugLevel <- scenario$debugLevel
   cost <- time <- NULL
   err.msg <- output$error
   if (is.null(err.msg)) {
-    v.output <- parse.output(output$output, verbose = (scenario$debugLevel >= 2))
+    v.output <- parse.output(output$output, verbose = (debugLevel >= 2))
     if (length(v.output) > 2) {
       err.msg <- "The output of targetRunner should not be more than two numbers!"
     } else if (length(v.output) == 1) {
@@ -470,9 +493,9 @@ target.runner.default <- function(experiment, scenario)
       time <- v.output[2]
     }
   }
-  return(list(cost = cost, time = time,
-              error = err.msg, outputRaw = output$output,
-              call = paste(targetRunner, args)))
+  list(cost = cost, time = time,
+       error = err.msg, outputRaw = output$output,
+       call = paste(cmd, args, collapse = " "))
 }
 
 execute.experiments <- function(experiments, scenario)
@@ -570,14 +593,14 @@ execute.experiments <- function(experiments, scenario)
                             scenario = scenario,
                             target.runner = target.runner)
   }
- 
-  return(target.output)
+  target.output
 }
 
 execute.evaluator <- function(experiments, scenario, target.output, configurations.id)
 {
   ## FIXME: We do not need the configurations.id argument:
-  # configurations.id <- sapply(experiments, function(x) x[["id.configuration"]])
+  irace.assert(isTRUE(all.equal(configurations.id,
+                                sapply(experiments, getElement, "id.configuration"))))
   all.conf.id <- paste(configurations.id, collapse = " ")
   
   ## Evaluate configurations sequentially

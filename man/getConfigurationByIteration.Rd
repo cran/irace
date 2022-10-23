@@ -4,16 +4,12 @@
 \alias{getConfigurationByIteration}
 \title{Returns the configurations by the iteration in which they were executed.}
 \usage{
-getConfigurationByIteration(iraceResults = NULL, logFile = NULL,
-  iterations, drop.metadata = FALSE)
+getConfigurationByIteration(iraceResults, iterations, drop.metadata = FALSE)
 }
 \arguments{
-\item{iraceResults}{(\code{NULL}) Object created by \pkg{irace} and saved in \code{scenario$logFile}.}
+\item{iraceResults}{(\code{list()}|\code{character(1)}) \code{iraceResults} object created by \pkg{irace} and typically saved in the log file \code{irace.Rdata}. If a character string is given, then it is interpreted as the path to the log file from which the \code{iraceResults} object will be loaded.}
 
-\item{logFile}{(\code{NULL}) Log file created by \pkg{irace}, this file must contain the 
-\code{iraceResults} object.}
-
-\item{iterations}{The iteration number or a vector of iteration numbers from where 
+\item{iterations}{The iteration number or a vector of iteration numbers from where
 the configurations should be obtained.}
 
 \item{drop.metadata}{(\code{FALSE}) Remove metadata, such the configuration ID and
@@ -29,3 +25,4 @@ Returns the configurations by the iteration in which they were executed.
 \author{
 Manuel López-Ibáñez and Leslie Pérez Cáceres
 }
+\concept{analysis}

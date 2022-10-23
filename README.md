@@ -1,14 +1,17 @@
 **irace**: Iterated Racing for Automatic Algorithm Configuration
 ================================================================
 
-[![CRAN Status](https://www.r-pkg.org/badges/version-last-release/irace)](https://cran.r-project.org/package=irace) [![CRAN Downloads](https://cranlogs.r-pkg.org/badges/grand-total/irace)](https://CRAN.R-project.org/package=irace) [![Travis Build
-Status](https://travis-ci.org/MLopez-Ibanez/irace.svg?branch=master)](https://travis-ci.org/MLopez-Ibanez/irace)
+<!-- badges: start -->
+[![CRAN Status](https://www.r-pkg.org/badges/version-last-release/irace)](https://cran.r-project.org/package=irace) [![CRAN Downloads](https://cranlogs.r-pkg.org/badges/grand-total/irace)](https://CRAN.R-project.org/package=irace) [![R build
+status](https://github.com/MLopez-Ibanez/irace/workflows/R-CMD-check/badge.svg)](https://github.com/MLopez-Ibanez/irace/actions) 
+[![Codecov test coverage](https://codecov.io/gh/MLopez-Ibanez/irace/branch/master/graph/badge.svg)](https://app.codecov.io/gh/MLopez-Ibanez/irace?branch=master)
+<!-- badges: end -->
+  
+[ [**Homepage**](https://mlopez-ibanez.github.io/irace/) ] [ [**User Guide (PDF)**](https://cran.r-project.org/package=irace/vignettes/irace-package.pdf) ] 
 
-[ [**Homepage**](http://iridia.ulb.ac.be/irace/) ] [ [**User Guide (PDF)**](https://cran.r-project.org/package=irace/vignettes/irace-package.pdf) ] 
+**Maintainers:** [Manuel López-Ibáñez](https://lopez-ibanez.eu/), Leslie Pérez Cáceres
 
-**Maintainers:** [Manuel López-Ibáñez](http://lopez-ibanez.eu), Leslie Pérez Cáceres
-
-**Creators:** [Manuel López-Ibáñez](http://lopez-ibanez.eu), Jérémie Dubois-Lacoste
+**Creators:** [Manuel López-Ibáñez](https://lopez-ibanez.eu/), Jérémie Dubois-Lacoste
   
 **Contributors:** Jérémie Dubois-Lacoste, Thomas Stützle, Mauro Birattari, Eric
   Yuan and Prasanna Balaprakash.
@@ -31,22 +34,23 @@ It builds upon the race package by Birattari and it is implemented in R.
 **Relevant literature:**
 
  1. M. López-Ibáñez, J. Dubois-Lacoste, L. Pérez Cáceres, T. Stützle, and
-    M. Birattari. [The irace package: Iterated Racing for Automatic Algorithm Configuration.](http://dx.doi.org/10.1016/j.orp.2016.09.002).
+    M. Birattari. [The irace package: Iterated Racing for Automatic Algorithm Configuration](http://dx.doi.org/10.1016/j.orp.2016.09.002).
 *Operations Research Perspectives*, 3:43–58, 2016.<br>
-    [ [bibtex](http://lopez-ibanez.eu/LopezIbanez_bib.html#LopDubPerStuBir2016irace) 
+    [ [bibtex](https://lopez-ibanez.eu/LopezIbanez_bib.html#LopDubPerStuBir2016irace) 
     | doi: [10.1016/j.orp.2016.09.002](http://dx.doi.org/10.1016/j.orp.2016.09.002) ]
 
  2. Manuel López-Ibáñez, Jérémie Dubois-Lacoste, Thomas Stützle, and Mauro
-    Birattari. [The irace package, Iterated Race for Automatic Algorithm Configuration](http://iridia.ulb.ac.be/IridiaTrSeries/IridiaTr2011-004.pdf).
+    Birattari. [The irace package, Iterated Race for Automatic Algorithm Configuration](https://iridia.ulb.ac.be/IridiaTrSeries/link/IridiaTr2011-004.pdf).
     Technical Report TR/IRIDIA/2011-004, IRIDIA, Université libre de Bruxelles,
     Belgium, 2011.<br>
-    [ [bibtex](http://iridia.ulb.ac.be/~manuel/LopezIbanez_bib.html#LopDubStu2011irace)
-    | [PDF](http://iridia.ulb.ac.be/IridiaTrSeries/IridiaTr2011-004.pdf) ]
+    [ [bibtex](https://iridia-ulb.github.io/references/index.html#LopDubStu2011irace)
+    | [PDF](https://iridia.ulb.ac.be/IridiaTrSeries/link/IridiaTr2011-004.pdf) ]
 
- 3. Manuel López-Ibáñez. [The irace
-    software package: A tutorial](http://iridia.ulb.ac.be/irace/files/irace-comex-tutorial.pdf). COMEX Workshop on Practical Automatic Algorithm Configuration, 2014.<br>
-    [ [workshop webpage](http://iridia.ulb.ac.be/~manuel/comex_workshop/)
-    | [PDF](http://iridia.ulb.ac.be/irace/files/irace-comex-tutorial.pdf) ]
+ 3. Thomas Stützle and Manuel López-Ibáñez. [Tutorial: Automated algorithm
+    configuration and design](https://doi.org/10.1145/3449726.3461404). GECCO
+    '21: Proceedings of the Genetic and Evolutionary Computation Conference
+    Companion, July 2021.
+    [doi:10.1145/3449726.3461404](https://doi.org/10.1145/3449726.3461404)
 
 
 Requisites
@@ -69,6 +73,25 @@ package, invoking from R the following command:
 
 The following is a quick-start guide. The user guide gives more detailed
 instructions.
+
+Quick Start 
+===========
+1. Install R (with your favourite package manager, and see more details below).
+2. Install irace. This command works on CMD and Powershell with R added to PATH (see detailed instructions below).
+```bash
+    $ Rscript -e "install.packages('irace', repos='https://cloud.r-project.org')"
+```
+
+3. Add irace to path. For windows user, this step is unfortunately more involved, so please see more detailed instructions below.
+```bash
+    $ export PATH="$(Rscript -e "cat(paste0(system.file(package='irace', 'bin', mustWork=TRUE), ':'))" 2> /dev/null)${PATH}"
+```
+Consider adding this line to your `~/.bashrc`, `~/.zshrc`, or `~/.profile` for it to persist between sessions. 
+
+4. You can open the user guide with the following command. This command works on CMD and Powershell with R added to PATH (see detailed instructions below).
+```bash
+    $ Rscript -e "vignette('irace-package')"
+```
 
 Installing R
 ============
@@ -95,14 +118,12 @@ OS X
 You can install R directly from a CRAN mirror
 (<https://cran.r-project.org/bin/macosx/>).
 
-Alternatively, if you use homebrew, you can just brew the R formula
-from the science tap (unfortunately it does not come already bottled
-so you need to have Xcode installed to compile it):
-
-```bash
-    $ brew tap homebrew/science
-    $ brew install r
+Alternatively, if you use homebrew, you can just do
 ```
+    $ brew install --cask r
+```
+
+(Using `brew install r` is not recommended because that will build R from source and you will not be able to use any CRAN binary, possibly resulting in annoying build failiures). 
 
 Once R is installed, you can launch R from the Terminal (or from your
 Applications), and from the R prompt install the irace package. See
@@ -116,12 +137,23 @@ You can install R from a CRAN mirror
 launch the R console and install the irace package from it. See instructions
 below.
 
+In addition to using the R console, it might be very useful to add R to PATH so you can run most of the GUN/Linux shell commands without modification in CMD or Powershell. Usually, R is installed in `C:\Program Files\R\R-4.1.3` (the version number depends on your installation).
+
+You should add the following line [to PATH](https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/) (if you want to use the 64-bit version)
+```
+C:\Program Files\R\R-4.1.3\bin\x64
+```
+
+Or, if you are on a 32-bit version 
+```
+C:\Program Files\R\R-4.1.3\bin\i386
+```
 
 Installing the irace package
 ============================
 
-There are two methods for installing the [irace](http://iridia.ulb.ac.be/irace) R package on your
-computer:
+There are two methods for installing the
+[irace](https://mlopez-ibanez.github.io/irace/) R package on your computer:
 
 1. Install within R (automatic download):
 ```R
@@ -156,8 +188,8 @@ Once installed, test that it is working by doing:
 ```R
     $ R
     R> library(irace)
-    R> system.file(package="irace")
-    [1] "~/R/irace"
+    R> cat(system.file(package="irace", "bin", mustWork=TRUE), "\n")
+    /home/user/R/irace/bin
 ```
 The last command tells you the installation directory of `irace`.
 
@@ -168,8 +200,8 @@ Save the installation directory of `irace` to a variable, and add it to your
 `.bash_profile`, `.bashrc` or `.profile`:
 
 ```bash
-    export IRACE_HOME=~/R/irace/ # Path given by system.file(package="irace")
-    export PATH=${IRACE_HOME}/bin/:$PATH
+    export IRACE_HOME=/home/user/R/irace/bin/ # Path given by system.file(package="irace", "bin", mustWork=TRUE)
+    export PATH=${IRACE_HOME}:$PATH
     # export R_LIBS=~/R:${R_LIBS} # Only if local installation was forced
 ```
 
@@ -184,17 +216,17 @@ invoke `irace` as follows:
 Windows
 -------
 
-If the installation directory of `irace` is `C:/R/irace/`, you can invoke
-`irace` by opening a terminal (launch the program `cmd.exe`) and executing:
+You can find out where the irace binary is installed by running the following in Powershell or CMD:
 
-```bash
-    C:\> C:\R\irace\bin\x64\irace.exe --help
+```Powershell
+    C:\> Rscript -e "cat(gsub('/', '\\\\', system.file(package='irace', 'bin', 'x64', mustWork=TRUE)))"
 ```
 
-or if you are in a 32-bits system, executing:
+It will output a path, such as `C:\Program Files\R\R-4.1.3\library\irace\bin\x64` (replace `x64` with `i386` if you are on a 32-bit system), which can you [add to PATH](https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/). 
 
-```bash
-    C:\> C:\R\irace\bin\i386\irace.exe --help
+Then running the following should work:
+```Powershell 
+    C:\> irace --help
 ```
 
 You can also launch irace by opening the R console and executing:
@@ -203,6 +235,23 @@ You can also launch irace by opening the R console and executing:
     R> library(irace)
     R> irace.cmdline("--help")
 ```
+
+GitHub (Development version)
+----------------------------
+
+If you wish to try the development version, you can install it by executing the
+following commands within the R console:
+
+```R
+    R> install.packages("devtools")
+    R> devtools::install_github("MLopez-Ibanez/irace")
+```
+
+Python
+------
+
+You can use the irace R package from Python using `rpy2`. An example on how to do this is the implementation of [iracepy](https://github.com/auto-optimization/iracepy).
+
 
 Usage
 =====
@@ -213,23 +262,12 @@ Usage
         $ cd ~/tuning
 ```
 
-2. Copy the template and example files to the scenario directory
+2. Initialize your tuning directory with template config files
 ```bash
-        $ cp $IRACE_HOME/templates/*.tmpl .
+        $ $IRACE_HOME/bin/irace --init
 ```
 
-    where `$IRACE_HOME` is the path to the installation directory of
-    `irace`. It can be obtained by doing:
-
-```R
-        $ R
-        > library(irace)
-        > system.file(package="irace")
-```
-
-3. For each template in your tuning directory, remove the `.tmpl`
-   suffix, and modify them following the instructions in each file. In
-   particular,
+3. Modify the generated files following the instructions found within each file. In particular,
     * The scripts `target-runner` and `target-evaluator` (if you need it at all)
       should be executable. The output of `target-runner` (or
       `target-evaluator` if you use a separate evaluation step) is minimized by
@@ -243,7 +281,7 @@ Usage
 4. Put the instances in `~/tuning/Instances/`. In addition, you can
    create a file that specifies which instances from that directory
    should be run and which instance-specific parameters to use. See
-   `scenario.txt.tmpl` and `instances-list.tmpl` for examples. The command
+   `scenario.txt` and `instances-list.txt` for examples. The command
    irace will not attempt to create the execution directory (`execDir`),
    so it must exist before calling irace. The default `execDir` is the
    current directory.
@@ -252,10 +290,9 @@ Usage
 ```bash
         $ cd ~/tuning/ && $IRACE_HOME/bin/irace
 ```
-
-    performs one run of Iterated Race. See the output of `irace --help` for
-    additional irace parameters. Command-line parameters override the
-    scenario setup specified in the `scenario.txt` file.
+   performs one run of Iterated Race. See the output of `irace --help` for
+   additional irace parameters. Command-line parameters override the
+   scenario setup specified in the `scenario.txt` file.
 
 
 Many tuning runs in parallel
@@ -317,6 +354,24 @@ appropriate citation is:
 The **irace** package uses code under the GPL from the [race
 package](https://CRAN.R-project.org/package=race) is Copyright (C) 2003 Mauro
 Birattari.
+
+
+Building an irace standalone container
+======================================
+
+Thanks to [Singularity](https://sylabs.io/singularity/), you can build a
+standalone container of `irace` using the file `irace.sindef` which is
+available in the directory `inst/` in the source tarball and github repository
+or, after installing the irace R package, in the installation directory given
+by the R expression `system.file(package="irace")`. After installing
+SingularityCE, the container may be build using:
+
+    sudo singularity build irace.sindef irace.sif
+    
+and run with:
+
+    singularity run irace.sif <arguments>
+    
 
 
 Frequently Asked Questions

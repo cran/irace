@@ -2,7 +2,8 @@
 % Please edit documentation in R/readParameters.R
 \name{readParameters}
 \alias{readParameters}
-\title{readParameters}
+\title{Reads the parameters to be tuned by \pkg{irace} from a file or from a
+character string.}
 \usage{
 readParameters(file, digits = 4, debugLevel = 0, text)
 }
@@ -38,11 +39,15 @@ and, thus, it does not need to be tuned.}
 \item{\code{nbParameters}}{An integer, the total number of parameters.}
 \item{\code{nbFixed}}{An integer, the number of parameters with a fixed value.}
 \item{\code{nbVariable}}{Number of variable (to be tuned) parameters.}
+\item{\code{depends}}{List of character vectors, each vector specifies
+which parameters depend on this one.}
+\item{\code{isDependent}}{Logical vector that specifies which parameter has
+a dependent domain.}
 }
 }
 \description{
-\code{readParameters} reads the parameters to be tuned by
-\pkg{irace} from a file or directly from a character string.
+Reads the parameters to be tuned by \pkg{irace} from a file or from a
+character string.
 }
 \details{
 Either \code{file} or \code{text} must be given. If \code{file} is given, the
@@ -65,18 +70,18 @@ potential user errors.
 \examples{
  ## Read the parameters directly from text
  parameters.table <- '
- # name       switch           type values               [conditions (using R syntax)]
- algorithm    "--"             c    (as,mmas,eas,ras,acs)
- localsearch  "--localsearch " c    (0, 1, 2, 3)
- alpha        "--alpha "       r    (0.00, 5.00)
- beta         "--beta "        r    (0.00, 10.00)
- rho          "--rho  "        r    (0.01, 1.00)
- ants         "--ants "        i            (5, 100)
- q0           "--q0 "          r    (0.0, 1.0)           | algorithm == "acs"
- rasrank      "--rasranks "    i    (1, 100)             | algorithm == "ras"
- elitistants  "--elitistants " i    (1, 750)             | algorithm == "eas"
- nnls         "--nnls "        i    (5, 50)              | localsearch \%in\% c(1,2,3)
- dlb          "--dlb "         c    (0, 1)               | localsearch \%in\% c(1,2,3)
+ # name       switch           type  values               [conditions (using R syntax)]
+ algorithm    "--"             c     (as,mmas,eas,ras,acs)
+ localsearch  "--localsearch " c     (0, 1, 2, 3)
+ alpha        "--alpha "       r     (0.00, 5.00)
+ beta         "--beta "        r     (0.00, 10.00)
+ rho          "--rho  "        r     (0.01, 1.00)
+ ants         "--ants "        i,log (5, 100)
+ q0           "--q0 "          r     (0.0, 1.0)           | algorithm == "acs"
+ rasrank      "--rasranks "    i     (1, "min(ants, 10)") | algorithm == "ras"
+ elitistants  "--elitistants " i     (1, ants)            | algorithm == "eas"
+ nnls         "--nnls "        i     (5, 50)              | localsearch \%in\% c(1,2,3)
+ dlb          "--dlb "         c     (0, 1)               | localsearch \%in\% c(1,2,3)
  '
  parameters <- readParameters(text=parameters.table)
  str(parameters)

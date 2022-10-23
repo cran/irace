@@ -1,11 +1,12 @@
-## ----include=FALSE-------------------------------------------------------
+## ----include=FALSE------------------------------------------------------------
 library(knitr)
 
 ## ----exampleload,eval=TRUE,include=FALSE----------------------------
 library("irace")
 load("examples.Rdata")
-load("irace-acotsp.Rdata")
-load("log-ablation.Rdata")
+iraceResults <- irace::read_logfile("irace-acotsp.Rdata")
+log_ablation_file <- file.path(system.file(package="irace"), "exdata", "log-ablation.Rdata")
+load(log_ablation_file)
 options(width = 70)
 
 ## ----R_irace_install, prompt=FALSE, eval=FALSE----------------------
@@ -90,6 +91,7 @@ print(experiment)
 #  {
 #    isreal <- parameters$type[colnames(configuration)] %in% "r"
 #    configuration[isreal] <- configuration[isreal] / sum(configuration[isreal])
+#    configurations[isreal] <- round(configuration[isreal], digits)
 #    return(configuration)
 #  }
 
@@ -117,7 +119,7 @@ print(experiment)
    print(output)
 
 ## ----testing_r, prompt=FALSE, eval=FALSE----------------------------
-#  testing.main(logFile = "./irace.Rdata")
+#  testing_fromlog(logFile = "./irace.Rdata", testNbElites = 1)
 
 ## ----change_recover, prompt=TRUE, eval=FALSE------------------------
 #  load ("~/tuning/irace.Rdata")
@@ -142,7 +144,7 @@ head(iraceResults$allConfigurations)
 print(iraceResults$allElites)
 
 ## ----get_elites, prompt=TRUE, eval=TRUE, comment=""-----------------
-getFinalElites(logFile = "irace-acotsp.Rdata", n = 0)
+getFinalElites("irace-acotsp.Rdata", n = 0)
 
 ## ----show_iditelites, prompt=TRUE, eval=TRUE, comment=""------------
 print(iraceResults$iterationElites)
@@ -150,7 +152,7 @@ print(iraceResults$iterationElites)
 ## ----get_elite, prompt=TRUE, eval=TRUE, comment=""------------------
 last <- length(iraceResults$iterationElites)
 id <- iraceResults$iterationElites[last]
-getConfigurationById(logFile = "irace-acotsp.Rdata", ids = id)
+getConfigurationById(iraceResults, ids = id)
 
 ## ----get_experiments, prompt=TRUE, eval=TRUE, comment=""------------
 # As an example, we use the best configuration found
@@ -165,12 +167,12 @@ all.exp[!is.na(all.exp)]
 # As an example, we get seed and instance of the experiments
 # of the best candidate.
 # Get index of the instances
-pair.id <- names(all.exp[!is.na(all.exp)])
-index <- iraceResults$state$.irace$instancesList[pair.id,"instance"]
+pair.id <- which(!is.na(all.exp))
+index <- iraceResults$state$.irace$instancesList[pair.id, "instance"]
 # Obtain the instance names
 iraceResults$scenario$instances[index]
 # Get the seeds
-iraceResults$state$.irace$instancesList[index,"seed"]
+iraceResults$state$.irace$instancesList[pair.id, "seed"]
 
 ## ----get_model, prompt=TRUE, eval=TRUE, comment=""------------------
 # As an example, we get the model probabilities for the
@@ -187,30 +189,18 @@ iraceResults$testing$experiments
 # Get the seeds used for testing
 iraceResults$testing$seeds
 
-## ----plot_test, fig.pos="tbp", fig.align="center", fig.height = 4, fig.width = 8, out.width='0.85\\textwidth', fig.cap="Boxplot of the testing results of the best configurations.", prompt=TRUE, eval=TRUE, comment=""----
+## ----wilcox_test,prompt=TRUE, eval=TRUE, comment=""-----------------
 results <- iraceResults$testing$experiments
 # Wilcoxon paired test
 conf <- gl(ncol(results), # number of configurations
            nrow(results), # number of instances
            labels = colnames(results))
 pairwise.wilcox.test (as.vector(results), conf, paired = TRUE, p.adj = "bonf")
-# Plot the results
-configurationsBoxplot (results, ylab = "Solution cost")
 
-## ----freq, fig.pos="tbp", fig.cap="Parameters sampling frequency.", out.width="\\textwidth",prompt=TRUE, eval=TRUE, comment=""----
-parameterFrequency(iraceResults$allConfigurations, iraceResults$parameters)
+## ----conc, prompt=TRUE, eval=TRUE, comment=""-----------------------
+irace:::concordance(iraceResults$testing$experiments)
 
-## ----parcord, fig.pos="tbp", fig.align="center", out.width="0.7\\textwidth", fig.cap="Parallel coordinate plots of the parameters of the configurations in the last two iterations of a run of \\irace.", prompt=FALSE, eval=TRUE, comment=""----
-# Get last iteration number
-last <- length(iraceResults$iterationElites)
-# Get configurations in the last two iterations
-conf <- getConfigurationByIteration(iraceResults = iraceResults,
-                                    iterations = c(last - 1, last))
-parallelCoordinatesPlot (conf, iraceResults$parameters,
-                         param_names = c("algorithm", "alpha", "beta", "rho", "q0"),
-                         hierarchy = FALSE)
-
-## ----testEvo, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Testing set performance of the best-so-far configuration over number of experiments. Label of each point is the configuration ID.", prompt=FALSE, eval=TRUE, comment=""----
+## ----testEvo, fig.pos="tb", fig.align="center", out.width='0.7\\textwidth', fig.cap="Testing set performance of the best-so-far configuration over number of experiments. Label of each point is the configuration ID.", prompt=FALSE, eval=TRUE, comment=""----
 # Get number of iterations
 iters <- unique(iraceResults$experimentLog[, "iteration"])
 # Get number of experiments (runs of target-runner) up to each iteration
@@ -219,18 +209,25 @@ fes <- cumsum(table(iraceResults$experimentLog[,"iteration"]))
 # for the best configuration of that iteration.
 elites <- as.character(iraceResults$iterationElites)
 values <- colMeans(iraceResults$testing$experiments[, elites])
+stderr <- function(x) sqrt(var(x)/length(x))
+err <- apply(iraceResults$testing$experiments[, elites], 2, stderr)
 plot(fes, values, type = "s",
      xlab = "Number of runs of the target algorithm",
-     ylab = "Mean value over testing set")
-points(fes, values)
+     ylab = "Mean value over testing set", ylim=c(23000000,23500000))
+points(fes, values, pch=19)
+arrows(fes, values - err, fes, values + err, length=0.05, angle=90, code=3)
 text(fes, values, elites, pos = 1)
 
 ## ----ablation, prompt=FALSE, eval=FALSE-----------------------------
-#  ablation(iraceLogFile = "irace.Rdata",
-#           src = 1, target = 60, pdf.file = "plot-ablation.pdf")
+#  ablog <- ablation("irace.Rdata", src = 1, target = 60)
+#  plotAblation(ablog)
 
-## ----testAb, fig.pos="htb!", fig.align="center", out.width="0.75\\textwidth", fig.cap="Example of plot generated by \\code{ablation()}.", prompt=FALSE, eval=TRUE, echo=FALSE----
-plotAblation(abLogFile = "log-ablation.Rdata")
+## ----testAb, fig.pos="htb!", fig.align="center", out.width="0.75\\textwidth", fig.cap="Example of plot generated by \\code{plotAblation()}.", prompt=FALSE, eval=TRUE, echo=FALSE----
+logfile <- file.path(system.file(package="irace"), "exdata", "log-ablation.Rdata")
+plotAblation(logfile)
+
+## ----ablation_cmdline, prompt=FALSE, eval=TRUE,echo=FALSE-----------
+ablation_cmdline("--help")
 
 ## ----postsel, prompt=FALSE, eval=FALSE------------------------------
 #  # Execute all elite configurations in the iterations

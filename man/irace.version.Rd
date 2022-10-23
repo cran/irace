@@ -4,11 +4,13 @@
 \name{irace.version}
 \alias{irace.version}
 \title{irace.version}
-\format{An object of class \code{character} of length 1.}
+\format{
+An object of class \code{character} of length 1.
+}
 \usage{
 irace.version
 }
 \description{
-A character string containing the version of \pkg{irace}.
+A character string containing the version of \code{irace}.
 }
 \keyword{datasets}

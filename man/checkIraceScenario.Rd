@@ -4,38 +4,37 @@
 \alias{checkIraceScenario}
 \title{Test that the given irace scenario can be run.}
 \usage{
-checkIraceScenario(scenario, parameters = NULL)
+checkIraceScenario(scenario, parameters)
 }
 \arguments{
 \item{scenario}{(\code{list()}) \cr Data structure containing \pkg{irace}
 settings. The data structure has to be the one returned by the function
-\code{\link{defaultScenario}} or \code{\link{readScenario}}.}
+\code{\link[=defaultScenario]{defaultScenario()}} or \code{\link[=readScenario]{readScenario()}}.}
 
 \item{parameters}{(\code{list()}) \cr Data structure containing the parameter
 space definition. The data structure has to similar to the one returned by the
 function \code{\link{readParameters}}.}
 }
 \value{
-returns \code{TRUE} if succesful and gives an error and returns
+returns \code{TRUE} if successful and gives an error and returns
 \code{FALSE} otherwise.
 }
 \description{
-\code{checkIraceScenario} tests that the given irace scenario
-  can be run by checking the scenario settings provided and trying to run
-  the target-algorithm.
+Test that the given irace scenario can be run by checking the scenario
+settings provided and trying to run the target-algorithm.
 }
 \details{
-Provide the \code{parameters} argument only if the parameter list
-  should not be obtained from the parameter file given by the scenario. If
-  the parameter list is provided it will not be checked. This function will
-  try to execute the target-algorithm.
+If the \code{parameters} argument is missing, then the parameters
+will be read from the file \code{parameterFile}  given by \code{scenario}. If
+\code{parameters} is provided, then \code{parameterFile} will not be read.  This function will
+try to execute the target-algorithm.
 }
 \seealso{
 \describe{
- \item{\code{\link{readScenario}}}{for reading a configuration scenario from a file.}
- \item{\code{\link{printScenario}}}{prints the given scenario.}
- \item{\code{\link{defaultScenario}}}{returns the default scenario settings of \pkg{irace}.}
- \item{\code{\link{checkScenario}}}{to check that the scenario is valid.}
+\item{\code{\link{readScenario}}}{for reading a configuration scenario from a file.}
+\item{\code{\link{printScenario}}}{prints the given scenario.}
+\item{\code{\link{defaultScenario}}}{returns the default scenario settings of \pkg{irace}.}
+\item{\code{\link{checkScenario}}}{to check that the scenario is valid.}
 }
 }
 \author{

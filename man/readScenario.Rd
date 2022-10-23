@@ -2,34 +2,35 @@
 % Please edit documentation in R/readConfiguration.R
 \name{readScenario}
 \alias{readScenario}
-\title{readScenario}
+\title{Reads from a file the scenario settings to be used by \pkg{irace}.}
 \usage{
-readScenario(filename = "", scenario = list())
+readScenario(filename = "", scenario = list(), params_def = .irace.params.def)
 }
 \arguments{
 \item{filename}{(\code{character(1)}) \cr Filename from which the scenario will
 be read. If empty, the default \code{scenarioFile} is used.  An example
-scenario file is provided in \code{system.file(``package="irace",}
-\code{"templates/scenario.txt.tmpl")}.}
+scenario file is provided in \verb{system.file(``package="irace",}
+\verb{"templates/scenario.txt.tmpl")}.}
 
 \item{scenario}{(\code{list()}) \cr Data structure containing \pkg{irace}
 settings. The data structure has to be the one returned by the function
-\code{\link{defaultScenario}} or \code{\link{readScenario}}.
+\code{\link[=defaultScenario]{defaultScenario()}} or \code{\link[=readScenario]{readScenario()}}.
 This is an initial scenario that is overwritten}
+
+\item{params_def}{(\code{data.frame()}) \cr Definition of the options accepted by the scenario. This should only be modified by packages that wish to extend \pkg{irace}.}
 }
 \value{
 The scenario list read from the file. The scenario settings not
 present in the file are not present in the list, i.e., they are \code{NULL}.
 }
 \description{
-\code{readScenario} reads from a file the scenario settings to be used by
-\pkg{irace}..
+Reads from a file the scenario settings to be used by \pkg{irace}.
 }
 \seealso{
 \describe{
-\item{\code{\link{printScenario}}}{prints the given scenario.}
-\item{\code{\link{defaultScenario}}}{returns the default scenario settings of \pkg{irace}.}
-\item{\code{\link{checkScenario}}}{to check that the scenario is valid.}
+\item{\code{\link[=printScenario]{printScenario()}}}{prints the given scenario.}
+\item{\code{\link[=defaultScenario]{defaultScenario()}}}{returns the default scenario settings of \pkg{irace}.}
+\item{\code{\link[=checkScenario]{checkScenario()}}}{to check that the scenario is valid.}
 }
 }
 \author{

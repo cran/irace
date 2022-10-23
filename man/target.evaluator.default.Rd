@@ -4,8 +4,13 @@
 \alias{target.evaluator.default}
 \title{target.evaluator.default}
 \usage{
-target.evaluator.default(experiment, num.configurations, all.conf.id,
-  scenario, target.runner.call)
+target.evaluator.default(
+  experiment,
+  num.configurations,
+  all.conf.id,
+  scenario,
+  target.runner.call
+)
 }
 \arguments{
 \item{experiment}{A list describing the experiment. It contains at least:
@@ -28,7 +33,7 @@ of parameters used in \code{configuration}.}
 
 \item{scenario}{(\code{list()}) \cr Data structure containing \pkg{irace}
 settings. The data structure has to be the one returned by the function
-\code{\link{defaultScenario}} or \code{\link{readScenario}}.}
+\code{\link[=defaultScenario]{defaultScenario()}} or \code{\link[=readScenario]{readScenario()}}.}
 
 \item{target.runner.call}{String describing the call to \code{targetRunner} that
 corresponds to this call to \code{targetEvaluator}. This is used for

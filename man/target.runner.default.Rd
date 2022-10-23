@@ -2,7 +2,7 @@
 % Please edit documentation in R/race-wrapper.R
 \name{target.runner.default}
 \alias{target.runner.default}
-\title{target.runner.default}
+\title{Default \code{targetRunner} function.}
 \usage{
 target.runner.default(experiment, scenario)
 }
@@ -23,7 +23,7 @@ of parameters used in \code{configuration}.}
 
 \item{scenario}{(\code{list()}) \cr Data structure containing \pkg{irace}
 settings. The data structure has to be the one returned by the function
-\code{\link{defaultScenario}} or \code{\link{readScenario}}.}
+\code{\link[=defaultScenario]{defaultScenario()}} or \code{\link[=readScenario]{readScenario()}}.}
 }
 \value{
 If \code{targetEvaluator} is \code{NULL}, then the \code{targetRunner}
@@ -45,9 +45,7 @@ an external program or function.}
 }
 }
 \description{
-\code{target.runner.default} is the default targetRunner function.
-You can use it as an advanced example of how to create your own targetRunner
-function.
+Use it as an advanced example of how to create your own \code{targetRunner} function.
 }
 \author{
 Manuel López-Ibáñez and Jérémie Dubois-Lacoste
