@@ -1,11 +1,18 @@
+## ----setup, include=FALSE-----------------------------------------------------
+library(knitr)
+knit_hooks$set(inline = function(x) {
+  if (is.numeric(x)) return(knitr:::format_sci(x, 'latex'))
+  highr::hi_latex(x)
+})
+
 ## ----include=FALSE------------------------------------------------------------
 library(knitr)
 
 ## ----exampleload,eval=TRUE,include=FALSE----------------------------
 library("irace")
-load("examples.Rdata")
-iraceResults <- irace::read_logfile("irace-acotsp.Rdata")
-log_ablation_file <- file.path(system.file(package="irace"), "exdata", "log-ablation.Rdata")
+load("examples.Rdata") # loads "experiment" and "output"
+iraceResults <- irace::read_logfile(system.file(package="irace", "exdata", "irace-acotsp.Rdata", mustWork=TRUE))
+log_ablation_file <- system.file(package="irace", "exdata", "log-ablation.Rdata", mustWork = TRUE)
 load(log_ablation_file)
 options(width = 70)
 
@@ -35,7 +42,7 @@ options(width = 70)
 
 ## ----windows_irace_help ,eval=FALSE, prompt=FALSE-------------------
 #  library("irace")
-#  irace.cmdline("--help")
+#  irace_cmdline("--help")
 
 ## ----irace_R_check, eval=FALSE, prompt=FALSE------------------------
 #  library("irace")
@@ -46,25 +53,25 @@ options(width = 70)
 ## ----irace_R_exe, eval=FALSE, prompt=FALSE--------------------------
 #  library("irace")
 #  # Go to the directory containing the scenario files
-#  setwd("~/tuning")
+#  setwd("./tuning")
 #  scenario <- readScenario(filename = "scenario.txt",
 #                           scenario = defaultScenario())
-#  irace.main(scenario = scenario)
+#  irace_main(scenario = scenario)
 
 ## ----runexample2,prompt=FALSE,eval=FALSE----------------------------
 #  library("irace")
-#  setwd("~/tuning/")
-#  irace.cmdline()
+#  setwd("./tuning/")
+#  irace_cmdline()
 
 ## ----readParameters,prompt=FALSE, eval=FALSE------------------------
 #  parameters <- readParameters(file = "parameters.txt")
 
 ## ----parametersetup,eval=TRUE,include=FALSE-------------------------
 # Setup example
-parameters <- irace::readParameters(text='
+parameters <- readParameters(text='
 algorithm       "--"                 c		(as,mmas,eas,ras,acs)
-ants            "--ants "            i	  	(5, 100)
-q0              "--q0 "              r  	(0.0, 1.0) 		| algorithm %in% c("acs")
+ants            "--ants "            i	        (5, 100)
+q0              "--q0 "              r          (0.0, 1.0)              | algorithm %in% c("acs")
 ')
 
 ## ----parameterlist,eval=TRUE, prompt=TRUE, size='normalsize', comment=""----
@@ -76,9 +83,9 @@ str(parameters, vec.len = 10)
 ## ----experimentlist,eval=TRUE,size='normalsize', prompt=TRUE,  comment=""----
 print(experiment)
 
-## ----targetEvaluator, prompt=FALSE, eval=FALSE----------------------
-#  targetEvaluator(experiment, num.configurations, all.conf.id,
-#                  scenario, target.runner.call)
+## ----targetEvaluator, eval=FALSE------------------------------------
+#  targetEvaluator(experiment, num_configurations, all_conf_id, scenario,
+#                  target_runner_call)
 
 ## ----instance1, prompt=FALSE, eval=FALSE----------------------------
 #  scenario$instances <- c("rosenbrock_20 --function=12 --nvar 20",
@@ -87,32 +94,35 @@ print(experiment)
 #                          "rastrigin_40 --function=15 --nvar 30")
 
 ## ----repairEx,prompt=FALSE, eval=FALSE------------------------------
-#  repairConfiguration = function (configuration, parameters, digits)
+#  repairConfiguration = function(configuration, parameters)
 #  {
-#    isreal <- parameters$type[colnames(configuration)] %in% "r"
-#    configuration[isreal] <- configuration[isreal] / sum(configuration[isreal])
-#    configurations[isreal] <- round(configuration[isreal], digits)
+#    isreal <- names(which(parameters$types[colnames(configuration)] == "r"))
+#    # This ignores 'digits'
+#    c_real <- unlist(configuration[isreal])
+#    c_real <- c_real / sum(c_real)
+#    configuration[isreal] <- c_real
 #    return(configuration)
 #  }
 
 ## ----repairEx2,prompt=FALSE, eval=FALSE-----------------------------
-#  repairConfiguration = function (configuration, parameters, digits)
+#  repairConfiguration = function(configuration, parameters)
 #  {
 #   columns <- c("p1","p2","p3")
 #   # cat("Before"); print(configuration)
-#   configuration[columns] <- sort(configuration[columns])
+#   configuration[columns] <- sort(unlist(configuration[columns], use.names=FALSE))
 #   # cat("After"); print(configuration)
 #   return(configuration)
 #  }
 
 ## ----targetRunnerParallel,prompt=FALSE, eval=FALSE------------------
-#  targetRunnerParallel(experiments, exec.target.runner, scenario, target.runner)
+#  targetRunnerParallel(experiments, exec_target_runner, scenario, target_runner)
 
 ## ----targetRunnerParallel2,prompt=FALSE, eval=FALSE-----------------
-#  targetRunnerParallel <- function(experiments, exec.target.runner, scenario)
+#  targetRunnerParallel <- function(experiments, exec_target_runner, scenario,
+#                                   target_runner)
 #  {
-#    return (lapply(experiments, exec.target.runner, scenario = scenario,
-#                   target.runner = target.runner))
+#    lapply(experiments, exec_target_runner, scenario = scenario,
+#           target_runner = target_runner)
 #  }
 
 ## ----targetRunnerParallel3,prompt=FALSE, eval=TRUE------------------
@@ -122,20 +132,18 @@ print(experiment)
 #  testing_fromlog(logFile = "./irace.Rdata", testNbElites = 1)
 
 ## ----change_recover, prompt=TRUE, eval=FALSE------------------------
-#  load ("~/tuning/irace.Rdata")
-#  new.path <- "~/experiments/tuning/instances/"
+#  iraceResults <- read_logfile("./tuning/irace.Rdata")
+#  new_path <- "./experiments/tuning/instances/"
 #  iraceResults$scenario$instances <-
-#     paste (new.path,
-#           basename(iraceResults$scenario$instances),
-#           sep="")
-#  save (iraceResults, file="~/tuning/irace.Rdata")
+#     paste0(new_path, basename(iraceResults$scenario$instances))
+#  save(iraceResults, file="./tuning/irace.Rdata")
 
 ## ----load_rdata, prompt=FALSE, eval=FALSE---------------------------
-#  load("irace-acotsp.Rdata")
+#  logfile <- system.file(package="irace", "exdata", "irace-acotsp.Rdata", mustWork=TRUE)
+#  iraceResults <- read_logfile(logfile)
 
 ## ----show_version, prompt=TRUE, eval=TRUE, comment=""---------------
-iraceResults$irace.version
-iraceResults[["irace.version"]]
+iraceResults$irace_version
 
 ## ----show_configurations, prompt=TRUE, eval=TRUE, comment=""--------
 head(iraceResults$allConfigurations)
@@ -144,7 +152,8 @@ head(iraceResults$allConfigurations)
 print(iraceResults$allElites)
 
 ## ----get_elites, prompt=TRUE, eval=TRUE, comment=""-----------------
-getFinalElites("irace-acotsp.Rdata", n = 0)
+logfile <- system.file(package="irace", "exdata", "irace-acotsp.Rdata", mustWork=TRUE)
+getFinalElites(logfile, n = 0)
 
 ## ----show_iditelites, prompt=TRUE, eval=TRUE, comment=""------------
 print(iraceResults$iterationElites)
@@ -156,30 +165,44 @@ getConfigurationById(iraceResults, ids = id)
 
 ## ----get_experiments, prompt=TRUE, eval=TRUE, comment=""------------
 # As an example, we use the best configuration found
-best.config <- getFinalElites(iraceResults = iraceResults, n = 1)
-id <- best.config$.ID.
-# Obtain the configurations using the identifier
-# of the best configuration
-all.exp <- iraceResults$experiments[,as.character(id)]
-all.exp[!is.na(all.exp)]
+best_config <- getFinalElites(iraceResults, n = 1)
+best_id <- as.character(best_config$.ID.)
+# Obtain the results of the best configuration
+all_exp <- iraceResults$experiments[, best_id]
+# all_exp is a vector and names(all_exp) is the (instance,seed) index.
+all_exp
+# Obtain the results of the first and best configurations
+all_exp <- iraceResults$experiments[, c("1", best_id)]
+# all_exp is a matrix: colnames(all_exp) is configurationID and
+# rownames(all_exp) is the (instance,seed) index.
+all_exp
 
 ## ----get_instance_seed, prompt=TRUE, eval=TRUE, comment=""----------
-# As an example, we get seed and instance of the experiments
-# of the best candidate.
-# Get index of the instances
-pair.id <- which(!is.na(all.exp))
-index <- iraceResults$state$.irace$instancesList[pair.id, "instance"]
-# Obtain the instance names
-iraceResults$scenario$instances[index]
-# Get the seeds
-iraceResults$state$.irace$instancesList[pair.id, "seed"]
+# As an example, we get instanceID, seeds and instances of the experiments
+# of the best configuration.
+# We could get the indexes of the instances on which at least one
+# configuration was executed:
+pair_index <- which(apply(!is.na(all_exp), 1L, any))
+# or the instances on which all configurations were executed:
+pair_index <- which(apply(!is.na(all_exp), 1L, all))
+# but in this example we get the indexes of the instances executed for
+# the best configuration.
+pair_index <- which(!is.na(all_exp[, best_id]))
+instanceID <- get_instanceID_seed_pairs(iraceResults)[["instanceID"]][pair_index]
+# or get the seeds
+get_instanceID_seed_pairs(iraceResults)[["seed"]][pair_index]
+# or obtain the actual instances.
+iraceResults$scenario$instances[instanceID]
+# If the instances are of atomic type (integers, floating-point numbers or
+# character strings), the above is similar to:
+get_instanceID_seed_pairs(iraceResults, index = pair_index, instances=TRUE)
 
 ## ----get_model, prompt=TRUE, eval=TRUE, comment=""------------------
 # As an example, we get the model probabilities for the
 # localsearch parameter.
 iraceResults$state$model["localsearch"]
 # The order of the probabilities corresponds to:
-iraceResults$parameters$domain$localsearch
+iraceResults$scenario$parameters$domains$localsearch
 
 ## ----get_test_exp, prompt=TRUE, eval=TRUE, comment=""---------------
 # Get the results of the testing
@@ -201,16 +224,18 @@ pairwise.wilcox.test (as.vector(results), conf, paired = TRUE, p.adj = "bonf")
 irace:::concordance(iraceResults$testing$experiments)
 
 ## ----testEvo, fig.pos="tb", fig.align="center", out.width='0.7\\textwidth', fig.cap="Testing set performance of the best-so-far configuration over number of experiments. Label of each point is the configuration ID.", prompt=FALSE, eval=TRUE, comment=""----
+# Get summary data from the logfile.
+irs <- irace_summarise(iraceResults)
 # Get number of iterations
-iters <- unique(iraceResults$experimentLog[, "iteration"])
+iters <- irs$n_iterations
 # Get number of experiments (runs of target-runner) up to each iteration
-fes <- cumsum(table(iraceResults$experimentLog[,"iteration"]))
+fes <- cumsum(table(iraceResults$state$experiment_log[["iteration"]]))
 # Get the mean value of all experiments executed up to each iteration
 # for the best configuration of that iteration.
 elites <- as.character(iraceResults$iterationElites)
 values <- colMeans(iraceResults$testing$experiments[, elites])
 stderr <- function(x) sqrt(var(x)/length(x))
-err <- apply(iraceResults$testing$experiments[, elites], 2, stderr)
+err <- apply(iraceResults$testing$experiments[, elites], 2L, stderr)
 plot(fes, values, type = "s",
      xlab = "Number of runs of the target algorithm",
      ylab = "Mean value over testing set", ylim=c(23000000,23500000))
@@ -223,19 +248,23 @@ text(fes, values, elites, pos = 1)
 #  plotAblation(ablog)
 
 ## ----testAb, fig.pos="htb!", fig.align="center", out.width="0.75\\textwidth", fig.cap="Example of plot generated by \\code{plotAblation()}.", prompt=FALSE, eval=TRUE, echo=FALSE----
-logfile <- file.path(system.file(package="irace"), "exdata", "log-ablation.Rdata")
+logfile <- system.file(package="irace", "exdata", "log-ablation.Rdata", mustWork=TRUE)
 plotAblation(logfile)
 
-## ----ablation_cmdline, prompt=FALSE, eval=TRUE,echo=FALSE-----------
+## ----ablation_cmdline, prompt=FALSE, eval=TRUE,echo=FALSE, comment=""----
 ablation_cmdline("--help")
 
 ## ----postsel, prompt=FALSE, eval=FALSE------------------------------
 #  # Execute all elite configurations in the iterations
-#  psRace(iraceLogFile="irace.Rdata", elites=TRUE)
+#  psRace("irace.Rdata", max_experiments = 0.5, elites=TRUE)
 #  # Execute a set of configurations IDs providing budget
-#  psRace(iraceLogFile="irace.Rdata",
-#               conf.ids=c(34, 87, 102, 172, 293),
-#               max.experiments=500)
+#  psRace("irace.Rdata", conf_ids = c(34, 87, 102, 172, 293), max_experiments = 500)
+
+## ----targetCmdline, prompt=FALSE, eval=FALSE------------------------
+#  targetRunner="./real_target_runner.py"
+#  targetRunnerLauncher="python"
+#  targetCmdLine="-m {targetRunner} {configurationID} {instanceID}\
+#   --seed {seed} -i {instance} --cutoff {bound} {targetRunnerArgs}"
 
 ## ----faq3, eval=FALSE-----------------------------------------------
 #  library(Rmpi)

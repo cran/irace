@@ -7,7 +7,7 @@
 ablation_cmdline(argv = commandArgs(trailingOnly = TRUE))
 }
 \arguments{
-\item{argv}{(\code{character()}) \cr The arguments
+\item{argv}{\code{character()}\cr The arguments
 provided on the R command line as a character vector, e.g.,
 \code{c("-i", "irace.Rdata", "--src", 1)}.}
 }
@@ -31,7 +31,9 @@ executable (\code{ablation.exe} in Windows).
 The function reads the parameters given on the command line
 used to invoke R, launches \code{\link[=ablation]{ablation()}} and possibly \code{\link[=plotAblation]{plotAblation()}}.
 
-List of command-line options:\preformatted{-l,--log-file            Path to the (.Rdata) file created by irace from which
+List of command-line options:
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{-l,--log-file            Path to the (.Rdata) file created by irace from which
                          the "iraceResults" object will be loaded.
 -S,--src                 Source configuration ID. Default: 1.
 -T,--target              Target configuration ID. By default the best
@@ -42,16 +44,19 @@ List of command-line options:\preformatted{-l,--log-file            Path to the 
                          configuration on all "--n-instances" to determine the
                          best-performing one; "racing" will apply racing to
                          find the best configurations. Default: full.
--n,--n-instances         Number of instances used in "full" ablation will be
-                         n_instances * scenario$firstTest. Default: 1.
+-n,--nrep                Number of replications per instance used in "full"
+                         ablation. Default: 1.
    --seed                Integer value to use as seed for the random number
                          generation. Default: 1234567.
 -o,--output-file         Log file to save the ablation log. If "", the results
                          are not saved to a file. Default: log-ablation.Rdata.
+   --instances-file      Instances file used for ablation: "train", "test" or a
+                         filename containing the list of instances. Default:
+                         train.
 -p,--plot                Output filename (.pdf) for the plot. If not given, no
                          plot is created.
--O,--plot-type           Type of plot. Supported values are "mean" and
-                         "boxplot". Default: mean.
+-O,--plot-type           Type of plot. Supported values are "mean", "boxplot",
+                         "rank" or "rank,boxplot". Default: mean.
    --old-path            Old path found in the log-file (.Rdata) given as input
                          to be replaced by --new-path.
    --new-path            New path to replace the path found in the log-file
@@ -61,13 +66,17 @@ List of command-line options:\preformatted{-l,--log-file            Path to the 
                          log-file (.Rdata)
    --parallel            Number of calls to targetRunner to execute in
                          parallel. Values 0 or 1 mean no parallelization.
-}
+}\if{html}{\out{</div>}}
 }
 \examples{
-# ablation_cmdline("--help")
-
+ablation_cmdline("--help")
+# Find the ablation command-line executable:
+Sys.glob(file.path(system.file(package="irace", "bin"), "ablation*"))
+}
+\seealso{
+\code{\link[=plotAblation]{plotAblation()}} \code{\link[=ablation]{ablation()}}
 }
 \author{
 Manuel López-Ibáñez
 }
-\concept{running}
+\concept{ablation}

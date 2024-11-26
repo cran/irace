@@ -4,18 +4,17 @@
 \alias{read_pcs_file}
 \title{Read parameters in PCS (AClib) format and write them in irace format.}
 \usage{
-read_pcs_file(file, digits = 4, debugLevel = 0, text)
+read_pcs_file(file, digits = 4L, debugLevel = 0L, text)
 }
 \arguments{
-\item{file}{(\code{character(1)}) \cr Filename containing the definitions of
+\item{file}{\code{character(1)}\cr Filename containing the definitions of
 the parameters to be tuned.}
 
-\item{digits}{The number of decimal places to be considered for the real
-parameters.}
+\item{digits}{\code{integer(1)}\cr The number of decimal places to be considered for real-valued parameters.}
 
-\item{debugLevel}{(\code{integer(1)}) \cr Larger values produce more verbose output.}
+\item{debugLevel}{\code{integer(1)}\cr Larger values produce more verbose output.}
 
-\item{text}{(\code{character(1)}) \cr If \code{file} is not supplied and this is,
+\item{text}{\code{character(1)}\cr If \code{file} is not supplied and this is,
 then parameters are read from the value of \code{text} via a text connection.}
 }
 \value{
@@ -33,7 +32,7 @@ whose name is \code{file}) in the expected form.  See the documentation
 for details.  If none of these parameters is given, \pkg{irace}
 will stop with an error.
 
-\strong{FIXME:} Forbidden configurations, default configuration and transformations ("log") are currently ignored. See \url{https://github.com/MLopez-Ibanez/irace/issues/31}
+\strong{FIXME:} Multiple conditions and default configuration are currently ignored. See \url{https://github.com/MLopez-Ibanez/irace/issues/31}
 }
 \examples{
  ## Read the parameters directly from text
@@ -44,7 +43,7 @@ will stop with an error.
  alpha        [0.00, 5.00][1]
  beta         [0.00, 10.00][1]
  rho          [0.01, 1.00][0.95]
- ants         [5, 100][10]i
+ ants         [1, 100][10]il
  q0           [0.0, 1.0][0]
  rasrank      [1, 100][1]i
  elitistants  [1, 750][1]i
@@ -55,8 +54,8 @@ will stop with an error.
  rasrank | algorithm in {ras}
  elitistants | algorithm in {eas}
  nnls | localsearch in {1,2,3}
- dlb | localsearch in {1,2,3}
- '
+ dlb | localsearch in {1,2,3} 
+ {alpha=0, beta=0}'
  parameters_table <- read_pcs_file(text=pcs_table)
  cat(parameters_table)
  parameters <- readParameters(text=parameters_table)
@@ -65,6 +64,9 @@ will stop with an error.
 }
 \references{
 Frank Hutter, Manuel López-Ibáñez, Chris Fawcett, Marius Thomas Lindauer, Holger H. Hoos, Kevin Leyton-Brown, and Thomas Stützle. \strong{AClib: A Benchmark Library for Algorithm Configuration}. In P. M. Pardalos, M. G. C. Resende, C. Vogiatzis, and J. L. Walteros, editors, \emph{Learning and Intelligent Optimization, 8th International Conference, LION 8}, volume 8426 of Lecture Notes in Computer Science, pages 36–40. Springer, Heidelberg, 2014.
+}
+\seealso{
+\code{\link[=readParameters]{readParameters()}}
 }
 \author{
 Manuel López-Ibáñez

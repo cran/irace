@@ -4,19 +4,20 @@
 \alias{readConfigurationsFile}
 \title{Read parameter configurations from a file}
 \usage{
-readConfigurationsFile(filename, parameters, debugLevel = 0, text)
+readConfigurationsFile(filename, parameters, debugLevel = 0L, text)
 }
 \arguments{
-\item{filename}{(\code{character(1)}) \cr Filename from which the configurations should be read. The contents should be readable by \code{read.table( , header=TRUE)}.}
+\item{filename}{\code{character(1)}\cr Filename from which the configurations should be read.
+The contents should be readable by \code{read.table( , header=TRUE)}.}
 
 \item{parameters}{(\code{list()}) \cr Data structure containing the parameter
 space definition. The data structure has to similar to the one returned by the
 function \code{\link{readParameters}}.}
 
-\item{debugLevel}{(\code{integer(1)}) \cr Larger values produce more verbose output.}
+\item{debugLevel}{\code{integer(1)}\cr Larger values produce more verbose output.}
 
-\item{text}{(\code{character(1)}) \cr If \code{file} is not supplied and this is,
-then parameters are read from the value of \code{text} via a text connection.}
+\item{text}{\code{character(1)}\cr If \code{file} is not supplied and this is,
+then configurations are read from the value of \code{text} via a text connection.}
 }
 \value{
 A data frame containing the obtained configurations.
@@ -29,13 +30,14 @@ Reads a set of target-algorithm configurations from a file and puts them in
 description provided.
 }
 \details{
-Example of an input file:\preformatted{# This is a comment line
-<param_name_1>  <param_name_2> ... 
-      0.5           "value_1"    ...
-      1.0           "value_2"    ...
-      1.2           "value_3"    ...
-      ...           ...
-}
+Example of an input file:
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{# This is a comment line
+param_1    param_2
+    0.5  "value_1"
+    1.0         NA
+    1.2  "value_3"
+}\if{html}{\out{</div>}}
 
 The order of the columns does not necessarily have to be the same
 as in the file containing the definition of the parameters.

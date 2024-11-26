@@ -5,19 +5,15 @@
 \title{Execute the given configurations on the testing instances specified in the
 scenario}
 \usage{
-testConfigurations(configurations, scenario, parameters)
+testConfigurations(configurations, scenario)
 }
 \arguments{
-\item{configurations}{(\code{data.frame}) \cr Parameter configurations of the
+\item{configurations}{\code{data.frame}\cr Parameter configurations of the
 target algorithm (one per row).}
 
-\item{scenario}{(\code{list()}) \cr Data structure containing \pkg{irace}
+\item{scenario}{\code{list()}\cr Data structure containing \pkg{irace}
 settings. The data structure has to be the one returned by the function
 \code{\link[=defaultScenario]{defaultScenario()}} or \code{\link[=readScenario]{readScenario()}}.}
-
-\item{parameters}{(\code{list()}) \cr Data structure containing the parameter
-space definition. The data structure has to similar to the one returned by the
-function \code{\link{readParameters}}.}
 }
 \value{
 A list with the following elements:

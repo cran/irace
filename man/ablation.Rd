@@ -8,28 +8,31 @@ ablation(
   iraceResults,
   src = 1L,
   target = NULL,
-  ab.params = NULL,
+  ab_params = NULL,
   type = c("full", "racing"),
-  n_instances = 1L,
-  seed = 1234567,
+  nrep = 1L,
+  seed = 1234567L,
   ablationLogFile = "log-ablation.Rdata",
+  instancesFile = "train",
   ...
 )
 }
 \arguments{
-\item{iraceResults}{(\code{list()}|\code{character(1)}) \code{iraceResults} object created by \pkg{irace} and typically saved in the log file \code{irace.Rdata}. If a character string is given, then it is interpreted as the path to the log file from which the \code{iraceResults} object will be loaded.}
+\item{iraceResults}{\code{list()}|\code{character(1)}\cr Object created by \pkg{irace} and typically saved in the log file \code{irace.Rdata}. If a character string is given, then it is interpreted as the path to the log file from which the \code{iraceResults} object will be loaded.}
 
-\item{src, target}{Source and target configuration IDs. By default, the first configuration ever evaluated (ID 1) is used as \code{src} and the best configuration found by irace is used as target.}
+\item{src, target}{(\code{integer(1)}) Source and target configuration IDs. By default, the first configuration ever evaluated (ID 1) is used as \code{src} and the best configuration found by irace is used as target.}
 
-\item{ab.params}{Specific parameter names to be used for the ablation. They must be in \code{parameters$names}. By default, use all parameters.}
+\item{ab_params}{Specific parameter names to be used for the ablation. They must be in \code{parameters$names}. By default, use all parameters.}
 
 \item{type}{Type of ablation to perform: \code{"full"} will execute each configuration on all \code{n_instances} to determine the best-performing one; \code{"racing"} will apply racing to find the best configurations.}
 
-\item{n_instances}{(\code{integer(1)}) Number of instances used in \code{"full"} ablation will be \code{n_instances * scenario$firstTest}.}
+\item{nrep}{(\code{integer(1)}) Number of replications per instance used in \code{"full"} ablation. When \code{nrep > 1}, each configuration will be executed \code{nrep} times on each instance with different random seeds.}
 
 \item{seed}{(\code{integer(1)}) Integer value to use as seed for the random number generation.}
 
 \item{ablationLogFile}{(\code{character(1)}) Log file to save the ablation log. If \code{NULL}, the results are not saved to a file.}
+
+\item{instancesFile}{(\code{character(1)}) Instances file used for ablation: \code{'train'}, \code{'test'} or a filename containing the list of instances.}
 
 \item{...}{Further arguments to override scenario settings, e.g., \code{debugLevel}, \code{parallel}, etc.}
 }
@@ -57,7 +60,7 @@ plotAblation(ablog)
 # Execute ablation between two selected configurations, and selecting only a
 # subset of parameters, directly reading the setup from the irace log file.
 ablog <- ablation(logfile, src = 1, target = 10,
-                  ab.params = c("temp"), ablationLogFile = NULL)
+                  ab_params = c("temp"), ablationLogFile = NULL)
 plotAblation(ablog)
 }
 
@@ -67,8 +70,9 @@ C. Fawcett and H. H. Hoos. Analysing differences between algorithm
 configurations through ablation. Journal of Heuristics, 22(4):431–458, 2016.
 }
 \seealso{
-\code{\link[=plotAblation]{plotAblation()}}
+\code{\link[=plotAblation]{plotAblation()}} \code{\link[=ablation_cmdline]{ablation_cmdline()}}
 }
 \author{
 Leslie Pérez Cáceres and Manuel López-Ibáñez
 }
+\concept{ablation}

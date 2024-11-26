@@ -1,14 +1,14 @@
-context("irace")
-
 withr::with_output_sink("test-maxTime.Rout", {
 
 target.runner <- function(experiment, scenario)
 {
   configuration     <- experiment$configuration
-  tmax <-  as.numeric(configuration[["tmax"]]) 
-  temp <-  as.numeric(configuration[["temp"]])
+  tmax <-  configuration[["tmax"]]
+  temp <-  configuration[["temp"]]
+  stopifnot(is.numeric(tmax))
+  stopifnot(is.numeric(temp))
   time <- max(1, abs(rnorm(1, mean=(tmax+temp)/10)))
-  return(list(cost = time, time = time, call = toString(experiment)))
+  list(cost = time, time = time, call = toString(experiment))
 }
 
 time.irace <- function(...)
@@ -19,29 +19,31 @@ time.irace <- function(...)
   parameters <- readParameters(text = '
    tmax "" i (1, 50)
    temp "" r (0, 10)
+   dummy "" c ("dummy")
    ')
   scenario <- list(targetRunner = target.runner,
                    instances = weights,
                    testInstances = test_weights,
-                   seed = 1234567)
+                   seed = 1234567,
+                   parameters = parameters)
   scenario <- modifyList(scenario, args)
   scenario <- checkScenario (scenario)
 
-  irace:::checkTargetFiles(scenario = scenario, parameters = parameters)
+  irace:::checkTargetFiles(scenario = scenario)
   
-  confs <- irace(scenario = scenario, parameters = parameters)
-  final_ids <- as.character(sort(confs$.ID.[1:scenario$testNbElites]))
+  confs <- irace(scenario = scenario)
+  final_ids <- sort(as.character(confs$.ID.[1:scenario$testNbElites]))
   expect_gt(nrow(confs), 0L)
   testing_fromlog(scenario$logFile)
-  load(scenario$logFile)
+  iraceResults <- read_logfile(scenario$logFile)
   if (scenario$testIterationElites) {
     # FIXME: We could test here that the correct configurations are tested.
     expect_gte(ncol(iraceResults$testing$experiments), scenario$testNbElites)
   } else {
     test_ids <- sort(colnames(iraceResults$testing$experiments))
-    expect_equivalent(final_ids, test_ids)
+    expect_equal(final_ids, test_ids)
   }
-  return(confs)
+  confs
 }
 
 

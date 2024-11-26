@@ -5,18 +5,17 @@
 \title{Reads the parameters to be tuned by \pkg{irace} from a file or from a
 character string.}
 \usage{
-readParameters(file, digits = 4, debugLevel = 0, text)
+readParameters(file, digits = 4L, debugLevel = 0L, text)
 }
 \arguments{
-\item{file}{(\code{character(1)}) \cr Filename containing the definitions of
+\item{file}{\code{character(1)}\cr Filename containing the definitions of
 the parameters to be tuned.}
 
-\item{digits}{The number of decimal places to be considered for the real
-parameters.}
+\item{digits}{\code{integer(1)}\cr The number of decimal places to be considered for real-valued parameters.}
 
-\item{debugLevel}{(\code{integer(1)}) \cr Larger values produce more verbose output.}
+\item{debugLevel}{\code{integer(1)}\cr Larger values produce more verbose output.}
 
-\item{text}{(\code{character(1)}) \cr If \code{file} is not supplied and this is,
+\item{text}{\code{character(1)}\cr If \code{file} is not supplied and this is,
 then parameters are read from the value of \code{text} via a text connection.}
 }
 \value{
@@ -41,8 +40,10 @@ and, thus, it does not need to be tuned.}
 \item{\code{nbVariable}}{Number of variable (to be tuned) parameters.}
 \item{\code{depends}}{List of character vectors, each vector specifies
 which parameters depend on this one.}
-\item{\code{isDependent}}{Logical vector that specifies which parameter has
+\item{\code{is_dependent}}{Logical vector that specifies which parameter has
 a dependent domain.}
+\item{\code{digits}}{Integer vector that specifies the number of digits per parameter.}
+\item{\code{forbidden}}{List of expressions that define which parameter configurations are forbidden.}
 }
 }
 \description{
@@ -60,19 +61,23 @@ will stop with an error.
 
 A fixed parameter is a parameter that should not be sampled but
 instead should be always set to the only value of its domain.  In this
-function we set isFixed to TRUE only if the parameter is a categorical
+function we set \code{isFixed} to TRUE only if the parameter is a categorical
 and has only one possible value.  If it is an integer and the minimum
 and maximum are equal, or it is a real and the minimum and maximum
 values satisfy \code{round(minimum, digits) == round(maximum, digits)},
 then the parameter description is rejected as invalid to identify
 potential user errors.
+
+The order of the parameters determines the order in which parameters are
+given to \code{targetRunner}. Changing the order may also change the results
+produced by \code{irace}, even with the same random seed.
 }
 \examples{
  ## Read the parameters directly from text
- parameters.table <- '
+ parameters_table <- '
  # name       switch           type  values               [conditions (using R syntax)]
  algorithm    "--"             c     (as,mmas,eas,ras,acs)
- localsearch  "--localsearch " c     (0, 1, 2, 3)
+ localsearch  "--localsearch " o     (0, 1, 2, 3)
  alpha        "--alpha "       r     (0.00, 5.00)
  beta         "--beta "        r     (0.00, 10.00)
  rho          "--rho  "        r     (0.01, 1.00)
@@ -82,8 +87,13 @@ potential user errors.
  elitistants  "--elitistants " i     (1, ants)            | algorithm == "eas"
  nnls         "--nnls "        i     (5, 50)              | localsearch \%in\% c(1,2,3)
  dlb          "--dlb "         c     (0, 1)               | localsearch \%in\% c(1,2,3)
+ 
+ [forbidden]
+ (alpha == 0.0) & (beta == 0.0)
+ [global]
+ digits = 4
  '
- parameters <- readParameters(text=parameters.table)
+ parameters <- readParameters(text=parameters_table)
  str(parameters)
 
 }

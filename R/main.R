@@ -28,14 +28,14 @@
 # $Revision$
 # =========================================================================
 
-#' irace.license
+#' irace_license
 #'
 #' A character string containing the license information of \pkg{irace}.
 #' 
 #' @export
 ## __VERSION__ below will be replaced by the version defined in R/version.R
 ## This avoids constant conflicts within this file.
-irace.license <-
+irace_license <-
 '#------------------------------------------------------------------------------
 # irace: An implementation in R of (Elitist) Iterated Racing
 # Version: __VERSION__
@@ -55,14 +55,14 @@ irace.license <-
 '
 cat_irace_license <- function()
 {
-  cat(sub("__VERSION__", irace.version, irace.license, fixed=TRUE))
+  cat(sub("__VERSION__", irace_version, irace_license, fixed=TRUE))
 }
 
 #' Higher-level interface to launch irace.
 #'
-#' @template arg_scenario
+#' @inheritParams defaultScenario
 #' 
-#' @param output.width (\code{integer(1)}) The width used for the screen
+#' @param output.width `integer(1)`\cr The width used for the screen
 #'   output.
 #'
 #' @details This function checks the correctness of the scenario, reads the
@@ -75,15 +75,16 @@ cat_irace_license <- function()
 #' @templateVar return_invisible TRUE
 #' @template return_irace
 #' @seealso
-#' [irace.cmdline()] a higher-level command-line interface to
-#'  [irace()]
-#'  [readScenario()] to read the scenario setup from  a file.
-#'  [defaultScenario()] to provide a default scenario for \pkg{irace}.
-#' 
+#'  \describe{
+#'  \item{[irace_cmdline()]}{a command-line interface to [irace()].}
+#'  \item{[readScenario()]}{for reading a configuration scenario from a file.}
+#'  \item{[readParameters()]}{read the target algorithm parameters from a file.}
+#'  \item{[defaultScenario()]}{returns the default scenario settings of \pkg{irace}.}
+#' }
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
 #' @concept running
 #' @export
-irace.main <- function(scenario, output.width = 9999L)
+irace_main <- function(scenario, output.width = 9999L)
   irace_common(scenario = scenario, simple=FALSE, output.width = output.width)
 
 #' Test configurations given in `.Rdata` file
@@ -131,7 +132,6 @@ testing_fromlog <- function(logFile, testNbElites, testIterationElites,
   }
   iraceResults <- read_logfile(logFile)
   scenario <- iraceResults[["scenario"]]
-  parameters <- iraceResults[["parameters"]]
   instances_changed <- FALSE
   
   if (!missing(testNbElites))
@@ -167,17 +167,17 @@ testing_fromlog <- function(logFile, testNbElites, testIterationElites,
   
   # Get configurations that will be tested
   if (scenario$testIterationElites)
-    testing_id <- sapply(iraceResults$allElites, function(x)
-      x[1:min(length(x), scenario$testNbElites)])
+    testing_id <- sapply(iraceResults$allElites,
+                         function(x) x[seq_len(min(length(x), scenario$testNbElites))])
   else {
     tmp <- iraceResults$allElites[[length(iraceResults$allElites)]]
-    testing_id <- tmp[1:min(length(tmp), scenario$testNbElites)]
+    testing_id <- tmp[seq_len(min(length(tmp), scenario$testNbElites))]
   }
   testing_id <- unique.default(unlist(testing_id))
   configurations <- iraceResults$allConfigurations[testing_id, , drop=FALSE]
 
   irace.note ("Testing configurations (in no particular order): ", paste(testing_id, collapse=" "), "\n")
-  testing_common(configurations, scenario, parameters, iraceResults)
+  testing_common(configurations, scenario, iraceResults)
   return(TRUE)
 }
 
@@ -187,10 +187,10 @@ testing_fromlog <- function(logFile, testNbElites, testIterationElites,
 #' `filename` (same format as in [readConfigurationsFile()]). A `logFile` is
 #' created unless disabled in `scenario`. This may overwrite an existing one!
 #' 
-#' @param filename Path to a file containing configurations: one configuration
+#' @param filename `character(1)`\cr Path to a file containing configurations: one configuration
 #'   per line, one parameter per column, parameter names in header.
 #'
-#' @template arg_scenario
+#' @inheritParams defaultScenario
 #'
 #' @return iraceResults
 #'
@@ -201,46 +201,39 @@ testing_fromlog <- function(logFile, testNbElites, testIterationElites,
 #' @export
 testing_fromfile <- function(filename, scenario)
 {
-  irace.note ("Checking scenario\n")
+  irace.note ("Checking scenario.\n")
   scenario <- checkScenario(scenario)
   if (!scenario$quiet) printScenario(scenario)
 
-  irace.note("Reading parameter file '", scenario$parameterFile, "'.\n")
-  parameters <- readParameters (file = scenario$parameterFile,
-                                digits = scenario$digits)
-  configurations <- readConfigurationsFile (filename, parameters)
-  configurations <- cbind(.ID. = 1:nrow(configurations),
-                             configurations,
-                             .PARENT. = NA)
-  rownames(configurations) <- configurations$.ID.
+  configurations <- readConfigurationsFile(filename, scenario$parameters)
+  configurations <- cbind(.ID. = seq_nrow(configurations), configurations, .PARENT. = NA_integer_)
+  rownames(configurations) <- configurations[[".ID."]]
   num <- nrow(configurations)
-  configurations <- checkForbidden(configurations, scenario$forbiddenExps)
+  configurations <- checkForbidden(configurations, scenario$parameters$forbidden)
   if (nrow(configurations) < num) {
     irace.warning("Some of the configurations in the configurations file were forbidden",
-                  "and, thus, discarded")
+                  "and, thus, discarded.")
   }
   # To save the logs
   iraceResults <- list(scenario = scenario,
-                       irace.version = irace.version,
-                       parameters = parameters,
+                       irace_version = irace_version,
                        allConfigurations = configurations)
     
   irace.note ("Testing configurations (in the order given as input): \n")
-  iraceResults <- testing_common(configurations, scenario, parameters, iraceResults)
-  return(iraceResults)
+  testing_common(configurations, scenario, iraceResults)
 }
 
-testing_common <- function(configurations, scenario, parameters, iraceResults)
+testing_common <- function(configurations, scenario, iraceResults)
 {
   verbose <- !scenario$quiet
-  if (verbose) configurations.print(configurations)
-  iraceResults$testing <- testConfigurations(configurations, scenario, parameters)
-  irace_save_logfile (iraceResults, scenario)
-  # FIXME : We should print the seeds also. As an additional column?
+  if (verbose) configurations_print(configurations)
+  iraceResults$testing <- testConfigurations(configurations, scenario)
+  irace_save_logfile(iraceResults, scenario)
   irace.note ("Testing results (column number is configuration ID in no particular order):\n")
-  if (verbose) print(iraceResults$testing$experiments)
+  if (verbose) print(cbind(seeds = iraceResults$testing$seeds,
+                           as.data.frame(iraceResults$testing$experiments)))
   irace.note ("Finished testing\n")
-  return(iraceResults)
+  iraceResults
 }
 
 #' Test that the given irace scenario can be run.
@@ -248,11 +241,10 @@ testing_common <- function(configurations, scenario, parameters, iraceResults)
 #' Test that the given irace scenario can be run by checking the scenario
 #' settings provided and trying to run the target-algorithm.
 #' 
-#' @template arg_scenario
-#' @template arg_parameters
-#'
-#' @return returns \code{TRUE} if successful and gives an error and returns
-#' \code{FALSE} otherwise.
+#' @inheritParams defaultScenario
+#' 
+#' @return returns `TRUE` if successful and gives an error and returns `FALSE`
+#'   otherwise.
 #' 
 #' @details If the `parameters` argument is missing, then the parameters 
 #'   will be read from the file `parameterFile`  given by `scenario`. If
@@ -266,35 +258,22 @@ testing_common <- function(configurations, scenario, parameters, iraceResults)
 #'  \item{\code{\link{defaultScenario}}}{returns the default scenario settings of \pkg{irace}.}
 #'  \item{\code{\link{checkScenario}}}{to check that the scenario is valid.}
 #' }
-#' 
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
 #' @export
-checkIraceScenario <- function(scenario, parameters)
+checkIraceScenario <- function(scenario)
 {
   irace.note ("Checking scenario\n")
-  scenario$debugLevel <- 2 
+  scenario$debugLevel <- 2L
   scenario <- checkScenario(scenario)
   if (!scenario$quiet) printScenario(scenario)
  
-  if (missing(parameters)) {
-    irace.note("Reading parameter file '", scenario$parameterFile, "'.\n")
-    parameters <- readParameters (file = scenario$parameterFile,
-                                  digits = scenario$digits,
-                                  debugLevel = 2)
-  } else if (!is.null.or.empty(scenario$parameterFile)) {
-    if (!scenario$quiet) 
-      cat("# checkIraceScenario(): 'parameters' provided by user. ",
-          "Parameter file '", scenario$parameterFile, "' will be ignored\n", sep = "")
-  }
-  checkParameters(parameters)
   irace.note("Checking target runner.\n")
-  if (checkTargetFiles(scenario = scenario, parameters = parameters)) {
+  if (checkTargetFiles(scenario = scenario)) {
     irace.note("Check successful.\n")
     return(TRUE)
-  } else {
-    irace.error("Check unsuccessful.\n")
-    return(FALSE)
   }
+  irace.error("Check unsuccessful.\n")
+  return(FALSE)
 }
 
 init <- function() 
@@ -305,7 +284,7 @@ init <- function()
   for (file in tmplFiles) {
     if (grepl(".tmpl", file) && (file != "target-evaluator.tmpl")) {
       newFile <- gsub(".tmpl", "", file)
-      if ((file == "target-runner.tmpl") && .Platform$OS.type == 'windows') {
+      if (file == "target-runner.tmpl" && .Platform$OS.type == 'windows') {
         file.copy(file.path(libPath, "templates", "windows", "target-runner.bat"), file.path(getwd(), "target-runner.bat"), overwrite = FALSE)
       } else {
         file.copy(file.path(libPath, "templates", file), file.path(getwd(), newFile), overwrite = FALSE)
@@ -317,21 +296,21 @@ init <- function()
 
 #' Launch `irace` with command-line options.
 #'
-#' Calls [irace.main()] using command-line options, maybe parsed from the
+#' Calls [irace_main()] using command-line options, maybe parsed from the
 #' command line used to invoke R.
 #' 
 #' @param argv (\code{character()}) \cr The arguments 
 #' provided on the R command line as a character vector, e.g., 
 #' \code{c("--scenario", "scenario.txt", "-p", "parameters.txt")}.
 #' Using the  default value (not providing the parameter) is the 
-#' easiest way to call \code{irace.cmdline}.
+#' easiest way to call \code{irace_cmdline}.
 #' 
 #' @details The function reads the parameters given on the command line
 #' used to invoke R, finds the name of the scenario file,
 #'  initializes the scenario from the file (with the function
 #'  \code{\link{readScenario}}) and possibly from parameters passed in
 #'  the command line. It finally starts \pkg{irace} by calling
-#'  \code{\link{irace.main}}.
+#'  \code{\link{irace_main}}.
 #'
 #' List of command-line options:
 #' ```{r echo=FALSE,comment=NA}
@@ -342,13 +321,13 @@ init <- function()
 #' @template return_irace
 #' 
 #' @seealso
-#'  [irace.main()] to start \pkg{irace} with a given scenario.
+#'  [irace_main()] to start \pkg{irace} with a given scenario.
 #' @examples
-#' irace.cmdline("--version")
+#' irace_cmdline("--version")
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
 #' @concept running
 #' @export
-irace.cmdline <- function(argv = commandArgs(trailingOnly = TRUE))
+irace_cmdline <- function(argv = commandArgs(trailingOnly = TRUE))
 {
   parser <- CommandArgsParser$new(argv = argv, argsdef = .irace.params.def)
   quiet <- !is.null(parser$readArg (short = "-q", long = "--quiet")) 
@@ -360,7 +339,7 @@ irace.cmdline <- function(argv = commandArgs(trailingOnly = TRUE))
     cat("# installed at: ", system.file(package="irace"), "\n",
         "# called with: ", paste(argv, collapse = " "), "\n", sep = "")
   }
-  if (!is.null(parser$readArg (short = "-h", long = "--help"))) {
+  if (!is.null(parser$readArg(short = "-h", long = "--help"))) {
     parser$cmdline_usage()
     return(invisible(NULL))
   }
@@ -379,8 +358,7 @@ irace.cmdline <- function(argv = commandArgs(trailingOnly = TRUE))
   scenario <- readScenario(scenarioFile)
   for (param in .irace.params.names) {
     scenario[[param]] <-
-      parser$readCmdLineParameter(paramName = param,
-                                  default = scenario[[param]])
+      parser$readCmdLineParameter(paramName = param, default = scenario[[param]])
   }
   if (quiet) scenario$quiet <- TRUE
  
@@ -396,9 +374,96 @@ irace.cmdline <- function(argv = commandArgs(trailingOnly = TRUE))
     return(invisible(testing_fromfile(testFile, scenario)))
   }
 
-  if (length(parser$argv) > 0) {
+  if (length(parser$argv))
     irace.error ("Unknown command-line options: ", paste(parser$argv, collapse = " "))
+  
+  irace_common(scenario = scenario, simple=FALSE)
+}
+
+#' @rdname irace_cmdline
+#' @export
+irace.cmdline <- function(argv = commandArgs(trailingOnly = TRUE))
+{
+  .Deprecated("irace.cmdline")
+  irace_cmdline(argv = argv)
+}
+
+## Check targetRunner execution
+checkTargetFiles <- function(scenario)
+{
+  ## Create two random configurations
+  configurations <- sampleUniform(scenario$parameters, 2L,
+    repair = scenario$repairConfiguration)
+  set(configurations, j = ".ID.", value = seq_nrow(configurations))
+  setcolorder(configurations, ".ID.", before = 1L)
+  
+  # Read initial configurations provided by the user.
+  initConfigurations <- allConfigurationsInit(scenario)
+  setDT(initConfigurations)
+  if (nrow(initConfigurations) > 0L) {
+    irace.assert(all(colnames(configurations) == colnames(initConfigurations)))
+    configurations <- rbindlist(list(initConfigurations, configurations))
+    set(configurations, j = ".ID.", value = seq_nrow(configurations))
   }
 
-  irace_common(scenario = scenario, simple=FALSE)
+  bounds <- rep(scenario$boundMax, nrow(configurations))
+  instances_ID <- if (scenario$sampleInstances)
+                    sample.int(length(scenario$instances), 1L) else 1L
+  setDF(configurations)
+  experiments <- createExperimentList(
+    configurations, scenario$parameters, instances = scenario$instances,
+    instances_ID = instances_ID, seeds = 1234567L, bounds = bounds)
+
+  race_state <- RaceState$new(scenario)
+  race_state$start_parallel(scenario)
+  on.exit(race_state$stop_parallel(), add = TRUE)
+
+  # FIXME: Create a function try.call(err.msg,warn.msg, fun, ...)
+  # Executing targetRunner
+  cat("# Executing targetRunner (", nrow(configurations), "times)...\n")
+  result <- TRUE
+  output <-  withCallingHandlers(
+    tryCatch(execute_experiments(race_state, experiments, scenario),
+             error = function(e) {
+               cat(sep = "\n",
+                   "\n# Error occurred while executing targetRunner:",
+                   paste0(conditionMessage(e), collapse="\n"))
+               result <<- FALSE
+               NULL
+             }), warning = function(w) {
+               cat(sep = "\n",
+                   "\n# Warning occurred while executing targetRunner:",
+                   paste0(conditionMessage(w), collapse="\n"))
+               invokeRestart("muffleWarning")})
+
+  if (scenario$debugLevel >= 1L) {
+    cat ("# targetRunner returned:\n")
+    print(output, digits = 15L)
+  }
+  
+  irace.assert(is.null(scenario$targetEvaluator) == is.null(race_state$target_evaluator))
+  if (!result) return(FALSE)
+  
+  if (!is.null(scenario$targetEvaluator)) {
+    cat("# Executing targetEvaluator...\n")
+    output <-  withCallingHandlers(
+      tryCatch(execute_evaluator(race_state$target_evaluator,
+        experiments, scenario, output, configurations[[".ID."]]),
+                 error = function(e) {
+                   cat(sep = "\n",
+                       "\n# Error ocurred while executing targetEvaluator:",
+                       paste0(conditionMessage(e), collapse="\n"))
+                   result <<- FALSE
+                   NULL
+                 }), warning = function(w) {
+                   cat(sep = "\n",
+                       "\n# Warning ocurred while executing targetEvaluator:",
+                       paste0(conditionMessage(w), collapse="\n"))
+                   invokeRestart("muffleWarning")})
+    if (scenario$debugLevel >= 1L) {
+      cat ("# targetEvaluator returned:\n")
+      print(output, digits = 15L)
+    }
+  }
+  result
 }

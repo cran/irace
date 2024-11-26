@@ -1,5 +1,3 @@
-#' irace.version
-#'
-#' A character string containing the version of `irace`.
+#' A character string containing the version of `irace` including git SHA.
 #' @export
-irace.version <- '3.5.6863679'
+irace_version <- '4.0.886dd4c'

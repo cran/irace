@@ -9,8 +9,9 @@
 \RequirePackage{xparse}
 \RequirePackage[dvipsnames]{xcolor}
 \documentclass[a4paper,english]{article}
-\usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
 \usepackage[a4paper]{geometry} % It saves some pages
 \usepackage[english]{babel}
 \usepackage{ifthen}
@@ -25,6 +26,7 @@
 \usepackage{amsmath,amssymb}
 \usepackage{relsize}
 \usepackage{fancyvrb}
+\usepackage{underscore}
 \usepackage{microtype}
 % \texttt{test -- test} keeps the "--" as "--" (and does not convert it to an en dash)
 \DisableLigatures{encoding = T1, family = tt* }
@@ -194,6 +196,18 @@
 %
 }
 
+% Workaround for broken knitr: https://github.com/yihui/knitr-examples/blob/master/036-latex-if.tex
+\providecommand{\hldef}[1]{\textcolor[rgb]{0.345,0.345,0.345}{#1}}%
+\providecommand{\hlsng}[1]{\textcolor[rgb]{0.192,0.494,0.8}{#1}}%
+
+<<setup, include=FALSE>>=
+library(knitr)
+knit_hooks$set(inline = function(x) {
+  if (is.numeric(x)) return(knitr:::format_sci(x, 'latex'))
+  highr::hi_latex(x)
+})
+@
+
 \begin{document}
 
 <<include=FALSE>>=
@@ -216,9 +230,9 @@ library(knitr)
 %Load files needed for examples
 <<exampleload,eval=TRUE,include=FALSE>>=
 library("irace")
-load("examples.Rdata")
-iraceResults <- irace::read_logfile("irace-acotsp.Rdata")
-log_ablation_file <- file.path(system.file(package="irace"), "exdata", "log-ablation.Rdata")
+load("examples.Rdata") # loads "experiment" and "output"
+iraceResults <- irace::read_logfile(system.file(package="irace", "exdata", "irace-acotsp.Rdata", mustWork=TRUE))
+log_ablation_file <- system.file(package="irace", "exdata", "log-ablation.Rdata", mustWork = TRUE)
 load(log_ablation_file)
 options(width = 70)
 @
@@ -241,10 +255,10 @@ options(width = 70)
 The \irace package implements an \emph{iterated racing} procedure,
 which is an extension of Iterated F-race (\IFRACE)~\cite{BirYuaBal2010:emaoa}.  The main use of
 \irace is the automatic configuration of optimization and decision algorithms,
-that is, finding the most appropriate settings of an algorithm given a 
-set of instances of a problem. However, it may also be useful for 
-configuring other types of algorithms when performance depends on 
-the used parameter settings. It builds upon the \pkg{race} package 
+that is, finding the most appropriate settings of an algorithm given a
+set of instances of a problem. However, it may also be useful for
+configuring other types of algorithms when performance depends on
+the used parameter settings. It builds upon the \pkg{race} package
 by Birattari and it is implemented in \aR. The \irace
 package is available from CRAN:
 %
@@ -502,7 +516,7 @@ Alternatively, you may directly invoke \irace from within the \aR
 console by executing:
 <<windows_irace_help ,eval=FALSE, prompt=FALSE>>=
 library("irace")
-irace.cmdline("--help")
+irace_cmdline("--help")
 @
 
 
@@ -518,7 +532,6 @@ parameters of the algorithm. The tuning scenario is composed of the following el
 \item Training instances list (see \autoref{sec:training})
 \item \irace options (see \autoref{sec:irace options}).
 \item \textit{Optional:} Initial configurations (see \autoref{sec:initial}).
-\item \textit{Optional:} Forbidden configurations (see \autoref{sec:forbidden}).
 \item \textit{Optional:} Target algorithm evaluator (see \autoref{sec:evaluator}).
 \end{enumerate}
 
@@ -541,12 +554,12 @@ indications provided in each step and in the template files used; if you have
 doubts check the the sections that describe each option in detail.
 
 \begin{enumerate}[leftmargin=*]
-\item Create a directory (\eg~\path{~/tuning/}) for the scenario setup. This directory will contain
+\item Create a directory (\eg~\path{./tuning/}) for the scenario setup. This directory will contain
 all the files that describe the scenario. On GNU/Linux or OS X, you can do this as follows:
 %<<dir1,engine='bash',eval=FALSE>>=
 \begin{lstlisting}[style=BashInputStyle]
-mkdir ~/tuning
-cd ~/tuning
+mkdir ./tuning
+cd ./tuning
 \end{lstlisting}
 %@
 
@@ -568,15 +581,8 @@ some) for the tuning. Follow the instructions in \code{configurations.txt} and s
 information in \autoref{sec:initial}. If you do not need to
 define initial configurations remove this file from the directory.
 
-\item \textit{Optional}: Define forbidden parameter value combinations,
-that is, configurations that \irace must not consider in the tuning.
-Follow the instructions in \code{forbidden.txt} and update \code{scenario.txt} with \parameter{forbiddenFile} \code{=} \code{"forbidden.txt"}. More information about
-forbidden configurations in \autoref{sec:forbidden}. 
-If you do not need to define forbidden configurations remove this file from
-the directory.
-
 \item Place the instances you would like to use for the tuning of your
-  algorithm in the folder \path{~/tuning/Instances/}. In addition, you can
+  algorithm in the folder \path{./tuning/Instances/}. In addition, you can
   create a file (\eg~\code{instances-list.txt}) that specifies which instances
   from that directory should be run and which instance-specific parameters to
   use. To use such an instance file, set the appropriate option in
@@ -584,11 +590,7 @@ the directory.
   See \autoref{sec:training} for guidelines.
 
 \item Uncomment and assign in \code{scenario.txt} only the options for which you
-need a value different from the default.
-%% MANUEL: I'm not sure what this means.
-% The names of the template files match the default names of the scenario
-% options.
-Some common parameters that you might want to adjust are:
+need a value different from the default. Some common options that you might want to adjust are:
 \begin{description}
 \item[\parameter{execDir}] (\code{--exec-dir}): the directory in which \irace will execute the
 target algorithm; the default value is the current directory.
@@ -596,12 +598,13 @@ target algorithm; the default value is the current directory.
 \item[\parameter{maxExperiments}] (\code{--max-experiments}): the maximum number of executions
 of the target algorithm that \irace will perform.
 \item[\parameter{maxTime}] (\code{--max-time}): maximum total execution time in seconds for the executions of \code{targetRunner}. In this case, \code{targetRunner} must return two values: cost and time. Note that you must provide either \parameter{maxTime} or \parameter{maxExperiments}.
-\end{description}
+\item[\parameter{trainInstancesDir}] (\code{--train-instances-dir}): set if to \path{./Instances} if you put the training instances in that folder as instructed above.
+  \end{description}
 For setting the tuning budget see \autoref{sec:budget}. For more information on \irace options and their default values, see \autoref{sec:irace options}.
 
 \item Modify the \code{target-runner} script to run your algorithm. This script
   must execute your algorithm with the parameters and instance specified by
-  \irace and return the evaluation of the execution and \textit{optionally} the execution 
+  \irace and return the evaluation of the execution and \textit{optionally} the execution
   time (\code{cost [time]}). When the \parameter{maxTime} option is used, returning \code{time} is mandatory.
   The \code{target-runner} template is written in \proglang{GNU Bash}
   scripting language, which can be executed easily in GNU/Linux and OS X
@@ -650,10 +653,10 @@ For setting the tuning budget see \autoref{sec:budget}. For more information on 
     \code{echo "\$COST"} (assuming \parameter{maxExperiments} is used) and the generated files are deleted (you may remove that line if you wish to keep them).
 
     \begin{xwarningbox}
-      The \code{target-runner} script must be an executable file, unless you specify \parameter{targetRunnerLauncher} and \parameter{targetRunnerLauncherArgs}.
+      The \code{target-runner} script must be an executable file, unless you specify \parameter{targetRunnerLauncher}.
     \end{xwarningbox}
 
-    You can test the target runner from the \aR console by checking the scenario as 
+    You can test the target runner from the \aR console by checking the scenario as
     explained earlier in \autoref{sec:execution}.
 
 If you have problems related to the \code{target-runner} script when executing
@@ -663,7 +666,7 @@ problems. For more information about the \parameter{targetRunner}, please see
         \end{enumerate}
 
       \item \textit{Optional}: Modify the \code{target-evaluator} file. This is rarely needed and the \code{target-runner} template does not use it. \autoref{sec:evaluator} explains when a \parameter{targetEvaluator} is needed and how to define it.
-        
+
       \item The \irace executable provides an option (\parameter{--check}) to
         check that the scenario is correctly defined. We recommend to perform a
         check every time you create a new scenario. When performing the check,
@@ -673,7 +676,7 @@ problems. For more information about the \parameter{targetRunner}, please see
 
 \begin{itemize}
 \item From the command-line (on Windows, execute \code{irace.bat}):
-  
+
 %<<irace_check,engine='bash', eval=FALSE>>=
 \begin{lstlisting}[style=BashInputStyle]
 # $IRACE_HOME is the installation directory of irace.
@@ -697,11 +700,11 @@ checkIraceScenario(scenario = scenario)
  or directly from the \aR console:
 
 \begin{itemize}
-\item 
+\item
 \textbf{From the command-line console}, call the command (on Windows, you should execute
   \code{irace.exe}):
 \begin{lstlisting}[style=BashInputStyle]
-cd ~/tuning/
+cd ./tuning/
 # $IRACE_HOME is the installation directory of irace
 # By default, irace reads scenario.txt, you can specify a different file
 # with --scenario.
@@ -712,22 +715,22 @@ properly in the \code{scenario.txt} file using the options described in
 \autoref{sec:irace options}. Most \irace options can be specified
 in the command line or directly in the \code{scenario.txt} file.
 
-\item 
+\item
 \textbf{From the \aR console}, evaluate:
 
 <<irace_R_exe, eval=FALSE, prompt=FALSE>>=
 library("irace")
 # Go to the directory containing the scenario files
-setwd("~/tuning")
+setwd("./tuning")
 scenario <- readScenario(filename = "scenario.txt",
                          scenario = defaultScenario())
-irace.main(scenario = scenario)
+irace_main(scenario = scenario)
 @
 
 \end{itemize}
 
-This will perform one run of \irace. See the output of \code{irace --help} in the command-line or \code{irace.usage()} in \aR for quick information on
-additional \irace parameters. For more information about \irace options, see \autoref{sec:irace options}.
+This will perform one run of \irace. See the output of \code{irace --help} in the command-line or \code{irace_cmdline("--help")} in \aR for quick information on
+additional \irace options. For more information about \irace options, see \autoref{sec:irace options}.
 
 \end{enumerate}
 
@@ -748,35 +751,35 @@ a GNU/Linux system such as Ubuntu with a working \proglang{C} compiler such as \
 To execute this scenario follow these steps:
 
 \begin{enumerate}
-\item Create a directory for the tuning (\eg~\path{~/tuning/}) and copy the example scenario files
+\item Create a directory for the tuning (\eg~\path{./tuning/}) and copy the example scenario files
 located in the \code{examples} folder to the created directory:
 %<<dir0,engine='bash',eval=FALSE>>=
 \begin{lstlisting}[style=BashInputStyle]
-mkdir ~/tuning
-cd ~/tuning
+mkdir ./tuning
+cd ./tuning
 # $IRACE_HOME is the installation directory of irace.
-cp $IRACE_HOME/examples/acotsp/* ~/tuning/
+cp $IRACE_HOME/examples/acotsp/* ./tuning/
 \end{lstlisting}
 %@
 
-\item Download the training instances from \url{https://iridia.ulb.ac.be/supp/IridiaSupp2016-003/index.html} to the \path{~/tuning/} directory.
-\item Create the instance directory (\eg~\path{~/tuning/Instances}) and decompress the instance files on it.
+\item Download the training instances from \url{https://iridia.ulb.ac.be/supp/IridiaSupp2016-003/index.html} to the \path{./tuning/} directory.
+\item Create the instance directory (\eg~\path{./tuning/Instances}) and decompress the instance files on it.
 
 %<<instance0,engine='bash',eval=FALSE>>=
 \begin{lstlisting}[style=BashInputStyle]
-mkdir ~/tuning/Instances/
-cd ~/tuning/
+mkdir ./tuning/Instances/
+cd ./tuning/
 tar -xvf tsp-instances-training.tar.bz2 Instances/
 \end{lstlisting}
 %@
 
-\item Download the \ACOTSP software from \url{http://www.aco-metaheuristic.org/aco-code/} to the \path{~/tuning/}
+\item Download the \ACOTSP software from \url{http://www.aco-metaheuristic.org/aco-code/} to the \path{./tuning/}
 directory and compile it.
 %<<acotsp0,engine='bash',eval=FALSE>>=
 \begin{lstlisting}[style=BashInputStyle]
-cd ~/tuning/
+cd ./tuning/
 tar -xvf ACOTSP-1.03.tgz
-cd ~/tuning/ACOTSP-1.03
+cd ./tuning/ACOTSP-1.03
 make
 \end{lstlisting}
 %@
@@ -785,8 +788,8 @@ make
 
 %<<runexample,engine='bash',eval=FALSE>>=
 \begin{lstlisting}[style=BashInputStyle]
-mkdir ~/tuning/acotsp-arena/
-cd ~/tuning/
+mkdir ./tuning/acotsp-arena/
+cd ./tuning/
 # $IRACE_HOME is the installation directory of irace.
 $IRACE_HOME/bin/irace
 \end{lstlisting}
@@ -796,8 +799,8 @@ $IRACE_HOME/bin/irace
 
 <<runexample2,prompt=FALSE,eval=FALSE>>=
 library("irace")
-setwd("~/tuning/")
-irace.cmdline()
+setwd("./tuning/")
+irace_cmdline()
 @
 
 \end{enumerate}
@@ -835,7 +838,7 @@ types supported by \irace are the following:
     bound>)}'. This interval is closed, that is, the parameter value
   may eventually be one of the bounds. The possible values are rounded
   to a number of \emph{decimal places} specified by
-  option \parameter{digits}. For example, given the default
+  the global option \code{digits} (Section~\ref{sec:globaloptions}). For example, given the default
   number of digits of $4$, the values $0.12345$ and
   $0.12341$ are both rounded to $0.1234$.
    Selected real-valued parameters can be optionally sampled on
@@ -858,14 +861,28 @@ types supported by \irace are the following:
 
 \end{itemize}
 
+\begin{xwarningbox}
+  Boolean (or logical) parameters are best encoded as categorical ones with just two values rather than integer ones with domain $(0,1)$. Some boolean parameters take an explicit value (0/1 or true/false) such as:
+\begin{CodeInput}
+dlb "--dlb " c (0, 1)
+\end{CodeInput}
+Others are switches whose presence activates the parameter:
+\begin{CodeInput}
+dlb "" c ("", "--dlb")
+\end{CodeInput}
+\end{xwarningbox}
+
+
+
+
 \subsubsection{Parameter domains}
 
 For each target parameter, an interval or a set of values must be defined
 according to its type, as described above. There is no limit for the size of
 the set or the length of the interval, but keep in mind that larger domains
 could increase the difficulty of the tuning task. Choose always values that you
-consider relevant for the tuning. In case of doubt, we recommend to choose larger 
-intervals, as occasionally best parameter settings may be not intuitive a priori. 
+consider relevant for the tuning. In case of doubt, we recommend to choose larger
+intervals, as occasionally best parameter settings may be not intuitive a priori.
 All intervals are considered as closed intervals.
 
 It is possible to define parameters that will have always the same value.
@@ -888,11 +905,11 @@ The expressions can only use the following operators and \aR functions: \code{+}
 \code{round}, \code{floor}, \code{ceiling}, \code{trunc}. If you need to use an
 operator or function not listed here, please contact us.
 
-\begin{xwarningbox} 
+\begin{xwarningbox}
 The user must ensure that the defined domain is valid at all times since
-\irace currently is not able to detect possible invalid domains based on the expressions 
+\irace currently is not able to detect possible invalid domains based on the expressions
 provided.
-\end{xwarningbox}   
+\end{xwarningbox}
 
 If you have a parameter \code{p2} that is just a transformation of another
 \code{p1}, then instead of using a dependent domain (left-hand side of the
@@ -931,6 +948,38 @@ the target algorithm may have a parameter \code{localsearch} that takes values
 set if the first parameter takes precisely the value \code{ts}. Thus, parameter
 \code{ts-length} is conditional on \code{localsearch == "ts"}.
 
+
+\subsubsection{Forbidden parameter configurations}\label{sec:forbidden}
+A line containing just \texttt{[forbidden]} ends the list of parameters and starts the list of forbidden expressions.
+Each line is a logical expression (in \aR syntax) containing
+parameter names as defined by the \parameter{parameterFile}
+(\autoref{sec:target parameters}), values and logical operators. For a list of \aR logical operators see:
+\begin{center}
+ \url{https://stat.ethz.ch/R-manual/R-devel/library/base/html/Syntax.html}
+\end{center}
+If \irace generates a parameter configuration that makes any of the logical
+expressions evaluate to \code{TRUE}, then the configuration is considered
+forbidden and it is never evaluated. This is useful when some combination
+of parameter values could cause the target algorithm to crash, consume
+excessive CPU time or memory, or when it is known that they do no produce
+satisfactory results.
+
+\begin{xwarningbox}
+Initial configuration (\autoref{sec:initial}) that are forbidden will be discarded with a warning.
+\end{xwarningbox}
+
+If the forbidden constraints provided are too strict, \irace may produce the following error:
+\begin{CodeInput}
+  irace tried 100 times to sample from the model a configuration not forbidden
+  without success, perhaps your constraints are too strict?
+\end{CodeInput}
+%
+In that case, it may be a good idea to reformulate  the forbidden constraints as conditional parameters (\autoref{sec:conditional}), parameter-dependent domains (\autoref{sec:paramdependant}),  repairing the configurations (\autoref{sec:repairconf}) or post-processing within the target-algorithm (\autoref{sec:complex_domains}).
+
+\subsubsection{Global options}\label{sec:globaloptions}
+
+A line containing just \texttt{[global]} starts the definition of global options. The only global option currently implemented is \code{digits}, which controls the number of decimal digits for real valued parameters. Its default value is 4.
+
 \subsubsection{Parameter file format}\label{sec:parameters file}
 
 For simplicity, the description of the parameters space is given as a
@@ -946,7 +995,7 @@ where each field is defined as follows:
 \item[\code{<name>}] The name of the parameter as an unquoted
                   alphanumeric string, e.g., `\code{ants}'.
                   %
-\item[\code{<label>}]                  
+\item[\code{<label>}]
 A \emph{label} for this parameter. This is a
                   string that will be passed together with the parameter
                   to \parameter{targetRunner}. In the default \parameter{targetRunner}
@@ -974,15 +1023,26 @@ A \emph{label} for this parameter. This is a
                          enabled or disabled, thus making the parameter conditional. If the
                          condition evaluates to false, then no value is assigned to this
                          parameter, and neither the parameter value nor the corresponding
-                         label are passed to \parameter{targetRunner}. The condition must follow the same syntax as those for specifying forbidden configurations (\autoref{sec:forbidden}), that is, it must be a
+                         label are passed to \parameter{targetRunner}. The condition must follow the same syntax as those for specifying forbidden configurations (see below), that is, it must be a
                          valid \aR logical expression\footnote{For a list of \aR operators
-                         see: \url{https://stat.ethz.ch/R-manual/R-devel/library/base/html/Syntax.html}}. 
+                         see: \url{https://stat.ethz.ch/R-manual/R-devel/library/base/html/Syntax.html}}.
                          The condition may contain the name
                          of other parameters as long as the dependency graph does not
                          contain any cycle. Otherwise, \irace will detect the cycle and
-                         stop with an error. 
-                
-                \end{description}
+                         stop with an error.
+\end{description}
+\begin{xwarningbox}
+Categorical and ordinal parameters are always treated as strings. Given a parameter like:
+\begin{CodeInput}
+a "" c (0, 5, 10, 20)
+\end{CodeInput}
+then, a condition like \code{a > 10} will be true when \code{a} is \code{5},
+because comparisons between strings are lexicographic and \code{"10"} is sorted
+before \code{"5"}. As a work-around, you can convert the string to numeric in
+the condition with \code{as.numeric(a)}.
+\end{xwarningbox}
+
+
 
 As an example, Figure~\ref{fig:acotsp_parameters} shows the parameters file
 of the \ACOTSP scenario.
@@ -1002,6 +1062,11 @@ q0          "--q0 "           r    (0.0, 1.0)           | algorithm == "acs"
 dlb         "--dlb "          c    (0, 1)               | localsearch %in% c(1,2,3)
 rasrank     "--rasranks "     i    (1, "ants")          | algorithm == "ras"
 elitistants "--elitistants "  i    (1, 750)             | algorithm == "eas"
+
+[forbidden]
+## Examples of valid logical operators are:
+## ==  !=  >=  <=  >  <  &  |  !  %in%
+(alpha == 0.0) & (beta == 0.0)
 \end{CodeInput}
 \caption{Parameter file (\code{parameters.txt}) for tuning \ACOTSP.}\label{fig:acotsp_parameters}
 \end{figure}
@@ -1038,6 +1103,7 @@ The structure of the parameter list that is created is as follows:
     \code{nbVariable}   & Number of variable (i.e., to be tuned) parameters.\\
     \code{isDependent}  & Logical vector that specifies which parameter defines
                           a dependent domain.\\
+    \code{forbidden}  & List of R logical expressions that cannot evaluate to \code{TRUE} for any evaluated configuration.\\
   \end{tabularx}
 \end{center}
 
@@ -1046,10 +1112,10 @@ for the \code{algorithm}, \code{ants} and \code{q0} parameters of the \ACOTSP sc
 
 <<parametersetup,eval=TRUE,include=FALSE>>=
 # Setup example
-parameters <- irace::readParameters(text='
+parameters <- readParameters(text='
 algorithm       "--"                 c		(as,mmas,eas,ras,acs)
-ants            "--ants "            i	  	(5, 100)
-q0              "--q0 "              r  	(0.0, 1.0) 		| algorithm %in% c("acs")
+ants            "--ants "            i	        (5, 100)
+q0              "--q0 "              r          (0.0, 1.0)              | algorithm %in% c("acs")
 ')
 @
 
@@ -1071,20 +1137,20 @@ cost value (\eg cost of the best solution found) of the evaluation; unless compu
   \code{-1} before returning it to \irace.
 \end{xwarningbox}
 
-\subsubsection{Target runner executable program}
+\subsubsection{Target runner as an executable program}
 
 When \parameter{targetRunner} is an auxiliary executable program, it
 is invoked for each candidate configuration, passing as arguments:
 %
 \begin{center}
-\small\code{<id.configuration>\ <id.instance>\ <seed>\ <instance>\ [bound]\ <configuration>}
+\small\code{<id_configuration>\ <id_instance>\ <seed>\ <instance>\ [bound]\ <configuration>}
 \end{center}
 %
 \begin{center}
 \renewcommand{\arraystretch}{1.2}
   \begin{tabularx}{1\linewidth}{@{}rX}
-    \code{id.configuration}  & an alphanumeric string that uniquely identifies a configuration;\\
-    \code{id.instance} & an alphanumeric string that uniquely identifies an instance;\\
+    \code{id_configuration}  & an alphanumeric string that uniquely identifies a configuration;\\
+    \code{id_instance} & an alphanumeric string that uniquely identifies an instance;\\
     \code{seed} & seed for the random number generator to be used for this evaluation, ignore the seed for deterministic algorithms;\\
     \code{instance} & string giving the instance to be used for this evaluation;\\
     \code{bound} & optional execution time bound. Only provided when the \parameter{boundMax} option is set in the scenario, see \autoref{sec:capping};\\
@@ -1108,14 +1174,14 @@ constructed by appending to each parameter label (switch), \emph{without
 separator}, the value of the parameter, following the order given in the
 parameter table. The program \parameter{targetRunner} must print a real
 number, which corresponds to the cost measure of the candidate configuration
-for the given instance and optionally its execution time (mandatory when \parameter{maxTime} 
-is used and/or when the \parameter{capping} option is enabled). The working directory of 
+for the given instance and optionally its execution time (mandatory when \parameter{maxTime}
+is used and/or when the \parameter{capping} option is enabled). The working directory of
 \parameter{targetRunner} is set to the execution directory specified by the option
 \parameter{execDir}. This allows the user to execute independent runs of \irace
 in parallel using different values for \parameter{execDir}, without the runs
 interfering with each other.
 
-\subsubsection{Target runner R function}
+\subsubsection{Target runner as an R function}
 \label{sec:runner fx}
 
 When \parameter{targetRunner} is an \aR function, it is invoked
@@ -1132,8 +1198,8 @@ list. The structure of the \code{experiment} list is as follows:
 \begin{center}
 \renewcommand{\arraystretch}{1.2}
   \begin{tabularx}{1\linewidth}{@{}rX}
- \code{id.configuration}  & an alphanumeric string that uniquely identifies a configuration;\\
-   \code{id.instance} & an alphanumeric string that uniquely identifies an instance;\\
+   \code{id_configuration}  & an alphanumeric string that uniquely identifies a configuration;\\
+   \code{id_instance} & an alphanumeric string that uniquely identifies an instance;\\
    \code{seed} & seed to be used for this evaluation;\\
    \code{instance} & string giving the instance to be used for this evaluation;\\
    \code{bound} &  optional execution time bound;\\
@@ -1149,15 +1215,17 @@ The following is an example of an experiment list for the \ACOTSP scenario:
 print(experiment)
 @
 
+You can find an example that calls MATLAB from \aR using this approach here: \url{https://github.com/MLopez-Ibanez/irace/blob/master/inst/examples/matlab/scenario.txt}.
+
 If \parameter{targetEvaluator} is \code{NULL}, then
 the \parameter{targetRunner} function must return a list with at least one
 element \code{"cost"}, the numerical value corresponding to the evaluation of
 the given configuration on the given instance. A cost of \code{Inf} is accepted
 and results in the immediate rejection of the configuration (see
 \autoref{sec:reject}).
-    
-If the scenario option \parameter{maxTime} is non-zero or if the \parameter{capping} 
-option is enabled, then the list must contain at least another element \code{"time"} that 
+
+If the scenario option \parameter{maxTime} is non-zero or if the \parameter{capping}
+option is enabled, then the list must contain at least another element \code{"time"} that
 reports the execution time for this call to \code{targetRunner}.
 
 The return list may also contain the following optional elements that are used
@@ -1169,7 +1237,7 @@ by \irace for reporting errors in \code{targetRunner}:
 \code{error} & is a string used to report an error;\\
     \code{outputRaw} & is a string used to report the raw output of calls to
       an external program or function;\\
-    \code{call} & is a string used to report how \code{targetRunner} called 
+    \code{call} & is a string used to report how \code{targetRunner} called
       an external program or function;\\
   \end{tabularx}
 \end{center}
@@ -1191,7 +1259,7 @@ the same instance have already finished.
 
 \begin{xwarningbox}
 When using \parameter{targetEvaluator}, \parameter{targetRunner} must not return the evaluation
-of the configuration. If \parameter{maxTime} is used, \parameter{targetRunner} must return only 
+of the configuration. If \parameter{maxTime} is used, \parameter{targetRunner} must return only
 execution time.
 \end{xwarningbox}
 
@@ -1218,18 +1286,18 @@ When \parameter{targetEvaluator} is an auxiliary executable program, it
 is invoked for each candidate with the following arguments:
 %
 \begin{center}
-\small\code{<id.configuration>\ <id.instance>\ <seed>\ <instance>\ <num.configs>\ <all.conf.id>}
+\small\code{<id_configuration>\ <id_instance>\ <seed>\ <instance>\ <num_configurations>\ <all_conf_id>}
 \end{center}
 %
 \begin{center}
 \renewcommand{\arraystretch}{1.2}
   \begin{tabularx}{1\linewidth}{@{}rX}
- \code{id.configuration}  & an alphanumeric string that uniquely identifies a configuration;\\
-   \code{id.instance} & an alphanumeric string that uniquely identifies an instance;\\
+   \code{id_configuration}  & an alphanumeric string that uniquely identifies a configuration;\\
+   \code{id_instance} & an alphanumeric string that uniquely identifies an instance;\\
    \code{seed} & seed to be used for this evaluation;\\
    \code{instance} & string giving the instance to be used for this evaluation;\\
-   \code{num.configs} & number of alive candidate configurations;\\
-   \code{all.conf.id}    & list of IDs of the alive configurations separated by whitespace.\\
+   \code{num_configurations} & number of alive candidate configurations;\\
+   \code{all_conf_id}    & list of IDs of the alive configurations separated by whitespace.\\
   \end{tabularx}
 \end{center}
 
@@ -1245,16 +1313,16 @@ the given instance.
 When \parameter{targetEvaluator} is an \aR function, it is invoked
 for each candidate configuration as:%
 %
-<<targetEvaluator, prompt=FALSE, eval=FALSE>>=
-targetEvaluator(experiment, num.configurations, all.conf.id,
-                scenario, target.runner.call)
+<<targetEvaluator, eval=FALSE>>=
+targetEvaluator(experiment, num_configurations, all_conf_id, scenario,
+                target_runner_call)
 @
 %
 \noindent where \code{experiment} is a list that contains information about one
-experiment (see \autoref{sec:runner fx}), \code{num.configurations}
-is the number of configurations alive in the race, \code{all.conf.id} is
+experiment (see \autoref{sec:runner fx}), \code{num_configurations}
+is the number of configurations alive in the race, \code{all_conf_id} is
 the vector of IDs of the alive configurations,  \code{scenario} is
-the scenario list and \code{target.tunner.call} is the string of the
+the scenario list and \code{target_runner_call} is the string of the
 \parameter{targetRunner} execution line.
 
 The function \parameter{targetEvaluator} must return a list with one element
@@ -1270,7 +1338,7 @@ by \irace for reporting errors in \code{targetEvaluator}:
 \code{error} & is a string used to report an error;\\
     \code{outputRaw} & is a string used to report the raw output of calls to
       an external program or function;\\
-    \code{call} & is a string used to report how \code{targetEvaluator} called 
+    \code{call} & is a string used to report how \code{targetEvaluator} called
       an external program or function;\\
   \end{tabularx}
 \end{center}
@@ -1280,10 +1348,10 @@ by \irace for reporting errors in \code{targetEvaluator}:
 The \irace options \parameter{trainInstancesDir} and \parameter{trainInstancesFile}
 specify where to find the training instances.
 %
-By default, the value of \parameter{trainInstancesFile} is empty. This means that \irace will consider all files within the directory given by \parameter{trainInstancesDir} (by default \path{./Instances}) as training instances. 
+If you only set the value of \parameter{trainInstancesDir} (e.g., to  \path{./Instances}),  \irace will consider all files within that directory as training instances.
 
 Otherwise, the value of \parameter{trainInstancesFile} may specify a text
-file. The format of this file is one instance per line. Within each line, elements separated by white-space will be parsed as separate arguments to be supplied to \parameter{targetRunner}. This allows defining instance-specific parameter settings. Quoted strings will be parsed as a single argument.
+file. The format of this file is one instance per line. Within each line, elements separated by white-space will be parsed as separate arguments to be supplied to \parameter{targetRunner}. This allows defining instance-specific parameter settings. Quoted strings will be parsed as a single argument. 
 %
 The following example shows a training instance file for the \ACOTSP scenario:
 
@@ -1300,15 +1368,14 @@ The following example shows a training instance file for the \ACOTSP scenario:
 \caption{Training instances file for tuning \ACOTSP.}\label{fig:acotsp_training}
 \end{figure}
 
-The value of \parameter{trainInstancesDir} is always prefixed to the instance
+The value of \parameter{trainInstancesDir}, if set, is always prefixed to the instance
 name, that is, the instances names are treated as relative to this directory.
 %
-For example, given the above file as \parameter{trainInstancesFile} and the default value of  \parameter{trainInstancesDir} (\code{./Instances}), then a possible invocation of \parameter{targetRunner} would be:
+For example, given the above file as \parameter{trainInstancesFile} and   \parameter{trainInstancesDir}\code{="./Instances"}, then a possible invocation of \parameter{targetRunner} would be:
 %
 %<<target_runner_cmd, engine='bash', eval=FALSE>>=
 \begin{lstlisting}[style=BashInputStyle]
-target-runner 1 113 734718 ./Instances/100/100-1_100-2.tsp --time 1 \
-              --alpha 2.92 ...
+target-runner 1 4 5718 ./Instances/100/100-1_100-2.tsp --time 1 --alpha 2.92 ...
 \end{lstlisting}
 %@
 
@@ -1409,70 +1476,11 @@ different sets of good parameter values are known. This will allow \irace to sta
 from those parameter values and attempt to improve their performance.
 
 
-\subsection{Forbidden configurations}\label{sec:forbidden}
-
-The scenario option \parameter{forbiddenFile} specifies a text file containing
-logical expressions of parameter values that valid configurations should not
-satisfy, that is, no configuration that satisfies any of these logical
-expressions will be evaluated by \irace. This is useful when some combination
-of parameter values could cause the target algorithm to crash, consume
-excessive CPU time or memory, or when it is known that they do no produce
-satisfactory results.
-
-The format of the forbidden configurations file is one constraint per line,
-where each constraint is a logical expression (in \aR syntax) containing
-parameter names as defined by the \parameter{parameterFile}
-(\autoref{sec:target parameters}), values and logical operators. For a list of \aR logical operators see:
-\begin{center}
- \url{https://stat.ethz.ch/R-manual/R-devel/library/base/html/Syntax.html}
-\end{center}
-
-If a parameter configuration is generated that makes any of the logical
-expressions evaluate to \code{TRUE}, then the configuration is considered
-forbidden and it is discarded. Figure~\ref{fig:acotsp_forbidden} shows an
-example file that corresponds to the \ACOTSP scenario.
-
-\begin{figure}[!ht]
-  \centering
-  \begin{minipage}{0.5\linewidth}
-\begin{CodeInput}
-## Examples of valid logical operators are:
-## ==  !=  >=  <=  >  <  &  |  !  %in%
-(alpha == 0.0) & (beta == 0.0)
-\end{CodeInput}
-\end{minipage}
-\caption{Forbidden configurations file (\code{forbidden.txt}) for tuning \ACOTSP.}\label{fig:acotsp_forbidden}
-\end{figure}
-
-\begin{xwarningbox}
-If initial configuration are provided (\autoref{sec:initial}), they must also comply with the
-constraints defined in \parameter{forbiddenFile}.
-\end{xwarningbox}
-
-\begin{xwarningbox}
-Categorical and ordinal parameters are always treated as strings. Given a parameter like:
-\begin{CodeInput}
-a "" c (0, 5, 10, 20)
-\end{CodeInput}
-then, a condition like \code{a > 10} will be true when \code{a} is \code{5},
-because comparisons between strings are lexicographic and \code{"10"} is sorted
-before \code{"5"}. As a work-around, you can convert the string to numeric in
-the condition with \code{as.numeric(a)}.
-\end{xwarningbox}
-
-If the constraints provided are too strict, \irace may produce the following error:
-\begin{CodeInput}
-  irace tried 100 times to sample from the model a configuration not forbidden
-  without success, perhaps your constraints are too strict?
-\end{CodeInput}
-%
-In that case, it may be a good idea to reformulate  the constraints as conditional parameters (\autoref{sec:conditional}), parameter-dependent domains (\autoref{sec:paramdependant}),  repairing the configurations (\autoref{sec:repairconf}) or post-processing within the target-algorithm (\autoref{sec:complex_domains}).
-
 
 \subsection{Repairing configurations}\label{sec:repairconf}
 
 In some problems, the parameter values require complex constraints that cannot
-be implemented by constraints defined in \parameter{forbiddenFile}
+be implemented by constraints defined in the parameter space
 (\autoref{sec:forbidden}).
 %
 The scenario option \parameter{repairConfiguration} can be set to a
@@ -1483,29 +1491,29 @@ parameter values.
 %
 The \parameter{repairConfiguration} function is called after generating a
 configuration and before checking for forbidden configurations. The first
-argument is a 1-row \code{data.frame} with parameter names as the column names,
-the second argument is the \code{parameters} list (\autoref{sec:parameters
-  object}), and the third argument is the scenario
-variable \parameter{digits}. An example that makes all real-valued parameters
+argument is a 1-row \code{data.frame} with parameter names as the column names and the second argument is the \code{parameters} list (\autoref{sec:parameters
+  object}).  An example that makes all real-valued parameters
 sum up to one would be:
 %
 <<repairEx,prompt=FALSE, eval=FALSE>>=
-repairConfiguration = function (configuration, parameters, digits)
+repairConfiguration = function(configuration, parameters)
 {
-  isreal <- parameters$type[colnames(configuration)] %in% "r"
-  configuration[isreal] <- configuration[isreal] / sum(configuration[isreal])
-  configurations[isreal] <- round(configuration[isreal], digits)
+  isreal <- names(which(parameters$types[colnames(configuration)] == "r"))
+  # This ignores 'digits'
+  c_real <- unlist(configuration[isreal])
+  c_real <- c_real / sum(c_real)
+  configuration[isreal] <- c_real
   return(configuration)
 }
 @
-The following example forces  three specific parameters to be in increasing order:
+The following example forces three specific parameters to be in increasing order:
 %
 <<repairEx2,prompt=FALSE, eval=FALSE>>=
-repairConfiguration = function (configuration, parameters, digits)
+repairConfiguration = function(configuration, parameters)
 {
  columns <- c("p1","p2","p3")
  # cat("Before"); print(configuration)
- configuration[columns] <- sort(configuration[columns])
+ configuration[columns] <- sort(unlist(configuration[columns], use.names=FALSE))
  # cat("After"); print(configuration)
  return(configuration)
 }
@@ -1527,11 +1535,12 @@ to \parameter{targetRunner} (the runs of the target algorithm) in
 parallel. There are four ways to parallelize a single run of \irace:
 
 \begin{enumerate}
-\item \textbf{Parallel processes}: The option \parameter{parallel} allows
-  executing in parallel, within a single computer, the calls
-  to \parameter{targetRunner}, by means of the \pkg{parallel} \aR package. For
-  example, adding \code{--parallel N} to the command line of \irace will launch
-  in parallel up to $N$ calls of the target algorithm.
+\item \textbf{Parallel processes}: The option \parameter{parallel} executes
+  multiple calls to \parameter{targetRunner} in parallel within a single
+  computer, by means of the \pkg{parallel} \aR package. For example, adding
+  \code{--parallel N} to the command line of \irace will launch in parallel up
+  to $N$ calls of the target algorithm. When using this option within a
+  computing cluster, \irace will be submitted as a \emph{job} in some way  that tells the cluster to   ``reserve'' $N$ CPUs (or tasks depending on the cluster) within a single cluster node (a single machine).
 
 \item \textbf{MPI}: By enabling the option \parameter{mpi}, calls
   to \parameter{targetRunner} will be executed in parallel by using the message
@@ -1545,84 +1554,99 @@ parallel. There are four ways to parallelize a single run of \irace:
    commonly available in computing clusters and requires launching \irace in
    some particular way. An example script for using MPI mode in a SGE cluster
    is given at \IRACEHOME{/bin/parallel-irace-mpi}.
-   
+
    By default, \irace dynamically balances the load among nodes, however, this
    may significantly increase communication overhead in some parallel
-   environments, where disabling \parameter{loadBalancing} may be faster.
+   environments and disabling \parameter{loadBalancing} may be faster.
 
- \item \textbf{Batch jobs clusters}: Some computing clusters work by submitting
+ \item \textbf{Batch queue mode}: Some computing clusters work by submitting
    jobs to a batch queue and waiting for the jobs to finish. With the
    option \parameter{batchmode} (\code{--batchmode} \code{[sge|pbs|} \code{torque|slurm]}),
    \irace will launch in parallel as many calls of \parameter{targetRunner} as
-   possible (\parameter{parallel} can be used to set a limit) and use a
-   cluster-specific method to wait for jobs to finish. If your cluster type is
-   not supported or not working as expected, please contact us and we will
-   gladly add support for it.
-
-   \begin{xwarningbox}
-     In this mode, \irace must run in the submission node of the cluster, and
-     hence, \irace should not be submitted to the cluster as a job (that is,
-     neither \code{qsub} nor \code{squeue} should be used to invoke \irace
-     itself). The user must call the appropriate job submission command (e.g., \code{qsub}) from within
-     \parameter{targetRunner} with the appropriate settings for their cluster,
-     otherwise \parameter{targetRunner} will not submit jobs to the
-     cluster. The script must return a single string: The job ID that allows
-     \irace to determine the status of the running job. Moreover, the use of a
-     separate
-   \parameter{targetEvaluator} script is required to evaluate the results of
-   \parameter{targetRunner} and return them to \irace.
-   \end{xwarningbox}
- See the examples in
+   possible and use a
+   cluster-specific method to wait for jobs to finish. In this mode, \parameter{parallel} controls how many jobs are queued and should be set to the queue limit of your cluster.  If your cluster type is
+   not supported or not working as expected, please submit a pull request (\url{https://github.com/MLopez-Ibanez/irace/pulls}) adding support to your cluster type.
+See the examples in
     \IRACEHOME{/examples/batchmode-cluster/}.
 
+   \begin{xwarningbox}
+     In batchmode, \irace runs in the submission node of the cluster,
+     hence, \irace is not submitted to the cluster as a job (that is,
+     neither \code{qsub} nor \code{squeue} should be used to invoke \irace
+     itself). The user must call the appropriate job submission command (e.g., \code{qsub} or \code{squeue}) from \parameter{targetRunner} with the appropriate settings for their cluster, that is,  \parameter{targetRunner} submits one job to the
+     cluster and prints a single string: The job ID that allows
+     \irace to determine the status of the running job. Moreover, the use of a
+     separate
+   \parameter{targetEvaluator} script is required to collect the results of
+   \parameter{targetRunner} and return them to \irace.
+   \end{xwarningbox}
+
   \item \parameter{targetRunnerParallel}: This option allows users to fully
-    control the parallelization of the execution of \parameter{targetRunner}. 
+    control the parallelization of the execution of \parameter{targetRunner}.
     Its value must be an \aR function that will be invoked by \irace as follows:
 
    <<targetRunnerParallel,prompt=FALSE, eval=FALSE>>=
-   targetRunnerParallel(experiments, exec.target.runner, scenario, target.runner)
+   targetRunnerParallel(experiments, exec_target_runner, scenario, target_runner)
    @
    %
    where \code{scenario} is the list describing the configuration scenario
    (\autoref{sec:scenario}); \code{experiments} is a list that describes the
    configurations and instances to be executed (see \autoref{sec:runner} for a
-   description); \code{target.runner} is the function that calls the target
+   description); \code{target_runner} is the function that calls the target
    algorithm and it is the same as \parameter{targetRunner}, if the latter is a
-   function, or it is a call to \code{target.runner.default}, if
+   function, or it is a call to \code{target_runner_default}, if
    \parameter{targetRunner} is the path to an executable; and
-   \code{exec.target.runner} is an internal function within \irace that takes
-   care of executing \code{target.runner}, check its output and, possibly,
+   \code{exec_target_runner} is an internal function within \irace that takes
+   care of executing \code{target_runner}, check its output and, possibly,
    retry in case of error (see \parameter{targetRunnerRetries}). The
    \parameter{targetRunnerParallel} function should call the given
-   \code{target.runner} function for each element in the \code{experiments}
-   list, possibly using \code{exec.target.runner} as a wrapper. A trivial
+   \code{target_runner} function for each element in the \code{experiments}
+   list, possibly using \code{exec_target_runner} as a wrapper. A trivial
    example would be:
-   
+
    <<targetRunnerParallel2,prompt=FALSE, eval=FALSE>>=
-   targetRunnerParallel <- function(experiments, exec.target.runner, scenario)
+   targetRunnerParallel <- function(experiments, exec_target_runner, scenario,
+                                    target_runner)
    {
-     return (lapply(experiments, exec.target.runner, scenario = scenario,
-                    target.runner = target.runner))
+     lapply(experiments, exec_target_runner, scenario = scenario,
+            target_runner = target_runner)
    }
    @
    %
    However, the user is free to set up the calls in any way, perhaps
-   implementing its own replacement for \code{target.runner} and/or
-   \code{exec.target.runner}.
-   
+   implementing its own replacement for \code{target_runner} and/or
+   \code{exec_target_runner}. The user may load and call other \aR packages, such as \pkg{batchtools} (\url{https://mllg.github.io/batchtools/}).
+
    The only requirement is that the \parameter{targetRunnerParallel} function
    must return a list of the same length as \code{experiments}, where each
    element is the output expected from the corresponding call
-   to \parameter{targetRunner} (see \autoref{sec:runner}). The following is an
-   example of the output of a call to \parameter{targetRunnerParallel} with 2
-   experiments, in which the execution time is not reported:
-  
+   to \parameter{targetRunner} (see \autoref{sec:runner}).
+
+   The following is an example of the output of a call to
+   \parameter{targetRunnerParallel} with 2 experiments, in which the execution
+   time is not reported:
+
   <<targetRunnerParallel3,prompt=FALSE, eval=TRUE>>=
      print(output)
    @
    %
 
  \end{enumerate}
+
+ The best option will depend on the resources available to you. Option 1 is
+ usually the fastest and simplest to setup.  Running on a node (machine) with
+ 128 CPUs will be faster than running on 8 nodes with 16 CPUs because the
+ communication between nodes required by MPI can be very slow depending on the
+ cluster.  Option 2 may be faster if irace generates more configurations per
+ iteration than the number of CPUs of a single node. However, depending on the
+ configuration of your cluster, requesting many CPUs may require waiting in the
+ queue a long time. Option 3 may be the slowest since irace has to check the
+ queue frequently. However, irace will start running experiments as soon as 1
+ CPU is available, thus option 3 may actually finish earlier than the other
+ options if there is always some CPUs available in the cluster but the queue
+ for requesting many CPUs at once is very long.
+
+ As a rule-of-thumb, if you only have access to a single machine, then you only need option 1. If you have access to a computing cluster with multiple machines, then  use option 1 with the maximum number of CPUs that a single node has in your computing cluster. If that number is 64 or more, it should be enough unless a single run of irace evaluates thousands of configurations. Otherwise, investigate option 2. If option 2 does not work, then investigate option 3.
 
 %%
 %%
@@ -1643,10 +1667,9 @@ typically different from the training set used during the tuning phase. These
 evaluations will use the same settings for parallel
 execution, \parameter{targetRunner} and \parameter{targetEvaluator}.
 
-The test instance set can be specified by the
-options \parameter{testInstancesDir} and \parameter{testInstancesFile}, or by
-setting directly the variable \code{scenario\$testInstances}, which behave the
-same as their counterparts for the training instances
+The test instances can be specified by the
+options \parameter{testInstancesDir} and/or \parameter{testInstancesFile}, or by
+setting directly the variable \code{scenario\$testInstances}. These options behave similarly to their counterparts for the training instances
 (\autoref{sec:training}). In particular, each test instance is assigned a
 different seed in the same way as done for the training instances. In
 principle, \irace evaluates each configuration on each testing instance just
@@ -1655,6 +1678,24 @@ evaluating $n'$ runs on $n/n'$ instances~\citep{IRIDIA-2004-001}. However, if
 the number of instances is limited, one can always duplicate instances as
 needed in the \parameter{testInstancesFile}, and \irace will assign a different
 random seed to each instance.
+%
+An example of the output produced by \irace when testing is shown in Fig.~\ref{fig:testing_output}.
+
+\afterpage{\clearpage
+  \begin{figure}[p]
+\RecustomVerbatimCommand{\VerbatimInput}{VerbatimInput}%
+{fontsize=\scriptsize,
+ %
+ frame=none,  % top and bottom rule only
+ framesep=0pt, % separation between frame and text
+ rulecolor=\color{Gray},
+}
+% FIXME: This doesn't break long lines, find another alternative.
+{\ttfamily\scriptsize\ldots
+\VerbatimInput{irace-acotsp-testing.txt}}%
+\caption{Sample text output of \irace when evaluating on test instances.}\label{fig:testing_output}
+\end{figure}}
+
 
 
 The options \parameter{testNbElites} and \parameter{testIterationElites}
@@ -1662,7 +1703,7 @@ control which configurations are evaluated during the testing phase. In
 particular, setting \code{testIterationElites = 1} will test not only the final
 set of elite configurations (those returned at the end of the training phase),
 but also the set of elites at the end of each race
-(iteration). The option \parameter{testNbElites} limits the maximum number of 
+(iteration). The option \parameter{testNbElites} limits the maximum number of
 configurations considered within each set. Some examples:
 \begin{itemize}
 \item \code{testIterationElites = 0; testNbElites = 1} means that only the best
@@ -1692,7 +1733,7 @@ Another alternative is to test a specific set of configurations using the comman
 \begin{lstlisting}[style=BashInputStyle]
 irace --only-test configurations.txt
 \end{lstlisting}
-where \path{configurations.txt} has the same format as the 
+where \path{configurations.txt} has the same format as the
 set of initial configurations (\autoref{sec:initial}).
 
 %%
@@ -1760,13 +1801,11 @@ please be careful not to change the order of the instances, because this would m
 \irace invalid. To change the instances path, open the \aR console and use:
 
 <<change_recover, prompt=TRUE, eval=FALSE>>=
-load ("~/tuning/irace.Rdata")
-new.path <- "~/experiments/tuning/instances/"
+iraceResults <- read_logfile("./tuning/irace.Rdata")
+new_path <- "./experiments/tuning/instances/"
 iraceResults$scenario$instances <-
-   paste (new.path,
-         basename(iraceResults$scenario$instances),
-         sep="")
-save (iraceResults, file="~/tuning/irace.Rdata")
+   paste0(new_path, basename(iraceResults$scenario$instances))
+save(iraceResults, file="./tuning/irace.Rdata")
 @
 
 This example can also can be applied to the target execution files \parameter{targetRunner} and \parameter{targetEvaluator}.
@@ -1820,6 +1859,7 @@ evaluations as budget.
  firstline=1,
  lastline=68,
 }
+% FIXME: This doesn't break long lines, find another alternative.
 \VerbatimInput{irace-acotsp-stdout.txt}%
 \caption{Sample text output of \irace.}\label{fig:output}
 \end{figure}}
@@ -1851,7 +1891,7 @@ At each iteration, information about the progress of the execution is printed as
   \item \code{timeUsed} is the execution time used so far in the experiments. Only available when reported
         in the \parameter{targetRunner} (activate it with the \parameter{maxTime} option).
   \item \code{remainingBudget} is the number of experiments that have not been used yet.
-  \item \code{timeEstimate} estimation of the mean execution time. This is used to calculate 
+  \item \code{timeEstimate} estimation of the mean execution time. This is used to calculate
         the remaining budget when \parameter{maxTime} is used.
   \item \code{currentBudget} is the number of evaluations \irace has allocated to the
         current iteration.
@@ -1881,10 +1921,10 @@ statistical test:
 Other columns have the following meaning:
 \begin{description}
   \item \code{Instance}: Index of \code{(instance, seed)} pair executed. This number
-corresponds to the index of the list found in \code{state$.irace$instancesList}. See \autoref{sec:output r}
-for more information. This is different from the instance ID passed to \parameter{targetRunner}.
+corresponds to the row in the data frame returned by \code{get_instanceID_seed_pairs()}. See \autoref{sec:output r}
+for more information. This index is different from the instance ID passed to \parameter{targetRunner}.
 \item \code{Bound}: Only when \parameter{capping} is enabled. Execution time used as bound
-for the execution of new candidate configurations. 
+for the execution of new candidate configurations.
 \item \code{Alive}: Number of configurations that have not been
 discarded after the statistical test was performed.
 \item \code{Best}: ID of the best configuration according to the instances seen
@@ -1916,15 +1956,15 @@ The \aR data file created by \irace (by default as \code{irace.Rdata}, see optio
 \code{iraceResults}. You can load this file in the \aR console with:
 
 <<load_rdata, prompt=FALSE, eval=FALSE>>=
-load("irace-acotsp.Rdata")
+logfile <- system.file(package="irace", "exdata", "irace-acotsp.Rdata", mustWork=TRUE)
+iraceResults <- read_logfile(logfile)
 @
 
 The \code{iraceResults} object is a list, and the elements of a list can be
 accessed in \aR by using the \code{\$} or \code{[[]]} operators:
 
 <<show_version, prompt=TRUE, eval=TRUE, comment="">>=
-iraceResults$irace.version
-iraceResults[["irace.version"]]
+iraceResults$irace_version
 @
 
 \noindent%
@@ -1944,7 +1984,7 @@ The \code{iraceResults} list contains the following elements:
    configuration; the first column (\code{.ID.}) indicates the internal identifier of the
    configuration; the final column (\code{.PARENT.}) is the identifier
    of the configuration from which the current configuration was sampled; and the remaining columns correspond to the parameter values; each column is named as
-   the parameter name specified in the parameter object. 
+   the parameter name specified in the parameter object.
 
 <<show_configurations, prompt=TRUE, eval=TRUE, comment="">>=
 head(iraceResults$allConfigurations)
@@ -1963,7 +2003,8 @@ configuration corresponds to the first ID. To obtain the values of the
 parameters of all elite configurations found by \irace use:
 
 <<get_elites, prompt=TRUE, eval=TRUE, comment="">>=
-getFinalElites("irace-acotsp.Rdata", n = 0)
+logfile <- system.file(package="irace", "exdata", "irace-acotsp.Rdata", mustWork=TRUE)
+getFinalElites(logfile, n = 0)
 @
 
 \item \code{iterationElites}: A vector containing the best candidate configuration ID of each iteration. The best configuration found corresponds to the last one
@@ -1980,7 +2021,7 @@ id <- iraceResults$iterationElites[last]
 getConfigurationById(iraceResults, ids = id)
 @
 
-\item \code{rejectedConfigurations}: A vector containing the rejected configurations IDs. These 
+\item \code{rejectedConfigurations}: A vector containing the rejected configurations IDs. These
 correspond to configurations that produced failed executions and were ignored by \irace during the
 configuration process. See \autoref{sec:reject} to enable the detection of such configurations.
 
@@ -1991,38 +2032,52 @@ configuration can be obtained using:
 
 <<get_experiments, prompt=TRUE, eval=TRUE, comment="">>=
 # As an example, we use the best configuration found
-best.config <- getFinalElites(iraceResults = iraceResults, n = 1)
-id <- best.config$.ID.
-# Obtain the configurations using the identifier
-# of the best configuration
-all.exp <- iraceResults$experiments[,as.character(id)]
-all.exp[!is.na(all.exp)]
+best_config <- getFinalElites(iraceResults, n = 1)
+best_id <- as.character(best_config$.ID.)
+# Obtain the results of the best configuration
+all_exp <- iraceResults$experiments[, best_id]
+# all_exp is a vector and names(all_exp) is the (instance,seed) index.
+all_exp
+# Obtain the results of the first and best configurations
+all_exp <- iraceResults$experiments[, c("1", best_id)]
+# all_exp is a matrix: colnames(all_exp) is configurationID and
+# rownames(all_exp) is the (instance,seed) index.
+all_exp
 @
 
 When a configuration was not executed on an instance, its value is \code{NA}. A
-configuration may not be executed on an instance because: 1) it was not created
-yet when the instance was used, or 2) it was
+configuration may not be executed on an instance because: (1) it was not created
+yet when the instance was used, or (2) it was
 discarded by the statistical test and not executed on subsequent instances, or
-3) the race terminated before this instance was considered.
+(3) the race terminated before this instance was considered.
 
-Row names correspond to the identifier of the \code{(instance, seed)} pairs
-defined in \code{state\$.irace\$instancesList}. The instance and seed used
+Row names correspond to the row index of the \code{(instance, seed)} pairs
+in the data frame returned by \code{get_instanceID_seed_pairs()}. The instanceID and seed used
 for a particular experiment can be obtained with:\sloppy
 
 <<get_instance_seed, prompt=TRUE, eval=TRUE, comment="">>=
-# As an example, we get seed and instance of the experiments
-# of the best candidate.
-# Get index of the instances
-pair.id <- which(!is.na(all.exp))
-index <- iraceResults$state$.irace$instancesList[pair.id, "instance"]
-# Obtain the instance names
-iraceResults$scenario$instances[index]
-# Get the seeds
-iraceResults$state$.irace$instancesList[pair.id, "seed"]
+# As an example, we get instanceID, seeds and instances of the experiments
+# of the best configuration.
+# We could get the indexes of the instances on which at least one
+# configuration was executed:
+pair_index <- which(apply(!is.na(all_exp), 1L, any))
+# or the instances on which all configurations were executed:
+pair_index <- which(apply(!is.na(all_exp), 1L, all))
+# but in this example we get the indexes of the instances executed for
+# the best configuration.
+pair_index <- which(!is.na(all_exp[, best_id]))
+instanceID <- get_instanceID_seed_pairs(iraceResults)[["instanceID"]][pair_index]
+# or get the seeds
+get_instanceID_seed_pairs(iraceResults)[["seed"]][pair_index]
+# or obtain the actual instances.
+iraceResults$scenario$instances[instanceID]
+# If the instances are of atomic type (integers, floating-point numbers or
+# character strings), the above is similar to:
+get_instanceID_seed_pairs(iraceResults, index = pair_index, instances=TRUE)
 @
 \item \code{experimentLog}: A matrix with columns \code{iteration, instance, configuration}. This matrix contains the log of all the experiments that \irace
 performs during its execution. The \code{instance} column refers to the index of the
-\code{state$.irace$instancesList} data frame. When \parameter{capping} is enabled a column \code{bound} is added to log the execution bound applied 
+data frame returned by \code{get_instanceID_seed_pairs()}. When \parameter{capping} is enabled a column \code{bound} is added to log the execution bound applied
 for each execution.
 
 \item \code{softRestart}: A logical vector that indicates if a soft restart was
@@ -2038,11 +2093,11 @@ probabilistic model of the last elite configurations can be found here by doing:
 # localsearch parameter.
 iraceResults$state$model["localsearch"]
 # The order of the probabilities corresponds to:
-iraceResults$parameters$domain$localsearch
+iraceResults$scenario$parameters$domains$localsearch
 @
 
 The example shows a list that has one element per elite configuration (ID as
-element name). In this case, \code{localsearch} is a categorical parameter and 
+element name). In this case, \code{localsearch} is a categorical parameter and
 it has a probability for each of its values.
 
 
@@ -2114,7 +2169,7 @@ irace:::concordance(iraceResults$testing$experiments)
 % plots the frequency of the parameters sampled during one \irace run:
 
 % <<freq, fig.pos="tbp", fig.cap="Parameters sampling frequency.", out.width="\\textwidth",prompt=TRUE, eval=TRUE, comment="">>=
-% parameterFrequency(iraceResults$allConfigurations, iraceResults$parameters)
+% parameterFrequency(iraceResults$allConfigurations, iraceResults$scenario$parameters)
 % @
 
 %% FIXME: iraceplot
@@ -2128,9 +2183,9 @@ irace:::concordance(iraceResults$testing$experiments)
 % # Get last iteration number
 % last <- length(iraceResults$iterationElites)
 % # Get configurations in the last two iterations
-% conf <- getConfigurationByIteration(iraceResults = iraceResults,
+% conf <- getConfigurationByIteration(iraceResults,
 %                                     iterations = c(last - 1, last))
-% parallelCoordinatesPlot (conf, iraceResults$parameters,
+% parallelCoordinatesPlot (conf, iraceResults$scenario$parameters,
 %                          param_names = c("algorithm", "alpha", "beta", "rho",
 %                                          "q0", "rasrank"),
 %                          hierarchy = FALSE)
@@ -2141,41 +2196,43 @@ irace:::concordance(iraceResults$testing$experiments)
 %%% performance estimated by irace as a confidence interval to account for
 %%% different number of instances. Or simply plot a heatmap of instances x
 %%% best-of-each iteration.
-\hide{It is also possible to plot the performance evolution of the best-so-far configuration over the number of experiments as follows:
-%%<<trainEvo, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Training set performance of the best-so-far configuration over number of experiments.", prompt=FALSE, eval=TRUE, comment="">>=
-# Get number of iterations
-iters <- unique(iraceResults$experimentLog[, "iteration"])
-# Get number of experiments (runs of target-runner) up to each iteration
-fes <- cumsum(table(iraceResults$experimentLog[,"iteration"]))
-# Get the mean value of all experiments executed up to each iteration
-# for the best configuration of that iteration.
-values <- sapply(iters, function(k) {
-  instances <- as.character(
-    unique(iraceResults$experimentLog[
-                          iraceResults$experimentLog[, "iteration"] == k,
-                          "instance"]))
-  return(mean(iraceResults$experiments[
-                             instances,
-                             as.character(iraceResults$iterationElites[k])]))})
-plot(fes, values, type="s", xlab = "Number of runs of the target algorithm",
-     ylab = "Estimated mean value over whole training set")
-points(fes, values)
-}
+% It is also possible to plot the performance evolution of the best-so-far configuration over the number of experiments as follows:
+% %%<<trainEvo, fig.pos="tbp", fig.align="center", out.width='0.75\\textwidth', fig.cap="Training set performance of the best-so-far configuration over number of experiments.", prompt=FALSE, eval=TRUE, comment="">>=
+% # Get number of iterations
+% iters <- unique(iraceResults$experimentLog[, "iteration"])
+% # Get number of experiments (runs of target-runner) up to each iteration
+% fes <- cumsum(table(iraceResults$experimentLog[,"iteration"]))
+% # Get the mean value of all experiments executed up to each iteration
+% # for the best configuration of that iteration.
+% values <- sapply(iters, function(k) {
+%   instances <- as.character(
+%     unique(iraceResults$experimentLog[
+%                           iraceResults$experimentLog[, "iteration"] == k,
+%                           "instance"]))
+%   return(mean(iraceResults$experiments[
+%                              instances,
+%                              as.character(iraceResults$iterationElites[k])]))})
+% plot(fes, values, type="s", xlab = "Number of runs of the target algorithm",
+%      ylab = "Estimated mean value over whole training set")
+% points(fes, values)
+% @
 
 % FIXME: We should normalize the ranges per instance so since the performance
 % on different instances is quite different.
 It is also possible, as shown in Fig.~\ref{fig:testEvo}, to plot the performance on the test set of the best-so-far configuration over the number of experiments as follows:
 <<testEvo, fig.pos="tb", fig.align="center", out.width='0.7\\textwidth', fig.cap="Testing set performance of the best-so-far configuration over number of experiments. Label of each point is the configuration ID.", prompt=FALSE, eval=TRUE, comment="">>=
+# Get summary data from the logfile.
+irs <- irace_summarise(iraceResults)
 # Get number of iterations
-iters <- unique(iraceResults$experimentLog[, "iteration"])
+iters <- irs$n_iterations
 # Get number of experiments (runs of target-runner) up to each iteration
-fes <- cumsum(table(iraceResults$experimentLog[,"iteration"]))
+fes <- cumsum(table(iraceResults$state$experiment_log[["iteration"]]))
 # Get the mean value of all experiments executed up to each iteration
 # for the best configuration of that iteration.
 elites <- as.character(iraceResults$iterationElites)
 values <- colMeans(iraceResults$testing$experiments[, elites])
 stderr <- function(x) sqrt(var(x)/length(x))
-err <- apply(iraceResults$testing$experiments[, elites], 2, stderr)
+err <- apply(iraceResults$testing$experiments[, elites], 2L, stderr)
 plot(fes, values, type = "s",
      xlab = "Number of runs of the target algorithm",
      ylab = "Mean value over testing set", ylim=c(23000000,23500000))
@@ -2187,6 +2244,7 @@ text(fes, values, elites, pos = 1)
 The \irace package also provides an implementation of the ablation
 method~\cite{FawHoos2015ablation}. See \autoref{sec:ablation}.
 
+\medskip{}
 Finally, more advanced visualizations of the behavior of \irace are provided by
 the ACVIZ software package~\cite{DesRitLopPer2021acviz}, which is available at \url{https://github.com/souzamarcelo/acviz}. See an example in Fig.~\ref{fig:acviz}.
 
@@ -2222,11 +2280,11 @@ a case, the use of \emph{iterated} racing is unnecessary: One can simply
 perform a single race of all configurations (see FAQ in
 \autoref{faq:allconfs}).
 
-\Irace provides two options for setting the total tuning budget (\parameter{maxExperiments} and 
-\parameter{maxTime}). The option \parameter{maxExperiments} 
-limits the number of executions of \parameter{targetRunner} performed by \irace. The option \parameter{maxTime} limits the 
-total time of the \parameter{targetRunner} executions. When this latter option is used, \parameter{targetRunner} 
-must return the evaluation cost together with the execution time (\code{"cost time"}). 
+\Irace provides two options for setting the total tuning budget (\parameter{maxExperiments} and
+\parameter{maxTime}). The option \parameter{maxExperiments}
+limits the number of executions of \parameter{targetRunner} performed by \irace. The option \parameter{maxTime} limits the
+total time of the \parameter{targetRunner} executions. When this latter option is used, \parameter{targetRunner}
+must return the evaluation cost together with the execution time (\code{"cost time"}).
 
 \begin{xwarningbox}
 When the goal is to minimize the computation time of an algorithm, and you wish to use \parameter{maxTime} as the tuning budget, \parameter{targetRunner} must return the time also as the evaluation cost, that is, return the time twice as \code{"time time"}.
@@ -2236,10 +2294,10 @@ When the goal is to minimize the computation time of an algorithm, and you wish 
 When using \parameter{targetEvaluator} and using \parameter{maxTime} as tuning budget, \parameter{targetRunner} just returns the time (\code{"time"}) and \parameter{targetEvaluator} returns the cost.
 \end{xwarningbox}
 
-When using \parameter{maxTime}, \irace estimates the execution time of each \parameter{targetRunner} execution 
+When using \parameter{maxTime}, \irace estimates the execution time of each \parameter{targetRunner} execution
 before the configuration. The amount of budget used for the estimation is set with the option \parameter{budgetEstimation}
-(default is $2\%$). The obtained estimation is adjusted after each iteration using the obtained results and it is used to estimate the number of experiments that can be executed. Internally, \irace uses the number of remaining experiments to 
-adjust the number of configurations tested in each race. 
+(default is $2\%$). The obtained estimation is adjusted after each iteration using the obtained results and it is used to estimate the number of experiments that can be executed. Internally, \irace uses the number of remaining experiments to
+adjust the number of configurations tested in each race.
 
 \subsection{Multi-objective tuning}\label{sec:multi objective}
 
@@ -2258,12 +2316,12 @@ hypervolume) may be used to evaluate the quality of the set.\footnote{An impleme
 % the objectives in a way that balances the importance of all of them. This might
 % not be an easy task in some scenarios, and therefore using a more adequate
 % indicator to evaluate the performance of a multi-objective optimizer, such as
-% the hypervolume, is strongly advised.  
+% the hypervolume, is strongly advised.
 
 %For using the hypervolume as evaluation \irace needs to postpone the evaluation of the
 %configurations in an instance until all the executions have been completed. Once
-%the executions are finalized, the evaluation starts by obtaining reference points for 
-%each objective from the configuration results. These points are used to define the 
+%the executions are finalized, the evaluation starts by obtaining reference points for
+%each objective from the configuration results. These points are used to define the
 %Pareto front and the hypervolume of each configuration
 %is calculated and the tuning process continues normally.
 
@@ -2293,38 +2351,38 @@ using the hypervolume can be found in the examples at
 When using \irace for tuning algorithms that only report computation time to
 reach a target, \parameter{targetRunner} should return the execution time of a configuration instead of solution cost. When using \parameter{maxTime} as the budget, this means that \parameter{targetRunner} must return twice the execution time since the first value is the minimization objective and the second value is used to track the budget consumed.
 
-Starting from version $3.0$,  \irace includes an elitist racing procedure that 
-implements an \textbf{adaptive capping mechanism} \citep{PerLopHooStu2017:lion}. 
-Adaptive capping \citep{HutHooLeyStu2009jair} is a configuration technique 
-that avoids the execution of long runs of the target algorithm, focusing the 
-configuration budget in the evaluation of the best configurations found. This is 
-done by bounding the execution time of each configuration based on the best 
-performing candidate configurations. 
+Starting from version $3.0$,  \irace includes an elitist racing procedure that
+implements an \textbf{adaptive capping mechanism} \citep{PerLopHooStu2017:lion}.
+Adaptive capping \citep{HutHooLeyStu2009jair} is a configuration technique
+that avoids the execution of long runs of the target algorithm, focusing the
+configuration budget in the evaluation of the best configurations found. This is
+done by bounding the execution time of each configuration based on the best
+performing candidate configurations.
 
-To use adaptive capping, the \parameter{capping} option must be enabled and the 
-\parameter{elitist} irace option must be selected. When evaluating candidate 
-configurations on an instance, \irace calculates an execution bound based on the 
-execution times of the elite configurations.  The \parameter{boundType} option defines 
-how the performance of the elite configurations  is defined to obtain the execution bound. 
-The default value of \parameter{boundType} calculates the performance ($p_i^s$) of each 
-elite configuration ($s$) as the mean execution time of the  instances already executed 
-in the race and the currently executed instance ($i$). The \parameter{cappingType} option 
-specifies the measure used to obtain the elite configurations bound. By default, the execution bound 
+To use adaptive capping, the \parameter{capping} option must be enabled and the
+\parameter{elitist} irace option must be selected. When evaluating candidate
+configurations on an instance, \irace calculates an execution bound based on the
+execution times of the elite configurations.  The \parameter{boundType} option defines
+how the performance of the elite configurations  is defined to obtain the execution bound.
+The default value of \parameter{boundType} calculates the performance ($p_i^s$) of each
+elite configuration ($s$) as the mean execution time of the  instances already executed
+in the race and the currently executed instance ($i$). The \parameter{cappingType} option
+specifies the measure used to obtain the elite configurations bound. By default, the execution bound
 is calculated as the median of the execution times of the elite configurations:
 %
 \begin{equation}
-  b_i= \text{Median}_{\theta_s \in \Celite} \{ p_i^s\} 
+  b_i= \text{Median}_{\theta_s \in \Celite} \{ p_i^s\}
 \end{equation}
 
 The execution bound for new configurations ($j$) is calculated by multiplying the elite configurations
-bound by the number of instances ($i$) in the execution list and subtracting the mean execution time 
+bound by the number of instances ($i$) in the execution list and subtracting the mean execution time
 of the instances executed by the candidate:
 %
 \begin{equation}
     k_i^{'j} = b_{i} \cdot i + \bmin - p^{j}_{i-1} \cdot (i-1)
 \end{equation}
 
-A small constant \bmin is added to account for time measurements errors. 
+A small constant \bmin is added to account for time measurements errors.
 These settings are also used to apply a dominance elimination criterion together with the
 statistical test elimination. The domination criterion is defined as:
 %
@@ -2335,14 +2393,14 @@ b_i + \bmin  < p_i^{j}
 When elite configurations dominate new configurations, these are eliminated from the race.
 
 \begin{xwarningbox}
-The default statistical test when \parameter{capping} is enabled is \code{t-test}. 
+The default statistical test when \parameter{capping} is enabled is \code{t-test}.
 This test is more appropriate to configure algorithms for optimizing runtime (see \autoref{sec:stat test}).
-\end{xwarningbox} 
+\end{xwarningbox}
 
-The execution bound is constantly adjusted by \irace based on the best configurations 
-times, nevertheless, a maximum execution time (\bmax) is never  exceeded. This maximum 
-execution time must be defined in the configuration scenario when \parameter{capping} 
-is enabled. To specify the maximum execution bound for the target runner executions 
+The execution bound is constantly adjusted by \irace based on the best configurations
+times, nevertheless, a maximum execution time (\bmax) is never  exceeded. This maximum
+execution time must be defined in the configuration scenario when \parameter{capping}
+is enabled. To specify the maximum execution bound for the target runner executions
 use the \parameter{boundMax} option. The final execution bound ($k_i^j$) is calculated by:
 %
 \begin{equation}\label{eq:cap}
@@ -2354,7 +2412,7 @@ use the \parameter{boundMax} option. The final execution bound ($k_i^j$) is calc
 \end{equation}
 
 Additionally, the \parameter{boundDigits} option defines the precision of the time bound
-provided by \irace, the default setting is 0.  
+provided by \irace, the default setting is 0.
 
 Timed out executions occur when the maximum execution bound
 (\parameter{boundMax}) is reached and the algorithm has not achieved successful
@@ -2370,7 +2428,7 @@ details about the implementation of adaptive capping can be found in
 \citet{PerLopHooStu2017:lion}.
 
 \begin{xwarningbox}
-Note that bounded executions are not timed out executions and thus, they will not be penalized by PARX. 
+Note that bounded executions are not timed out executions and thus, they will not be penalized by PARX.
 \end{xwarningbox}
 
 
@@ -2381,6 +2439,10 @@ Note that bounded executions are not timed out executions and thus, they will no
   consumed, \irace uses only unpenalized execution times. The unpenalized
   execution time must be provided by the target runner or target evaluator as
   described in \autoref{sec:runner} and \autoref{sec:evaluator} .
+\end{xwarningbox}
+
+\begin{xwarningbox}
+More advanced capping methods that are applicable to minimizing solution cost are available when combining irace with the \texttt{capopt} package described by \citet{SouRitLop2021cap}.
 \end{xwarningbox}
 
 
@@ -2448,7 +2510,7 @@ than what would be assigned to other methods that do a complete 10-fold CV at
 each step.
 
 %% FIXME: They removed the tutorial
-%% For such a task, we recommend the \pkg{mlr} package~\citep{R:mlr}. 
+%% For such a task, we recommend the \pkg{mlr} package~\citep{R:mlr}.
 %% The following webpage documents how to use \irace for this purpose: \url{https://mlr-org.github.io/mlr-tutorial/devel/html/advanced_tune/index.html}
 
 
@@ -2465,8 +2527,8 @@ instances, while they perform poorly for a different subset.
 
 When facing a heterogeneous scenario, the first question should be whether the
 objective of tuning is to find configurations that perform reasonably well over
-all instances, even if they are not the best ones in any of them. If this is
-not the case, then it would be better to partition instances into more similar
+all instances, even if that configuration is not the best ones in any particular instance (a generalist). If this is
+not the goal, then it would be better to partition instances into more similar
 subsets and execute \irace separately on each subset. This will lead to a
 portfolio of algorithm configurations, one for each subset, and algorithm
 selection techniques can be used to select the best configuration from the
@@ -2484,16 +2546,17 @@ is 1).
 If finding an overall good configuration for all the instances is the
 objective, then we recommend that instances are randomly sampled (option
 \parameter{sampleInstances}), unless one can provide the instances in a
-particular order that does not bias the tuning towards any subset.  For
-example, let's assume a heterogeneous scenario with two classes of instances.
-If training instances are not sampled and the first ten instances belong to
-only one class, the tuning will be biased towards configurations that perform
-good for those instances.  An optimal order would never present consecutively
-two instances of the same type. One can make sure \irace sees all instance
-classes before discarding configurations by carefully
-specifying the order of instances (disabling \parameter{sampleInstances} and
-specifying the order in \parameter{trainInstancesFile}) and setting both
-\parameter{firstTest} and \parameter{eachTest} appropriately.
+particular order that does not bias the tuning towards any subset.
+
+If instances are easily categorized in different classes, then we recommend to
+create ``blocks'' of instances in \parameter{trainInstancesFile}, where each
+block should contain one instance from each class.  Then set the option
+\parameter{blockSize} to the number of classes within each block, so that
+\irace will always see a complete block of instances before eliminating
+configurations. The value of \parameter{blockSize} will multiply the effective
+values of \parameter{firstTest} and \parameter{eachTest}. Randomly sampling
+instances (\parameter{sampleInstances}\code{=1}) will randomly sample the
+blocks but not break the blocks.
 
 While executing \irace, the homogeneity of the scenario can be observed by
 examining the values of Spearman's rank correlation coefficient and Kendall's
@@ -2525,7 +2588,7 @@ beneficial for different goals:
   \code{F-test} (default when \parameter{capping} is not enabled) when tuning
   for solution cost and whenever the best performing algorithm should be among
   the best in as many instances as possible.
-  
+
 \item Student's t-test (\code{t-test}): This test uses the mean performance of
   the configurations to analyze the differences between the
   configurations.\footnote{The t-test does not require that the performance
@@ -2645,7 +2708,7 @@ successful.
 
 If the target algorithm consistently fails for a particular set of
 configurations, these configurations may be declared as forbidden
-(\parameter{forbiddenFile}) so that \irace avoids them.  On the other hand, if
+(\autoref{sec:forbidden}) so that \irace avoids them.  On the other hand, if
 the configurations that cause the problem are unknown,
 the \parameter{targetRunner} should return \code{Inf} so that \irace
 immediately rejects the failing configuration. This immediate rejection should
@@ -2655,9 +2718,9 @@ memory, might still be considered acceptable if it gives very good results on
 other instances. The configurations which were rejected during the execution of \irace are saved
 in the Rdata output file (see \autoref{sec:output r}).
 \begin{xwarningbox}
-If the configuration budget is specified in total execution time (\parameter{maxTime} option), 
-immediate rejected executions must provide the cost and time (which must be \code{Inf 0}). 
-Nevertheless, rejected configurations will be  excluded from the execution time estimation 
+If the configuration budget is specified in total execution time (\parameter{maxTime} option),
+immediate rejected executions must provide the cost and time (which must be \code{Inf 0}).
+Nevertheless, rejected configurations will be  excluded from the execution time estimation
 and the execution bound calculation.
 \end{xwarningbox}
 
@@ -2671,15 +2734,12 @@ the target configuration.  This can be used to find new better ``intermediate''
 configurations or to analyse the impact of the parameters in the performance.
 
 
-To perform ablation, you can use the \code{ablation} function and specify the
-IDs of the source and target configurations.  By default, the source is taken
-as the first configuration evaluated by \irace and the target as the best
-overall configuration found. The argument \code{ab.params} can be used to
-specify a subset of the parameters considered in the ablation. The option
-\parameter{firstTest} defines how many instances are selected for the
-evaluation of configurations, if a different number of instances is required it
-must be specified in the argument \code{n.instance}.  Use the function
-\code{plotAblation} to visualize the ablation results (Fig.~\ref{fig:testAb}).
+To perform ablation, you can use the \code{ablation()} \aR function or the
+\path{ablation} command-line executable (see more details below). You may
+specify the IDs of the source and target configurations.  By default, the
+source is taken as the first configuration evaluated by \irace and the target
+as the best overall configuration found. Use the function \code{plotAblation} to visualize the ablation results
+(Fig.~\ref{fig:testAb}).
 
 <<ablation, prompt=FALSE, eval=FALSE>>=
 ablog <- ablation("irace.Rdata", src = 1, target = 60)
@@ -2687,7 +2747,7 @@ plotAblation(ablog)
 @
 
 <<testAb, fig.pos="htb!", fig.align="center", out.width="0.75\\textwidth", fig.cap="Example of plot generated by \\code{plotAblation()}.", prompt=FALSE, eval=TRUE, echo=FALSE>>=
-logfile <- file.path(system.file(package="irace"), "exdata", "log-ablation.Rdata")
+logfile <- system.file(package="irace", "exdata", "log-ablation.Rdata", mustWork=TRUE)
 plotAblation(logfile)
 @
 
@@ -2701,8 +2761,8 @@ The function returns a list containing the following elements:
    \item \code{best}: Best overall configuration found.
 \end{description}
 
-We also provide a command-line executable that allows you to perform ablation without launching \aR. It is installed in the same location as the \irace command-line executable and has the following options:
-<<ablation_cmdline, prompt=FALSE, eval=TRUE,echo=FALSE>>=
+We also provide a command-line executable (\path{ablation.exe} in Windows) that allows you to perform ablation without launching \aR. It is installed in the same location as the \irace command-line executable and has the following options:
+<<ablation_cmdline, prompt=FALSE, eval=TRUE,echo=FALSE, comment="">>=
 ablation_cmdline("--help")
 @
 
@@ -2717,7 +2777,7 @@ percentage of the \irace configuration budget. This budget is not considered in
 the total configuration budget that is, these evaluations are extra
 computation.
 
-The execution of the postselection race add an element (\code{psrace.log}) to 
+The execution of the postselection race add an element (\code{psrace.log}) to
 the \code{iraceResults} list saved in the \irace log file. The postselection log
 consists of a list with the following elements:
 \begin{description}
@@ -2730,34 +2790,32 @@ consists of a list with the following elements:
   \item \code{elites}: Elite configurations obtained in the postselection race.
 \end{description}
 
-Optionally, it is possible to perform a postselection race with all 
+Optionally, it is possible to perform a postselection race with all
 elite configurations of the iterations or selecting a set of configurations
 from \code{iraceResults$allConfigurations}.
 <<postsel, prompt=FALSE, eval=FALSE>>=
 # Execute all elite configurations in the iterations
-psRace(iraceLogFile="irace.Rdata", elites=TRUE)
+psRace("irace.Rdata", max_experiments = 0.5, elites=TRUE)
 # Execute a set of configurations IDs providing budget
-psRace(iraceLogFile="irace.Rdata", 
-             conf.ids=c(34, 87, 102, 172, 293), 
-             max.experiments=500)
+psRace("irace.Rdata", conf_ids = c(34, 87, 102, 172, 293), max_experiments = 500)
 @
 
 \subsection[Parameter importance analysis using PyImp]{Parameter importance analysis using \PyImp}
 
 The \PyImp\footnote{\url{https://github.com/automl/ParameterImportance}} tool developed by the AutoML group\footnote{\url{https://www.automl.org/}}
-supports various parameter importance analysis methods using surrogate models. 
-Given a performance dataset of an algorithm configuration scenario, a Random Forest is built to predict performance of all algorithm configurations. 
-Parameter importance analyses are then applied on the prediction model. 
+supports various parameter importance analysis methods using surrogate models.
+Given a performance dataset of an algorithm configuration scenario, a Random Forest is built to predict performance of all algorithm configurations.
+Parameter importance analyses are then applied on the prediction model.
 The model serves as a surrogate for the original target algorithm, so that the algorithm does not need to be executed during the analyses.
 Three analysis methods are supported, namely fANOVA~\citep{HutHooLey2014icml} (functional analysis of variance), forward selection~\cite{HutHooLey2013lion},
-and ablation analysis with surrogates~\cite{BieLinEggFraFawHoo2017}. 
+and ablation analysis with surrogates~\cite{BieLinEggFraFawHoo2017}.
 Note that the \irace package directly supports ablation (without surrogate models) analysis with and without racing (\autoref{sec:ablation}).
 Although ablation analysis without surrogates may be more time-consuming, results of the surrogate version may be less accurate than the non-surrogate one.
 
-The \code{.Rdata} dataset generated by \irace can be used as input for \PyImp. 
-The package \code{irace2pyimp}\footnote{\url{https://github.com/ndangtt/irace2pyimp}} is able to convert an \code{irace.Rdata} file into the input format required by \PyImp. The conversion can be  accessed either through the \aR console (function \code{irace2pyimp}), or via command line (\code{system.file("/bin/irace2pyimp", package="irace2pyimp")}).
+The \code{.Rdata} dataset generated by \irace can be used as input for \PyImp.
+The package \code{irace2pyimp}\footnote{\url{https://github.com/ndangtt/irace2pyimp}} is able to convert an \code{irace.Rdata} file into the input format required by \PyImp. The conversion can be  accessed either through the \aR console (function \code{irace2pyimp}), or via command line executable \code{irace2pyimp} (or \code{irace2pyimp.exe} in Windows) provided by the package. You can find the location of the executable by running this command in R: \Sexpr{'system.file(file.path("bin", "irace2pyimp"), package="irace2pyimp", mustWork=TRUE)'} or \Sexpr{'system.file(file.path("bin", "irace2pyimp.exe"), package="irace2pyimp", mustWork=TRUE)'} in Windows.
 
-To see the usage of the executable, please run: \code{irace2pyimp --help}. 
+To see the usage of the executable, please run: \code{irace2pyimp --help}.
 For more information on the \aR function \code{irace2pyimp}, type in the \aR console: \code{?irace2pyimp}.
 
 Given as input an \code{irace.Rdata} file, the script will generate the following output files:
@@ -2774,9 +2832,9 @@ Given as input an \code{irace.Rdata} file, the script will generate the followin
 examples on how to use the script and call \PyImp can be found at
 \code{system.file("/examples/", package="irace2pyimp")}.
 
-%\emph{\PyImp installation note:} At the time when this document is written (December 2019), the latest \PyImp release version (1.0.6) has some bugs. 
-%Please check on \url{https://pypi.org/project/PyImp/#history} to see if \PyImp version > 1.0.6 has been released. 
-%If it has, you can easily install \PyImp using \code{pip install pyimp}. 
+%\emph{\PyImp installation note:} At the time when this document is written (December 2019), the latest \PyImp release version (1.0.6) has some bugs.
+%Please check on \url{https://pypi.org/project/PyImp/#history} to see if \PyImp version > 1.0.6 has been released.
+%If it has, you can easily install \PyImp using \code{pip install pyimp}.
 %Otherwise, please install \PyImp from source (\url{https://github.com/automl/ParameterImportance}), branch \code{development}. Installation instructions can be found at \url{https://automl.github.io/ParameterImportance/installation.html}.
 %%
 %% irace options
@@ -2798,7 +2856,8 @@ specified by the user in this way.
   the scenario file. See also Table~\ref{tab:paths}.
 \end{xwarningbox}
 
-\input{section/irace-options}
+<<child-demo, child='section/irace-options.Rnw'>>=
+@
 
 %%
 %%
@@ -2820,6 +2879,22 @@ irace. This is done, for example, when maximizing the hypervolume (see the last
 lines in \IRACEHOME{/examples/hypervolume/target-evaluator}).
 
 
+\subsection{Are experiments with \irace reproducible?}
+
+Short answer: Yes, under some conditions.\\
+Long answer: According to the terminology described by \citet{LopBraPaq2021telo}, we define \emph{repeatability} as ``\emph{exactly repeating the original experiment, generating precisely the same results}''. Following this definition, a run of \irace is repeatable under the following conditions:
+\begin{itemize}
+\item Same version of \irace.
+\item Same version of \aR (different versions of \aR may change the behavior of functions used by \irace).
+\item The behavior of \parameter{targetRunner} is deterministic or exactly reproducible for the same instance, parameter configuration and random seed. Make sure that \parameter{targetRunner} uses the seed provided by \irace to initialize all random number generators used. If the result of \parameter{targetRunner} depends on CPU-time, wall-clock time or system load in any way, then \parameter{targetRunner} is not reproducible and neither will be \irace.
+\item Same random seed (\parameter{seed}) given to \irace.
+\item Same scenario options (\autoref{sec:irace options}). Although some options should not affect reproducibility (e.g., \parameter{debugLevel}), maintaining a list of such options will be a huge effort, thus the safest assumption is that any change may break reproducibility.
+\item Same parameter space (\autoref{sec:target parameters}), including types, domains, conditions and forbidden configurations. The order of the parameters may also affect reproducibility (the name of the parameters should not) because it affects the order in which random numbers are used.
+\item Same training instances provided and in the same order (\autoref{sec:training}). Even if the instances are sampled randomly (\parameter{sampleInstances}), a different initial order will produce a different sample even with the same random seed.
+\item Same initial configurations (\autoref{sec:initial}), if any.
+\end{itemize}
+
+
 \subsection[Is it possible to configure a MATLAB algorithm with irace?]
 {Is it possible to configure a \MATLAB algorithm with \irace ?}
 
@@ -2827,16 +2902,16 @@ Definitely. There are three main ways to achieve this:
 \begin{enumerate}
 \item Edit the \parameter{targetRunner} script to call \MATLAB in a non-interactive
     way. See the \MATLAB documentation, or the following links.\footnote{\url{http://stackoverflow.com/questions/1518072/suppress-start-message-of-matlab}}\footnote{\url{http://stackoverflow.com/questions/4611195/how-to-call-matlab-from-command-line-and-print-to-stdout-before-exiting}} %
-    You would need to pass the parameter received by \parameter{targetRunner} to your \MATLAB script.\footnote{\url{https://www.mathworks.com/matlabcentral/answers/97204-how-can-i-pass-input-parameters-when-running-matlab-in-batch-mode-in-windows}}\footnote{\url{https://stackoverflow.com/questions/3335505/how-can-i-pass-command-line-arguments-to-a-standalone-matlab-executable-running}} 
+    You would need to pass the parameter received by \parameter{targetRunner} to your \MATLAB script.\footnote{\url{https://www.mathworks.com/matlabcentral/answers/97204-how-can-i-pass-input-parameters-when-running-matlab-in-batch-mode-in-windows}}\footnote{\url{https://stackoverflow.com/questions/3335505/how-can-i-pass-command-line-arguments-to-a-standalone-matlab-executable-running}}
     %
     There is a minimal example in \IRACEHOME{/examples/matlab/}.
-  
+
 \item Call \MATLAB code directly from \aR using the
     \pkg{matlabr} package (\url{https://cran.r-project.org/package=matlabr}). This
     is a better option if you are experienced in \aR. Define \parameter{targetRunner} as
     an \aR function instead of a path to a script. The function should
     call your \MATLAB code with appropriate parameters.
-  
+
   \item Another possibility is calling \MATLAB directly from a different programming language and write \parameter{targetRunner} in that programming language,  for example, in \proglang{Python} (see examples in \IRACEHOME{/examples/target-runner-python/}).\footnote{\url{https://www.mathworks.com/help/matlab/matlab_external/call-matlab-functions-from-python.html}\\
     \url{https://www.mathworks.com/help/matlab/matlab_external/call-user-script-and-function-from-python.html}}
 \end{enumerate}
@@ -2850,7 +2925,7 @@ To detect such bugs, we recommend that you use, within
 \parameter{targetRunner}, a memory debugger (e.g.,
 \href{http://valgrind.org/}{\code{valgrind}}) to run your program. For example,
 if your program is executed by \parameter{targetRunner} as:
-  % 
+  %
 \begin{lstlisting}[style=BashInputStyle]
 ${EXE} ${FIXED_PARAMS} -i ${INSTANCE} ${CONFIG_PARAMS} 1> ${STDOUT} 2> ${STDERR}
 \end{lstlisting}
@@ -2877,9 +2952,9 @@ not in \irace. Some ideas for debugging this problem:
 \item Check that the target algorithm is really not running nor paused nor
   sleeping nor waiting for input-output.
 \item Use \parameter{debugLevel}\code{=3} to see how  \irace calls \code{target-runner}, run the same command outside \irace and verify that it terminates.
-\item Add some output to your algorithm that reports at the very end the runtime and exit code. Verify that this output is printed when \irace calls your algorithm. 
+\item Add some output to your algorithm that reports at the very end the runtime and exit code. Verify that this output is printed when \irace calls your algorithm.
 \item In \code{target-runner}, print something to a log file \emph{after} calling your target algorithm. Verify that this output appears in the log file when \irace is running.
- 
+
 \item Set a maximum timeout when calling your target algorithm from \code{target-runner} (see FAQ~\ref{faq:timeout}).
 
 \end{itemize}
@@ -2893,20 +2968,20 @@ GNU/Linux, it is easy to implement by using the \code{timeout} command\footnote{
 \subsection{When using the mpi option, \irace is aborted with an error message indicating that a
   function is not defined. How to fix this?}\label{sec:mpi-error}
 
-\pkg{Rmpi} does not work the same way when called from within a package and when called from a script or 
-interactively. When \irace creates the slave nodes, the slaves will load a copy of \irace automatically. 
+\pkg{Rmpi} does not work the same way when called from within a package and when called from a script or
+interactively. When \irace creates the slave nodes, the slaves will load a copy of \irace automatically.
 If the slave nodes are on different machines, they must have \irace installed. If \irace is not installed
-system-wide, \aR needs to be able to find \irace on the slave nodes. This is usually done by setting \code{R\_LIBS}, 
-\code{.libPaths()} or by loading \irace using \code{library()} or \code{require()} with the argument ``\code{lib.loc}''. 
-The settings on the master are not applied to the slave nodes automatically, thus the slave 
-nodes may need their own settings. After spawning the slaves, it is too late to modify 
-those settings, thus modifying the shell variable \code{R\_LIBS} seems the only valid 
+system-wide, \aR needs to be able to find \irace on the slave nodes. This is usually done by setting \code{R_LIBS},
+\code{.libPaths()} or by loading \irace using \code{library()} or \code{require()} with the argument ``\code{lib.loc}''.
+The settings on the master are not applied to the slave nodes automatically, thus the slave
+nodes may need their own settings. After spawning the slaves, it is too late to modify
+those settings, thus modifying the shell variable \code{R_LIBS} seems the only valid
 way to tell the slaves where to find \irace.
 
 If the path is set correctly and the problem persists, please check these instructions:
-% 
+%
 \begin{enumerate}[leftmargin=*,widest=3]
-\item Test that \irace and \pkg{Rmpi} work. Run \irace on a single machine (submit node), without calling \code{qsub}, \code{mpirun} or a 
+\item Test that \irace and \pkg{Rmpi} work. Run \irace on a single machine (submit node), without calling \code{qsub}, \code{mpirun} or a
   similar wrapper around \irace or \aR.
 \item Test loading \irace on the slave nodes. However,
   jobs submitted by \code{qsub}/\code{mpirun} may load \aR packages using a different mechanism from the way it happens if you log directly into the node (e.g., with \code{ssh}). Thus, you need to write a little \aR program such as:
@@ -2918,12 +2993,12 @@ If the path is set correctly and the problem persists, please check these instru
   print(paths)
   @
   Submit this program to the cluster like you would submit \irace (using \code{qsub}, \code{mpirun} or whatever program is used to submit jobs to the cluster).
-      
-      \item In the script \code{bin/parallel-irace-mpi}, the function \code{irace\_main()} creates an MPI job for our cluster. 
-      You may need to speak with the admin of your cluster and ask them how to best submit a job for MPI. There may be 
+
+      \item In the script \code{bin/parallel-irace-mpi}, the function \code{irace_main()} creates an MPI job for our cluster.
+      You may need to speak with the admin of your cluster and ask them how to best submit a job for MPI. There may be
       some particular settings that you need. \pkg{Rmpi} normally creates  log files; but \irace suppresses those files unless $\texttt{debugLevel} > 0$.
      \end{enumerate}
-     
+
      Please contact us (\autoref{sec:contact}) if you have further problems.
 
 \subsection[Error: 4 arguments passed to {.Internal(nchar)} which requires 3]{Error: 4 arguments passed to \code{.Internal(nchar)} which requires 3}
@@ -2931,7 +3006,7 @@ If the path is set correctly and the problem persists, please check these instru
 This is a bug in \aR 3.2.0 on Windows. The solution is to update your version of
 \aR.
 
-\subsection{Warning: \code{In read.table(filename,}  \code{header = TRUE,} \code{colClasses = "character",} \code{: incomplete final line found by} \ldots}
+\subsection[Warning: In read.table(filename, header = TRUE, colClasses = "character", : incomplete final line found by \ldots]{Warning: \code{In read.table(filename,}  \code{header = TRUE,} \code{colClasses =} \code{"character",} \code{: incomplete final line found by} \ldots}
 
 This is a warning given by \aR when the last line of an input file does not
 finish with the newline character. The warning is harmless and can be
@@ -2960,7 +3035,7 @@ file, or within various scripts, functions or instance files. Table
     the value of \parameter{logFile} or \code{--log-file} & \parameter{execDir}\\
     the value of other options in the scenario file  &  the directory containing the scenario file\\
     the value of other command-line options & invocation (working) directory of \irace\\
-\bottomrule    
+\bottomrule
   \end{tabular}
 \end{table}
 
@@ -2998,9 +3073,14 @@ C:\path\to\python.exe C:\path\to\target-runner.py %instance% %seed% \
 \item Or convert \code{target-runner.py} into an \code{.exe} file, for example, using \code{auto-py-to-exe}\footnote{\url{https://pypi.org/project/auto-py-to-exe/}}, so that you do not need a \code{.bat} file.
 \end{itemize}
 
-\subsection[Error in socketConnection(\ldots) : can not open the connection]{Error in \code{socketConnection("localhost", port = port, server = TRUE, lock = TRUE,} : can not open the connection}
+\subsection[Error in socketConnection(\ldots) : can not open the connection]{Error in \code{socketConnection("localhost", port = port, server = TRUE,} \code{lock = TRUE,} : can not open the connection}
 
 This error may arise if you activate the \parameter{parallel} option of \irace and your \parameter{targetRunner} or \parameter{targetEvaluator} tries to setup a parallel cluster or execute code in parallel in a way that interacts badly with the parallel mechanism in \aR. In this case, you need to either investigate yourself if there is a way for the two parallel mechanisms to co-exist or, if that is not possible, disable parallelism in \irace or in your code. Note that packages or software used by your \parameter{targetRunner} may have a parallel mechanism enabled by default and unknown to you. This is definitely NOT a bug in \irace.
+
+\subsection[irace does not print the call to the target-runner with --debug-level 2 when using the --parallel option]{\irace does not print the call to the \parameter{targetRunner} with \parameter{debugLevel}\code{=2} when using the \parameter{parallel}}
+
+This is a limitation of  Windows or Rstudio. Running without \parameter{parallel} should work. Unfortunately, we cannot fix this limitation in \irace. If you need to understand how \irace calls \parameter{targetRunner} when running in parallel, you can implement a logging mechanism able to handle parallelism directly inside the \parameter{targetRunner}.
+
 
 %%
 %%
@@ -3019,11 +3099,11 @@ This error may arise if you activate the \parameter{parallel} option of \irace a
 More information about the package can be found on the \irace webpage:
 \begin{center} \url{https://iridia.ulb.ac.be/supp/IridiaSupp2016-003/index.html} \end{center}
 
-For questions and suggestions please contact the development team through 
+For questions and suggestions please contact the development team through
 the \irace package Google group:
 \begin{center}
   \url{https://groups.google.com/d/forum/irace-package}
-\end{center} 
+\end{center}
 or by sending an email to:
 \begin{center}
   \href{mailto:irace-package@googlegroups.com}{irace-package@googlegroups.com}
@@ -3050,12 +3130,12 @@ collaborated in the development and improvement of \irace:
 \item Nguyen Dang (\texttt{nttd@st-andrews.ac.uk}) % implemented \code{irace2pyimp}
 \end{acklist}
 
-
+\newcommand{\doi}[1]{doi:\hspace{.16667em plus .08333em}\discretionary{}{}{}\href{https://doi.org/#1}{\urlstyle{rm}\nolinkurl{#1}}}
 \bibliographystyle{abbrvnat}
 \ifthenelse {\boolean{Release}}{%
 \bibliography{irace-package}%
 }{%
-\bibliography{optbib/abbrev,optbib/journals,optbib/authors,optbib/biblio,optbib/crossref}%
+\bibliography{optbib/abbrev,optbib/journals,optbib/authors,optbib/articles,optbib/biblio,optbib/crossref}%
 }
 
 \newpage
@@ -3127,7 +3207,7 @@ Follow this checklist to detect where the problem is:
 
 \item Make sure that your \code{targetRunner} script or program is at the specified location. If you see this error:
 \begin{CodeInput}
-Error: == irace == target runner '~/tuning/target-runner' does not exist
+Error: == irace == target runner './tuning/target-runner' does not exist
 \end{CodeInput}
 %
 it means that \irace cannot find the \code{target-runner} file. Check that the file is at
@@ -3136,12 +3216,12 @@ the path specified by the error.
 \item Make sure that your \code{targetRunner} script is an executable file and the user running \irace has permission to execute it. The following errors:
 %
 \begin{CodeInput}
-Error: == irace == target runner '~/tuning/target-runner' is a directory,
+Error: == irace == target runner './tuning/target-runner' is a directory,
 not a file
 \end{CodeInput}
 or
 \begin{CodeInput}
-Error: == irace == target runner '~/tuning/target-runner' is not executable
+Error: == irace == target runner './tuning/target-runner' is not executable
 \end{CodeInput}
 %
 mean that your \code{targetRunner} is not an executable file. In the first
@@ -3150,43 +3230,55 @@ name of the script. In the second case, you must make the file executable,
 which in GNU/Linux can be done by:
 %
 \begin{lstlisting}[style=BashInputStyle]
-chmod +x ~/tuning/target-runner
+chmod +x ./tuning/target-runner
 \end{lstlisting}
 
 \item If your \code{targetRunner} script calls another program, make sure it is at  the location described in the script
 (variable \code{EXE} in the examples and templates). A typical output for such an error is:
 %
 \begin{CodeInput}
-Error: == irace == running command ''~/tuning/target-runner' 1 8 676651103 
-~/tuning/Instances/1000-16.tsp --ras --localsearch 2 --alpha 4.03 --beta 1.89
---rho  0.02 --ants 37 --nnls 48 --dlb 0 --rasranks 15 2>\&1' had status 1  
-== irace == The call to target.runner.default was:
-~/tuning/target-runner 1 8 676651103 ~/tuning/Instances/1000-16.tsp --ras 
---localsearch 2 --alpha 4.03 --beta 1.89 --rho  0.02 --ants 37 --nnls 48 
---dlb 0 --rasranks 15 
+Error: == irace == running command ''./tuning/target-runner' 1 8 676651103
+./tuning/Instances/1000-16.tsp --ras --localsearch 2 --alpha 4.03 --beta 1.89
+--rho  0.02 --ants 37 --nnls 48 --dlb 0 --rasranks 15 2>\&1' had status 1
+== irace == The call to target_runner_default was:
+./tuning/target-runner 1 8 676651103 ./tuning/Instances/1000-16.tsp --ras
+--localsearch 2 --alpha 4.03 --beta 1.89 --rho  0.02 --ants 37 --nnls 48
+--dlb 0 --rasranks 15
 == irace == The output was:
-Tue May  3 19:00:37 UTC 2016: error: ~/bin/acotsp: not found or not executable
-(pwd: ~/tuning/acotsp-arena)
+Tue May  3 19:00:37 UTC 2016: error: ./bin/acotsp: not found or not executable
+(pwd: ./tuning/acotsp-arena)
 \end{CodeInput}
 %
 You may test your script by copying the command line shown in the error and
 executing \code{target-runner} directly on the execution directory (\parameter{execDir}). In this case, the command line is:
 %
 \begin{lstlisting}[style=BashInputStyle]
-~/tuning/target-runner 1 8 676651103 ~/tuning/Instances/1000-16.tsp  --ras \
+./tuning/target-runner 1 8 676651103 ./tuning/Instances/1000-16.tsp  --ras \
  --localsearch 2 --alpha 4.03 --beta 1.89 --rho  0.02 --ants 37 --nnls 48 \
  --dlb 0 --rasranks 15
 \end{lstlisting}
 
-This executes the \code{targetRunner} script as \irace does. The output of this script must be only one number. 
+This executes the \code{targetRunner} script as \irace does. The output of this script must be only one number.
+
+\item If your \code{targetRunner} file is an executable script in Python, \aR, Perl, Bash or some other interpreted programming language, make sure that the interpreter specified in the first line of the file exists at the correct location. For example, if the first line of \code{target-runner.py} is:
+%
+\begin{CodeInput}
+#|/usr/bin/python
+\end{CodeInput}
+%
+Then make sure that \path{/usr/bin/python} exists and it is executable. Otherwise, you will get an error such as:
+%
+\begin{CodeInput}
+Error: == irace == error in running command
+\end{CodeInput}
 
 \item Check that your \code{targetRunner} script is actually returning one
   number as output. For example:
-% 
+%
 \begin{CodeInput}
-Error: == irace == The output of '~/tuning/target-runner 1 25 365157769
- ~/tuning/Instances/1000-31.tsp --ras --localsearch 1 --alpha 0.26 --beta
- 6.95 --rho 0.69 --ants 56 --nnls 10 --dlb 0 --rasranks 7' is not numeric! 
+Error: == irace == The output of './tuning/target-runner 1 25 365157769
+ ./tuning/Instances/1000-31.tsp --ras --localsearch 1 --alpha 0.26 --beta
+ 6.95 --rho 0.69 --ants 56 --nnls 10 --dlb 0 --rasranks 7' is not numeric!
 == irace == The output was:
 Solution: 24479793
 \end{CodeInput}
@@ -3194,11 +3286,11 @@ Solution: 24479793
 %% For testing your script, copy the command-line of \code{target-runner} and execute it directly on the execution directory (\parameter{execDir}):
 %% %
 %% \begin{lstlisting}[style=BashInputStyle]
-%% ~/tuning/target-runner 1 25 365157769 ~/tuning/Instances/1000-31.tsp  --ras \
+%% ./tuning/target-runner 1 25 365157769 ./tuning/Instances/1000-31.tsp  --ras \
 %%  --localsearch 1 --alpha 0.26 --beta 6.95 --rho  0.69 --ants 56 \
 %%  --nnls 10 --dlb 0 --rasranks 7
 %% \end{lstlisting}
-%% This executes the \code{targetRunner} script as \irace does. 
+%% This executes the \code{targetRunner} script as \irace does.
   In the example above, the output of \code{target-runner} is ``\code{Solution:
     24479793}'', which is not a number. If \code{target-runner} is parsing the
   output of the target algorithm, you need to verify that the code only parses
@@ -3208,7 +3300,7 @@ Solution: 24479793
   for your algorithm.  If you see an error as:
 %
 \begin{CodeInput}
-== irace == The output was: Tue May  3 19:41:40 UTC 2016: 
+== irace == The output was: Tue May  3 19:41:40 UTC 2016:
 error: c1-9.stdout: No such file or directory
 \end{CodeInput}
 The output file of the execution of your algorithm has not been
@@ -3218,7 +3310,7 @@ created (check permissions) or has been deleted before the result can be read.
 \item Other errors can produce the following output:
 %
 \begin{CodeInput}
-== irace == The output was: Tue May  3 19:49:06 UTC 2016: 
+== irace == The output was: Tue May  3 19:49:06 UTC 2016:
 error: c1-23.stdout: Output is not a number
 \end{CodeInput}
 %
@@ -3240,7 +3332,7 @@ to see the output that your algorithm produces.
   that case, you must debug the commands individually exactly as \irace executes them. In
   order to find where the problem is, print the commands to a log file before
   executing them. For example:
-  % 
+  %
 \begin{lstlisting}[style=BashInputStyle]
 echo "$EXE ${FIXED_PARAMS} -i $INSTANCE ${CONFIG_PARAMS}" >> ${STDERR}.log
 $EXE ${FIXED_PARAMS} -i $INSTANCE ${CONFIG_PARAMS} 1> ${STDOUT} 2> ${STDERR}
@@ -3255,7 +3347,7 @@ $EXE ${FIXED_PARAMS} -i $INSTANCE ${CONFIG_PARAMS} 1> ${STDOUT} 2> ${STDERR}
   numbers generated by \code{target-runner}. We recommend that you run \irace,
   the \code{target-runner} and the target algorithm under an English locale (or
   make sure that their languages and number format are compatible).
-  
+
 \item It is possible that
   \href{https://en.wikipedia.org/wiki/Heisenbug}{transient bugs} in the target
   algorithm are only visible when running within \irace, and
@@ -3271,20 +3363,20 @@ $EXE ${FIXED_PARAMS} -i $INSTANCE ${CONFIG_PARAMS} 1> ${STDOUT} 2> ${STDERR}
     depending on the number of CPUs requested. One way to test this is to
     submit the failing execution of \code{targetRunner} to the queuing system,
     and specifically to any problematic machine.
-    
+
   \item When using MPI, some calls to \code{targetRunner} may run on different
     computers than the one running the master \irace process. See FAQ in
     \autoref{sec:mpi-error}.
-    
+
   \item Does \code{targetRunner} read or create intermediate files? These files
     may cause a race condition when two calls to \code{targetRunner} happen at
     the same time. You have to make sure that parallel runs of
     \code{targetRunner} do not interfere with each other's files.
-    
+
   \item Maybe these files consume too much memory or fill the filesystem when
     there are simultaneous \code{targetRunner} calls? Moreover, queuing systems
     have stricter limits for computing nodes than for the submit/host node.
-    
+
   \item Does the machine or the queuing system impose any limits on number of
     processes or CPU/memory/filesystem usage per job? Such limits may only
     trigger when more than one process is executed in parallel, killing the
@@ -3292,7 +3384,7 @@ $EXE ${FIXED_PARAMS} -i $INSTANCE ${CONFIG_PARAMS} 1> ${STDOUT} 2> ${STDERR}
     useful. In that case, \irace may not detect the the program finished
     unexpectedly, only that the expected output was not printed.
   \end{itemize}
-  
+
 \end{enumerate}
 
 \section{targetEvaluator troubleshooting checklist} \label{sec:evaluator check list}
@@ -3336,7 +3428,7 @@ Even if \parameter{targetRunner} appears to work, the use of \parameter{targetEv
 \item[\hypertarget{irace_home}{\path{$IRACE_HOME}:}] The filesystem path where \irace is
   installed. You can find this information by opening an \aR console and
   executing:
-  
+
 <<R_irace_home2, prompt=FALSE, eval=FALSE>>=
 system.file(package = "irace")
 @
@@ -3362,9 +3454,9 @@ system.file(package = "irace")
 
 %% NEWS is latin1 but this file is utf8
 \begingroup\inputencoding{utf8}%
-\VerbatimInput{NEWS.txt}%
+% FIXME: This doesn't break long lines, find another alternative.
+\VerbatimInput{../NEWS.md}%
 \endgroup
-
 \end{appendices}
 
 \end{document}

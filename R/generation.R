@@ -2,382 +2,295 @@
 ## GENERATE CONFIGURATIONS
 #######################################
 
-## When called with an unconditional parameter, it
-## must return TRUE
-conditionsSatisfied <- function (parameters, partialConfiguration, paramName)
+## When called with an unconditional parameter, it must return TRUE.
+conditionsSatisfied <- function(condition, partialConfiguration)
 {
-  condition <- parameters$conditions[[paramName]]
   # If there is no condition, do not waste time evaluating it.
   if (isTRUE(condition)) return(TRUE)
 
   v <- eval(condition, as.list(partialConfiguration))
   # Return TRUE if TRUE, FALSE if FALSE or NA
   ## FIXME: If we byte-compile the condition, then we should incorporate the
-  ## following into the condition directly. See readForbiddenFile.
-  v <- !is.na(v) && v
-  return(v)
+  ## following into the condition directly.
+  !is.na(v) && v
 }
 
-new_empty_configuration <- function(parameters)
+repairConfigurations <- function(x, parameters, repair)
 {
-  newConfigurationsColnames <- c(names(parameters$conditions), ".PARENT.")
-  return(setNames(as.list(rep(NA, length(newConfigurationsColnames))),
-                  newConfigurationsColnames))
-}
-
-get.fixed.value <- function(param, parameters)
-{
-  value <- parameters$domain[[param]][1]
-  type <- parameters$types[[param]]
-  if (type == "i") {
-    return (as.integer(value))
-  } else if (type == "c" || type == "o") {
-    return (value)
-  } else {
-    irace.assert (type == "r")
-    return (as.double(value))
+  if (!is.null(repair)) {
+    # FIXME: Pass the whole newConfigurations to repair and let it handle each row.
+    j <- parameters$names
+    df <- as.data.frame(x)
+    for (i in seq_nrow(x))
+      set(x, i = i, j = j, value = repair(df[i, parameters$names], parameters))
   }
+  x
 }
 
 ## Calculates the parameter bounds when parameters domain is dependent
-getDependentBound <- function(parameters, param, configuration)
+getDependentBound <- function(param, configuration)
 {
-  values <- parameters$domain[[param]]
-  if (is.expression(values)) {
-    # Depends contains parameters that enable param and parameters that define
-    # its domain. If this is a partial configuration, we need only the latter.
-    # Use names() here in case the configuration is simply a list.
-    deps <- intersect(names(configuration), parameters$depends[[param]])
+  domain <- param[["domain"]]
+  if (is.expression(domain)) {
+    deps <- all.vars(domain)
     # If it depends on a parameter that is disabled, then this is disabled.
     if (anyNA(configuration[deps])) return(NA)
-
-    values <- sapply(values, eval, configuration)
-    irace.assert(all(is.finite(values)))
+    domain <- sapply(domain, eval, configuration)
+    irace.assert(all(is.finite(domain)))
     # Value gets truncated (defined from robotics initial requirements)
-    if (parameters$types[param] == "i") values <- as.integer(values)
-    if (values[1] > values[2]) {
-      irace.error ("Invalid domain (", paste0(values, collapse=", "),
-                   ") generated for parameter '", param,
-                   "' that depends on parameters (",
-                   paste0(parameters$depends[[param]], collapse=", "),
+    if (param[["type"]] == "i") domain <- as.integer(domain)
+    if (domain[[1L]] > domain[[2L]]) {
+      irace.error ("Invalid domain (", paste0(domain, collapse=", "),
+                   ") generated for parameter '", param[["name"]],
+                   "' that depends on parameters (", paste0(deps, collapse=", "),
                    "). This is NOT a bug in irace. Check the definition of these parameters.")
     }
   }
-
-  return(values)
+  domain
 }
+
+## Calculates the parameter bounds when the parameter is dependent.
+get_dependent_domain <- function(param, configuration)
+{
+  # FIXME: Make this function handle a data.table and return a list of domains.
+  configuration <- as.list(configuration)
+  domain <- param[["domain"]]
+  deps <- all.vars(domain)
+  # FIXME: This function should not be called if the parent is disabled.
+  # If it depends on a parameter that is disabled, then this is disabled.
+  if (anyNA(configuration[deps])) return(NA)
+
+  irace.assert(is.expression(domain))
+  domain <- sapply(domain, eval, configuration, USE.NAMES=FALSE)
+  irace.assert(all(is.finite(domain)))
+  # Value gets truncated (defined from robotics initial requirements)
+  if (param[["type"]] == "i") domain <- as.integer(domain)
+  if (domain[[1L]] > domain[[2L]]) {
+    # FIXME: Add test for this error.
+    irace.error ("Invalid domain (", paste0(domain, collapse=", "),
+                 ") generated for parameter '", param[["name"]],
+                 "' that depends on parameters (", paste0(deps, collapse=", "),
+                 "). This is NOT a bug in irace. Check the definition of these parameters.")
+  }
+  domain
+}
+
+
+generate_sobol <- function(parameters, n, repair = NULL)
+{
+  confs <- spacefillr::generate_sobol_set(n, dim = parameters$nbVariable,
+    seed = runif_integer(size = 1L))
+  confs <- data.table(confs)
+  setnames(confs, parameters$names_variable)
+  hierarchy <- parameters$hierarchy
+  nodep_names <- names(hierarchy)[(hierarchy == 1L) & !parameters$isFixed]
+  # FIXME: How to do this faster using data.table?
+  for (x in nodep_names)
+    set(confs, j = x, value = param_quantile(parameters$get(x), confs[[x]]))
+  
+  for (x in parameters$names_fixed)
+    set(confs, j = x, value = parameters$domains[[x]])
+  
+  setcolorder(confs, parameters$names)
+  
+  max_level <- max(hierarchy)
+  if (max_level > 1L) {
+    .NEWVALUE <- .DOMAIN <- NULL # To silence CRAN warnings.
+    for (k in seq_len(max_level - 1L)) {
+      prev_names <- names(hierarchy)[hierarchy <= k]
+      dep_names <- names(hierarchy)[hierarchy == k+1L]
+      for (p in dep_names) {
+        param <- parameters$get(p)
+        idx_satisfied <- which_satisfied(confs, param[["condition"]])
+        if (param$isFixed) {
+          # If somehow this fixed parameter was not satisfied sometimes, just set its value to NA.
+          confs[!idx_satisfied, (p):= NA ]
+        } else if (length(idx_satisfied)) {
+          if (param[["is_dependent"]]) {
+            confs[idx_satisfied, let(.DOMAIN = list(get_dependent_domain(param, .SD))), by=.I, .SDcols=prev_names]
+            confs[idx_satisfied, .NEWVALUE := param_quantile(param, .SD, domain = unlist(.DOMAIN)), by=.I, .SDcols=p]
+            confs[, (p):=.NEWVALUE]
+            confs[, let(.NEWVALUE=NULL, .DOMAIN=NULL)]
+          } else {
+            confs[idx_satisfied, .NEWVALUE := param_quantile(param, unlist(.SD)), .SDcols=p]
+            confs[, (p):=.NEWVALUE]
+            confs[, let(.NEWVALUE=NULL)]
+          }
+        } else {
+          na_value <- switch(param[["type"]],
+            i = NA_integer_,
+            r = NA_real_,
+            c = NA_character_,
+            o = NA_character_,
+            irace.internal.error("Unknown type '", param[["type"]], "'"))
+          set(confs, j = p, value = na_value)
+        }
+      }
+    }
+  }
+  repairConfigurations(confs, parameters, repair)
+  confs
+}
+
+sampleSobol <- function(parameters, n, repair = NULL)
+{
+  newConfigurations <- generate_sobol(parameters, n, repair)
+  newConfigurations <- unique(newConfigurations)
+  forbidden <- parameters$forbidden  
+  newConfigurations <- filter_forbidden(newConfigurations, forbidden)
+  have <- nrow(newConfigurations)
+  if (have < n) {
+    needed <- max(ceiling(n + (n - have) * (2 - have / n)), min(parameters$nbVariable * 5L, 100L))
+    newConfigurations <- generate_sobol(parameters, needed, repair)
+    newConfigurations <- unique(newConfigurations)
+    newConfigurations <- filter_forbidden(newConfigurations, forbidden)
+    if (nrow(newConfigurations) == 0L) {
+      irace.error("irace tried to sample a configuration not forbidden without success, perhaps your constraints are too strict?")
+    }
+    newConfigurations <- truncate_rows(newConfigurations, n)
+  }
+  set(newConfigurations, j = ".PARENT.", value = NA_integer_)
+  newConfigurations
+}
+
+
+generate_uniform <- function(parameters, nbConfigurations, repair = NULL)
+{
+  newConfigurations <- configurations_alloc(parameters[["names"]],
+    nrow = nbConfigurations, parameters = parameters)
+  # We sample in the order of the conditions.
+  for (param in parameters$get_ordered()) {
+    pname <- param[["name"]]
+    idx <- which_satisfied(newConfigurations, param[["condition"]])
+    if (length(idx) == 0L)
+      next
+    if (param[["isFixed"]]) {
+      # We don't need to sample, there is only one value.
+      set(newConfigurations, i = idx, j = pname, value = param[["domain"]])
+      next
+    }
+    if (param[["is_dependent"]]) {
+      sample_dep_unif <- function(x)
+        sample_unif(param, n = 1L, domain = get_dependent_domain(param, x))
+      newConfigurations[idx, c(pname) := sample_dep_unif(.SD), by=.I, .SDcols=parameters$depends[[pname]]]
+      ## newVals <- sapply(idx, function(i) {
+      ##   domain <- get_dependent_domain(param, newConfigurations[i,])
+      ##   runif(param, n = 1L, domain = domain)
+      ## })
+    } else {
+      set(newConfigurations, i = idx, j = pname, value = sample_unif(param, n = length(idx)))
+    }
+  }
+  repairConfigurations(newConfigurations, parameters, repair)
+  newConfigurations
+}
+
 
 ### Uniform sampling for the initial generation
-sampleUniform <- function (parameters, nbConfigurations, digits,
-                           forbidden = NULL, repair = NULL)
+sampleUniform <- function(parameters, nbConfigurations, repair = NULL)
 {
-  if (is.null(repair)) repair <- function(c, p, d) c
-  
-  namesParameters <- names(parameters$conditions)
-  newConfigurations  <-
-    as.data.frame(matrix(nrow = nbConfigurations,
-                         ncol = length(namesParameters) + 1,
-                         dimnames = list(NULL, c(namesParameters, ".PARENT."))
-                         ), stringsAsFactors=FALSE)
-  empty_configuration <- new_empty_configuration(parameters)
-
-  for (idxConfiguration in seq_len(nbConfigurations)) {
-    forbidden.retries <- 0
-    while (forbidden.retries < 100) {
-      configuration <- empty_configuration
-      for (p in seq_along(namesParameters)) {
-        currentParameter <- namesParameters[p]
-        if (!conditionsSatisfied(parameters, configuration, currentParameter)) {
-          configuration[[p]] <- NA
-          next
-        }
-        # FIXME: We must be careful because parameters$types does not have the
-        # same order as namesParameters, because we sample in the order of the
-        # conditions.
-        currentType <- parameters$types[[currentParameter]]
-        if (isFixed(currentParameter, parameters)) {
-          # We don't even need to sample, there is only one possible value !
-          newVal <- get.fixed.value (currentParameter, parameters)
-          # The parameter is not a fixed and should be sampled          
-        } else if (currentType %in% c("i","r")) {
-          domain <- getDependentBound(parameters, currentParameter, configuration)
-          newVal <- sample_unif(currentType, domain,
-                                transf = parameters$transform[[currentParameter]],
-                                digits)
-        } else {
-          irace.assert(currentType %in% c("c","o"))
-          possibleValues <- parameters$domain[[currentParameter]]
-          newVal <- sample(possibleValues, 1)
-        }
-        configuration[[p]] <- newVal
-      }
-      configuration <- as.data.frame(configuration, stringsAsFactors=FALSE)
-      configuration <- repair(configuration, parameters, digits)
-
-      if (is.null(forbidden)
-          || nrow(checkForbidden(configuration, forbidden)) == 1) {
-        newConfigurations[idxConfiguration,] <- configuration
+  newConfigurations <- generate_uniform(parameters, nbConfigurations, repair)
+  forbidden <- parameters$forbidden  
+  if (!is.null(forbidden)) {
+    retries <- 100L
+    repeat {
+      newConfigurations <- filter_forbidden(newConfigurations, forbidden)
+      needed <- nbConfigurations - nrow(newConfigurations)
+      if (needed == 0L)
         break
+      newConfigurations <- rbindlist(list(newConfigurations,
+        generate_uniform(parameters, needed, repair = repair)))
+      retries <- retries - 1L
+      if (retries == 0L) {
+        irace.error("irace tried 100 times to sample uniformly a configuration not forbidden without success, perhaps your constraints are too strict?")
       }
-      forbidden.retries <- forbidden.retries + 1
-    }
-    if (forbidden.retries >= 100) {
-      irace.error("irace tried 100 times to sample from the model a configuration not forbidden without success, perhaps your constraints are too strict?")
     }
   }
-  return (newConfigurations)
+  set(newConfigurations, j = ".PARENT.", value = NA_integer_)
+  newConfigurations
 }
 
-# To be called the first time before the second race (with indexIter =
-# 2) Nb configurations is the number of configurations at the end
-# included the elite ones obtained from the previous iteration
-sampleModel <- function (parameters, eliteConfigurations, model,
-                         nbNewConfigurations, digits, forbidden = NULL,
-                         repair = NULL)
+sample_from_model <- function(parameters, eliteConfigurations, model,
+                              nbNewConfigurations, repair = NULL)
 {
-  if (is.null(repair)) repair <- function(c, p, d) c
+  # FIXME: We only need .WEIGHT. from eliteConfigurations.
+  ids_elites <- names(model[[1L]])
+  irace.assert(identical(as.integer(ids_elites), as.integer(eliteConfigurations[[".ID."]])), {
+    print(str(ids_elites))
+    print(str(eliteConfigurations[[".ID."]]))
+  })
   
-  if (nbNewConfigurations <= 0) {
+  newConfigurations  <- configurations_alloc(parameters$names, nrow = nbNewConfigurations, parameters)
+  idx_elites <- sample.int(n = length(ids_elites), size = nbNewConfigurations,
+                           prob = eliteConfigurations[[".WEIGHT."]], replace = TRUE)
+  .PARENT. <- NULL # Silence CRAN warning.
+  set(newConfigurations, j = ".PARENT.", value = ids_elites[idx_elites])
+  # Sample a value for every parameter of the new configuration.
+  for (param in parameters$get_ordered()) {
+    idx_satisfied <- which_satisfied(newConfigurations, param[["condition"]])
+    if (length(idx_satisfied) == 0L)
+      next
+    if (param[["isFixed"]]) {
+      # We don't need to sample, there is only one value.
+      set(newConfigurations, i = idx_satisfied, j = param[["name"]], value = param[["domain"]])
+      next
+    }
+    pname <- param[["name"]]
+    this_model <- model[[pname]]
+    if (param[["is_dependent"]]) {
+      sample_model <- if (param[["type"]] == "i") sample_model.ParamInt else sample_model.ParamReal
+      dep_rmodel <- function(x, sd_mean) {
+        domain <- get_dependent_domain(param, x)
+        if (is.na(domain[[1L]])) return(NA)
+        # If parameters are dependent standard deviation must be computed
+        # based on the current domain
+        sd <- (domain[[2L]] - domain[[1L]]) * sd_mean[[1L]]
+        if (sd < .Machine$double.eps) return(domain[[1L]])
+        sample_model(param, n = 1L, model = c(sd, sd_mean[[2L]]), domain = domain)
+      }
+      newConfigurations[idx_satisfied, c(pname) := dep_rmodel(.SD, this_model[[.PARENT.]]), by=.I, .SDcols=parameters$depends[[pname]]]
+      next # We are done with this parameter.
+    }
+    # .BY is a list, so take the first argument.
+    newConfigurations[idx_satisfied,
+      c(pname) := list(sample_model(param, .N, this_model[[ .BY[[1L]] ]])),
+      by = .PARENT.]
+  }
+  newConfigurations[, .PARENT. := as.integer(.PARENT.)]
+  repairConfigurations(newConfigurations, parameters, repair)
+  newConfigurations
+}
+
+sampleModel <- function(parameters, eliteConfigurations, model,
+                        nbNewConfigurations, repair = NULL)
+{
+  if (nbNewConfigurations <= 0)
     irace.error ("The number of configurations to generate appears to be negative or zero.")
-  }
-  namesParameters <- names(parameters$conditions)
-  newConfigurations  <-
-    as.data.frame(matrix(nrow = nbNewConfigurations,
-                         ncol = length(namesParameters) + 1,
-                         dimnames = list(NULL, c(namesParameters, ".PARENT."))
-                         ), stringsAsFactors=FALSE)
-  empty_configuration <- new_empty_configuration(parameters)
-  
-  for (idxConfiguration in seq_len(nbNewConfigurations)) {
-    forbidden.retries <- 0
-    while (forbidden.retries < 100) {
-      # Choose the elite which will be the parent.
-      indexEliteParent <- sample.int (n = nrow(eliteConfigurations), size = 1,
-                                      prob = eliteConfigurations[[".WEIGHT."]])
-      eliteParent <- eliteConfigurations[indexEliteParent, ]
-      idEliteParent <- eliteParent[[".ID."]]
-      configuration <- empty_configuration
-      configuration[[".PARENT."]] <- idEliteParent
-      
-      # Sample a value for every parameter of the new configuration.
-      for (p in seq_along(namesParameters)) {
-        # FIXME: We must be careful because parameters$types does not
-        # have the same order as parameters$conditions. Ideally, we
-        # should fix this or make it impossible to confuse them.
-        currentParameter <- namesParameters[p]
-        currentType <- parameters$types[[currentParameter]]
-        if (!conditionsSatisfied(parameters, configuration, currentParameter)) {
-          # Some conditions are unsatisfied.
-          # Should be useless, NA is (always?) assigned when matrix created
-          newVal <- NA
-          
-        } else if (isFixed(currentParameter, parameters)) {
-          # We don't even need to sample, there is only one possible value !
-          newVal <- get.fixed.value (currentParameter, parameters)
-          # The parameter is not a fixed and should be sampled
-        } else if (currentType %in% c("i", "r")) {
-          domain <- getDependentBound(parameters, currentParameter, configuration)
-          mean <- as.numeric(eliteParent[currentParameter])
-          # If there is not value we obtain it from the model or the mean obtained is
-          # not in the current domain, this can happen when using dependent domains
-          if (is.na(mean)) mean <- model[[currentParameter]][[as.character(idEliteParent)]][2]
-          if (is.na(mean) || !inNumericDomain(mean, domain)) {
-            # The elite parent does not have any value for this parameter,
-            # let's sample uniformly.
-            newVal <- sample_unif(currentType, domain,
-                                  transf = parameters$transform[[currentParameter]], digits)
-          } else {
-            stdDev <- model[[currentParameter]][[as.character(idEliteParent)]][1]
-            # If parameters are dependent standard deviation must be computed
-            # based on the current domain
-            if (parameters$isDependent[currentParameter]) {
-              # Conditions should be satisfied for the parameter, thus domain cannot be NA
-              stdDev <- (domain[2] - domain[1]) * stdDev
-            }
-            newVal <- sample_norm(mean, stdDev, currentType, domain,
-                                  transf = parameters$transform[[currentParameter]],
-                                  digits)
-          }
-        } else if (currentType == "o") {
-          possibleValues <- paramDomain(currentParameter, parameters)  
-          value <- eliteParent[currentParameter]
-          
-          if (is.na(value)) {
-            # The elite parent does not have any value for this
-            # parameter, let's sample uniformly
-            ## FIXME: We should save the last used parameter in the model and use it here.
-            newVal <- sample(possibleValues, 1)
-          } else {
-            # Find the position within the vector of possible
-            # values to determine the equivalent integer.
-            mean <- match(value, possibleValues) # Return index of value in array
-            stdDev <- model[[currentParameter]][[as.character(idEliteParent)]]
-
-            # Sample with truncated normal distribution as an integer.
-            # See sample_norm() for an explanation.
-            newValAsInt <- floor(rtnorm(1, mean + 0.5, stdDev, lower = 1,
-                                        upper = length(possibleValues) + 1L))
-
-            # The probability of this happening is very small, but it can happen.
-            if (newValAsInt == length(possibleValues) + 1L)
-              newValAsInt <- length(possibleValues)
-            
-            irace.assert(newValAsInt >= 1L && newValAsInt <= length(possibleValues))
-            # Get back to categorical values, find the one corresponding to the
-            # newVal
-            newVal <- possibleValues[newValAsInt]
-          } 
-        } else if (currentType == "c") {
-          # FIXME: Why is idEliteParent character?
-          # FIXME: Why the model is <parameter><Parent>? It makes more sense to be <Parent><parameter>.
-          probVector <- model[[currentParameter]][[as.character(idEliteParent)]]
-          possibleValues <- paramDomain(currentParameter, parameters)
-          newVal <- sample(x = possibleValues, size = 1, prob = probVector)
-        } else {
-          irace.internal.error("Unexpected condition in sampleModel")
-        }
-        configuration[[p]] <- newVal
-      }
-      
-      configuration <- as.data.frame(configuration, stringsAsFactors = FALSE)
-      configuration <- repair(configuration, parameters, digits)
-
-      if (is.null(forbidden)
-          || nrow(checkForbidden(configuration, forbidden)) == 1) {
-        newConfigurations[idxConfiguration,] <- configuration
+  newConfigurations <- sample_from_model(parameters, eliteConfigurations,
+                                         model, nbNewConfigurations, repair)
+  forbidden <- parameters$forbidden
+  if (!is.null(forbidden)) {
+    retries <- 100L
+    repeat {
+      newConfigurations <- filter_forbidden(newConfigurations, forbidden)
+      needed <- nbNewConfigurations - nrow(newConfigurations)
+      if (needed == 0L)
         break
+      tmp <- sample_from_model(parameters, eliteConfigurations, model, needed, repair = repair)
+      newConfigurations <- rbindlist(list(newConfigurations, tmp))
+      retries <- retries - 1L
+      if (retries == 0L) {
+        irace.error("irace tried 100 times to sample from the model a configuration not forbidden without success, perhaps your constraints are too strict?")
       }
-      forbidden.retries <- forbidden.retries + 1
-    }
-    if (forbidden.retries >= 100) {
-      irace.error("irace tried 100 times to sample from the model a configuration not forbidden without success, perhaps your constraints are too strict?")
     }
   }
-  return (newConfigurations)
+  newConfigurations
 }
 
-transform.from.log <- function(x, transf, lowerBound, upperBound)
-{
-  trLower <- attr(transf, "lower") 
-  trUpper <- attr(transf, "upper")
-  x <- exp(trLower + (trUpper - trLower) * x)
-  return(x)
-}
 
-transform.to.log <- function(x, transf, lowerBound, upperBound)
-{
-  trLower <- attr(transf, "lower") 
-  trUpper <- attr(transf, "upper")
-  return((log(x) - trLower)/(trUpper - trLower))
-}
-## How to sample integer values?
-#
-# The problem: If we have an integer with domain [1,3] and we sample a real value
-# and round, then there are more chances of getting 2 than 1 or 3:
-# [1, 1,5) -> 1
-# [1.5, 2,5) -> 2
-# [2.5, 3) -> 3
-#
-# The solution: Sample in [lowerbound, upperbound + 1], that is, [1, 4], then floor():
-# [1, 2) -> 1
-# [2, 3) -> 2
-# [3, 4) -> 3
-#
-# Why floor() and not trunc()?
-# Because trunc(-1.5) -> -1, while floor(-1.5) -> -2, so for a domain [-3,-1]:
-#
-# [-3, -2) -> -3
-# [-2, -1) -> -2
-# [-1, 0)  -> -1
-#
-# Issue 1: We can sample 4 (upperbound + 1). In that case, we return 3.
-#
-# Issue 2: When sampling from a truncated normal distribution, the extremes are
-# not symmetric.
-#
-# nsamples <- 100000
-# table(floor(rtnorm(nsamples, mean=1, sd=1, lower=1,upper=4)))/nsamples
-# table(floor(rtnorm(nsamples, mean=3, sd=1, lower=1,upper=4)))/nsamples
-#
-# To make them symmetric, we translate by 0.5, so that the mean is at the
-# actual center of the interval that will produce the same value after
-# truncation, e.g., given an integer value of 1, then mean=1.5, which is at the
-# center of [1,2).
-#
-# nsamples <- 100000
-# table(floor(rtnorm(nsamples, mean=1.5, sd=1, lower=1,upper=4)))/nsamples
-# table(floor(rtnorm(nsamples, mean=3.5, sd=1, lower=1,upper=4)))/nsamples
-#
-# The above reasoning also works for log-transformed domains, because 
-# floor() happens in the original domain, not in the log-transformed one,
-# except for the case of log-transformed negative domains, where we have to
-# translate by -0.5.
-# 
-numeric_value_round <- function(type, value, lowerBound, upperBound, digits)
-{  
-  irace.assert(is.finite(value))
-  if (type == "i") {
-    value <- floor(value)
-    # The probability of this happening is very small, but it could happen.
-    if (value == upperBound + 1L)
-      value <- upperBound
-  } else
-    value <- round(value, digits)
 
-  irace.assert(value >= lowerBound && value <= upperBound)
-  return (value)
-}
 
-# Sample value for a numerical parameter.
-sample_unif <- function(type, domain, transf, digits)
-{
-  # Dependent domains could be not available because of inactivity of parameters
-  # on which they are depedent. In this case, the dependent parameter becomes 
-  # not active and we return NA.
-  if (anyNA(domain)) return(NA)
 
-  lowerBound <- domain[1]
-  upperBound <- domain[2]
 
-  if (type == "i") {
-    # +1 for correct rounding before floor()
-    upperBound <- 1L + upperBound
-  }
-  if (transf == "log") {
-    value <- runif(1, min = 0, max = 1)
-    value <- transform.from.log(value, transf, lowerBound, upperBound)
-  } else {
-    value <- runif(1, min = lowerBound, max = upperBound)    
-  }
-  # We use original upperBound, not the +1L for 'i'.
-  value <- numeric_value_round(type, value, lowerBound, upperBound = domain[2], digits)
-  return(value)
-}
 
-sample_norm <- function(mean, sd, type, domain, transf, digits)
-{
-  # Dependent domains could be not available because of inactivity of parameters
-  # on which they are depedent. In this case, the dependent parameter becomes 
-  # not active and we return NA.
-  if (anyNA(domain)) return(NA)
 
-  lowerBound <- domain[1]
-  upperBound <- domain[2]
-
-  if (type == "i") {
-    upperBound <- 1L + upperBound
-    # Because negative domains are log-transformed to positive domains.
-    mean <- mean + 0.5
-  }
-  
-  if (transf == "log") {
-    trMean <- transform.to.log(mean, transf, lowerBound, upperBound)
-    value <- rtnorm(1, trMean, sd, lower = 0, upper = 1)
-    value <- transform.from.log(value, transf, lowerBound, upperBound)
-  } else {
-    value <- rtnorm(1, mean, sd, lowerBound, upperBound)
-  }
-  # We use original upperBound, not the +1L for 'i'.
-  value <- numeric_value_round(type, value, lowerBound, upperBound = domain[2], digits)
-  return(value)
-}

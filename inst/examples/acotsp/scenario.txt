@@ -1,7 +1,7 @@
 ###################################################### -*- mode: r -*- #####
-## Scenario setup for Iterated Race (iRace).
+## Scenario setup for Iterated Race (irace).
 ############################################################################
-## To use the default value of a parameter of iRace, simply do not set
+## To use the default value of a parameter of irace, simply do not set
 ## the parameter (comment it out in this file, and do not give any
 ## value on the command line).
 
@@ -22,15 +22,6 @@ maxExperiments = 5000
 ## File that contains a set of initial configurations. If empty or NULL,
 ## all initial configurations are randomly generated.
 # configurationsFile = ""
-
-## File that contains a list of logical expressions that cannot be TRUE
-## for any evaluated configuration. If empty or NULL, do not use forbidden
-## expressions.
-forbiddenFile = "forbidden.txt"
-
-## Indicates the number of decimal places to be considered for the
-## real parameters.
-digits = 2
 
 ## A value of 0 silences all debug messages. Higher values provide
 ## more verbose debug messages.

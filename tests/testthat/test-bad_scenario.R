@@ -1,6 +1,9 @@
-context("bug")
-skip_on_cran()
 withr::with_output_sink("test-bad_scenario.Rout", {
-  expect_error(irace.cmdline("--scenario bad_scenario.txt"), "unknown variables")
-  expect_error(irace.cmdline("--scenario scenario.txt --unknown"), "Unknown command-line options: --unknown")
+  test_that("bad scenario: unknown variables", {
+    skip_on_cran()
+    bad_scenario <- test_path("bad_scenario.txt")
+    expect_error(irace_cmdline(paste0("--scenario ", bad_scenario)), "unknown variables")
+    good_scenario <- test_path("good_scenario.txt")
+    expect_error(irace_cmdline(paste0("--scenario ", good_scenario, " --unknown")), "Unknown command-line options: --unknown")
+  })
 })

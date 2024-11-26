@@ -1,47 +1,10 @@
-# An internal function to reload irace and set options for debugging
-# errors. It may also be used to reload other packages.
-# FIXME: Reload dynamic libraries? See ?dyn.load
-irace.reload.debug <- function(package = "irace")
-{
-  pkg <- paste0("package:", package)
-  try(detach(pkg, character.only = TRUE, unload = TRUE))
-  library(package, character.only = TRUE)
-  options(error = if (interactive()) utils::recover else
-          quote(utils::dump.frames("iracedump", TRUE)))
-}
-
-irace.print.memUsed <- function(objects)
-{
-  object.size.kb <- function (name, envir) {
-    object.size(get(name, envir = envir)) / 1024
-  }
-
-  envir <- parent.frame()
-  if (missing(objects)) {
-    objects <- ls(envir = envir, all.names = TRUE)
-  }
-  
-  x <- sapply(objects, object.size.kb, envir = envir)
-
-  y <- sapply(ls(envir = .irace, all.names = TRUE),
-              object.size.kb, envir = .irace)
-  names(y) <- paste0(".irace$", names(y))
-  x <- c(x, y)
-
-  # Do not print anything that is smaller than 32 Kb
-  x <- x[x > 32]
-  cat(sep="", sprintf("%30s : %17.1f Kb\n", names(x), x))
-  cat(sep="", sprintf("%30s : %17.1f Mb\n", "Total", sum(x) / 1024))
-  # This does garbage collection and also prints memory used by R.
-  cat(sep="", sprintf("%30s : %17.1f Mb\n", "gc", sum(gc()[,2])))
-}
-
 # Print a user-level warning message, when the calling context
 # cannot help the user to understand why the program failed.
 irace.warning <- function(...)
 {
   if (getOption(".irace.quiet", default=FALSE)) return()
-  cat(sep="", .msg.prefix, "WARNING: ", ..., "\n")
+  warning(paste0(.irace_msg_prefix, ..., collapse=""),
+          call. = FALSE, immediate. = TRUE)
 }
 
 # Print a user-level fatal error message, when the calling context
@@ -50,12 +13,11 @@ irace.error <- function(...)
 {
   # The default is only 1000, which is too small. 8170 is the maximum
   # value allowed up to R 3.0.2
-  op <- options(warning.length = 8170)
-  on.exit(options(op))
-  stop (.msg.prefix, ..., call. = FALSE)
+  withr::local_options(list(warning.length = 8170))
+  stop (.irace_msg_prefix, ..., call. = FALSE)
 }
 
-## utils::dump.frames is broken and cannot be used with bquote, so we need a wrapper. When irace crashes, it generates a file "iracedump.rda". To debug the crash use:
+## When irace crashes, it generates a file "iracedump.rda". To debug the crash use:
 ## R> load("iracedump.rda")
 ## R> debugger(iracedump)
 ##
@@ -64,49 +26,42 @@ irace.dump.frames <- function()
 {
   execDir <- getOption(".irace.execdir")
   if (!is.null(execDir)) cwd <- setwd(execDir)
-  ## Only a very recent R version allows saving GlovalEnv:
-  ## https://stat.ethz.ch/pipermail/r-devel/2016-November/073378.html
-  # utils::dump.frames(dumpto = "iracedump", to.file = TRUE, include.GlobalEnv = TRUE)
-  ## For now, we use the following work-around:
-  ## http://stackoverflow.com/questions/40421552/r-how-make-dump-frames-include-all-variables-for-later-post-mortem-debugging
-  utils::dump.frames(dumpto = "iracedump")
-  save.image(file = "iracedump.rda")
-
+  utils::dump.frames(dumpto = "iracedump", to.file = TRUE, include.GlobalEnv = TRUE)
+  # FIXME: We want to use on.exit(setwd(cwd)) but q() does not run on.exit.
   if (!is.null(execDir)) setwd(cwd)
-  # We need this to signal an error in R CMD check.
-  if (!interactive()) q("no", status = 1, runLast = FALSE)
+  # We need this to signal an error in R CMD check. See help(dump.frames)
+  if (!interactive()) quit("no", status = 1)
 }
 
 # Print an internal fatal error message that signals a bug in irace.
 irace.internal.error <- function(...)
 {
   .irace.bug.report <-
-    paste0("An unexpected condition occurred. ",
+    paste0(.irace_msg_prefix, "An unexpected condition occurred. ",
            "Please report this bug to the authors of the irace package <https://github.com/MLopez-Ibanez/irace/issues>")
 
-  op <- options(warning.length = 8170,
-                error = if (interactive()) utils::recover
-                        else irace.dump.frames)
+  op <- options(warning.length = 8170)
+  if (!base::interactive()) options(error = irace.dump.frames)
   on.exit(options(op))
   # 6 to not show anything below irace.assert()
-  bt <- capture.output(traceback(6))
+  bt <- capture.output(traceback(5))
   warnings()
-  stop (.msg.prefix, paste0(..., collapse = "\n"),
+  stop (.irace_msg_prefix, paste0(..., collapse = "\n"), "\n",
         paste0(bt, collapse= "\n"), "\n",
-        .msg.prefix, "\n", .irace.bug.report, call. = FALSE)
+        .irace.bug.report, call. = FALSE)
   invisible()
 }
 
-irace.assert <- function(exp, eval.after = NULL)
+irace.assert <- function(exp, eval_after = NULL)
 {
   # FIXME: It would be great if we could save into a file the state of
   # the function that called this one.
-  if (exp) return(invisible())
-  mc <- match.call()[[2]]
-  msg <- paste0(deparse(mc), " is not TRUE\n")
-  if (!is.null(eval.after)) {
-    msg.after <- eval.parent(capture.output(eval.after))
-    msg <- paste0(msg, "\n", paste0(msg.after, collapse="\n"))
+  if (isTRUE(as.logical(exp))) return(invisible())
+  mc <- sys.call()[[2L]]
+  msg <- paste0("'", deparse(mc), "' is not TRUE")
+  if (!is.null(eval_after)) {
+    msg_after <- eval.parent(capture.output(eval_after))
+    msg <- paste0(msg, "\n", paste0(msg_after, collapse="\n"))
   }
   irace.internal.error(msg)
   invisible()
@@ -180,39 +135,27 @@ file.check <- function (file, executable = FALSE, readable = executable,
 }
 
 # Returns the smallest multiple of d that is higher than or equal to x.
-round.to.next.multiple <- function(x, d)
-  return(x + d - 1 - (x - 1) %% d)
+round_to_next_multiple <- function(x, d) (x + d - 1L - (x - 1L) %% d)
 
 # This returns FALSE for Inf/-Inf/NA
 is.wholenumber <- function(x, tol = .Machine$double.eps^0.5)
-{
   is.finite(x) & (abs(x - round(x)) < tol)
-}
 
-is.na.nowarn <- function(x)
-{
-  length(x) == 1 && suppressWarnings(is.na(x))
-}
 
-is.na.or.empty <- function(x)
-{
-  (length(x) == 0) || is.na.nowarn(x)
-}
+is_na_nowarn <- function(x)
+  length(x) == 1L && suppressWarnings(is.na(x))
+
+is_na_or_empty <- function(x)
+  (length(x) == 0L) || is_na_nowarn(x)
 
 is.null.or.na <- function(x)
-{
-  is.null(x) || is.na.nowarn(x)
-}
+  is.null(x) || is_na_nowarn(x)
 
 is.null.or.empty <- function(x)
-{
-  (length(x) == 0) || (length(x) == 1 && !suppressWarnings(is.na(x)) && is.character(x) && x == "")
-}
+  (length(x) == 0L) || (length(x) == 1L && !suppressWarnings(is.na(x)) && is.character(x) && x == "")
 
 is_null_or_empty_or_na <- function(x)
-{
-  (length(x) == 0) || is.na.nowarn(x) || (length(x) == 1 && !suppressWarnings(is.na(x)) && is.character(x) && x == "")
-}
+  (length(x) == 0L) || is_na_nowarn(x) || (length(x) == 1L && !suppressWarnings(is.na(x)) && is.character(x) && x == "")
 
 is.function.name <- function(FUN)
 {
@@ -227,7 +170,7 @@ get.function <- function(FUN)
   if (is.function(FUN)) return(FUN)
   FUN <- dynGet(as.character(FUN), ifnotfound = NULL, inherits = TRUE)
   if (is.function(FUN)) return(FUN)
-  return (NULL)
+  NULL
 }
 
 is.bytecode <- function(x) typeof(x) == "bytecode"
@@ -235,23 +178,15 @@ is.bytecode <- function(x) typeof(x) == "bytecode"
 bytecompile <- function(x)
 {
   if (is.bytecode(x)) return(x)
-  return(compiler::cmpfun(x))
+  compiler::cmpfun(x)
 }
 
-# FIXME: Use stringr function and replace this function
-str_sub <- function(x, start=0, stop=nchar(x))
+# This function is used to trim potentially large strings for printing, since
+# the maximum error/warning length is 8170 characters (R 3.0.2)
+strlimit <- function(s, limit = 5000L)
 {
-  negs <- start < 0
-  if (any(negs)) start[negs] <- nchar(x[negs]) + 1  - start[negs]
-
-  negs <- stop < 0
-  if (any(negs)) stop[negs] <- nchar(x[negs]) + 1  - stop[negs]
-  return(substr(x, start, stop))
-}
-
-strcat <- function(...)
-{
-  do.call(paste0, args = list(..., collapse = NULL))
+  if (nchar(s) <= limit) return(s)
+  paste0(substr(s, 1L, limit - 3L), "...")
 }
 
 #' Update filesystem paths of a scenario consistently.
@@ -259,13 +194,13 @@ strcat <- function(...)
 #' This function should be used to change the filesystem paths stored in a
 #' scenario object. Useful when moving a scenario from one computer to another.
 #'
-#' @template arg_scenario
-#' @param from character string containing a regular expression (or character
+#' @inheritParams defaultScenario
+#' @param from `character(1)`\cr Character string containing a regular expression (or character
 #'   string for `fixed = TRUE`) to be matched.
-#' @param to the replacement string.character string. For `fixed = FALSE`
+#' @param to `character(1)`\cr  The replacement string.character string. For `fixed = FALSE`
 #'   this can include backreferences `"\1"` to `"\9"` to
 #'   parenthesized subexpressions of `from`.
-#' @param fixed logical.  If `TRUE`, `from` is a string to be matched
+#' @param fixed `logical(1)`\cr If `TRUE`, `from` is a string to be matched
 #'   as is.
 #' @return The updated scenario
 #' @examples
@@ -284,24 +219,7 @@ scenario_update_paths <- function(scenario, from, to, fixed = TRUE)
   scenario
 }
 
-#' @rdname scenario_update_paths
-#' @export
-scenario.update.paths <- function(scenario, from, to, fixed = TRUE)
-{
-  .Deprecated("scenario_update_paths")
-  scenario_update_paths(scenario=scenario, from=from, to=to, fixed=fixed)
-}
-
-# This function is used to trim potentially large strings for printing, since
-# the maximum error/warning length is 8170 characters (R 3.0.2)
-strlimit <- function(str, limit = 5000)
-{
-  if (nchar(str) > limit) return(paste0(substr(str, 1, limit - 3), "..."))
-  return(str)
-}
-
 test.type.order.str <- function(test.type)
-{
   switch(test.type,
          friedman = "sum of ranks",
          t.none =, # Fall-throught
@@ -309,33 +227,16 @@ test.type.order.str <- function(test.type)
          t.bonferroni = "mean value",
          irace.internal.error ("test.type.order.str() Invalid value '",
                                test.type, "' of test.type"))
-}
 
-trim.leading <- function(str)
-  sub('^[[:space:]]+', '', str) ## white space, POSIX-style
 
-trim.trailing <- function(str)
-  sub('[[:space:]]+$', '', str) ## white space, POSIX-style
+trim_leading <- function(str)
+  sub('^[[:space:]]+', '', str, perl = TRUE) ## white space, POSIX-style
+
+trim_trailing <- function(str)
+  sub('[[:space:]]+$', '', str, perl = TRUE) ## white space, POSIX-style
 
 # remove leading and trailing white space characters
-trim <- function(str) trim.trailing(trim.leading(str))
-
-isFixed <- function (paramName, parameters)
-  as.logical(parameters$isFixed[paramName])
-
-paramDomain <- function (paramName, parameters)
-  parameters$domain[[paramName]]
-
-paramLowerBound <- function (paramName, parameters)
-  as.numeric(parameters$domain[[paramName]][1])
-
-paramUpperBound <- function (paramName, parameters)
-  as.numeric(parameters$domain[[paramName]][2])
-
-
-inNumericDomain <- function(value, domain) (value >= domain[1] && value <= domain[2])
-
-nbParam <- function (parameters) length(parameters$names)
+trim <- function(str) trim_trailing(trim_leading(str))
 
 ## This function takes two matrices x and y and merges them such that the
 ## resulting matrix z has:
@@ -343,7 +244,7 @@ nbParam <- function (parameters) length(parameters$names)
 # rownames(z) <- setunion(rownames(x), rownames(y)) and
 # z[rownames(x), colnames(x)] <- x and z[rownames(y), colnames(y)] <- y, and
 # z[i, j] <- NA for all i,j not in x nor y.
-merge.matrix <- function(x, y)
+merge_matrix <- function(x, y)
 {
   new.cols <- setdiff(colnames(y), colnames(x))
   new.rows <- setdiff(rownames(y), rownames(x))
@@ -365,124 +266,9 @@ merge.matrix <- function(x, y)
   # Update
   x[rownames(y), colnames(y)] <- y
   # There must be a non-NA entry for each instance.
-  irace.assert(all(apply(!is.na(x), 1, any)))
+  irace.assert(all(rowAnys(!is.na(x))))
   return(x)
 }
-
-## extractElites
-# Input: the configurations with the .RANK. field filled.
-#        the number of elites wished
-# Output: nbElites elites, sorted by ranks, with the weights assigned.
-extractElites <- function(scenario, parameters, configurations, nbElites)
-{
-  # Keep only alive configurations.
-  ## FIXME: Shouldn't this be done by the caller?
-  configurations <- configurations[configurations$.ALIVE., , drop = FALSE]
-  if (nbElites < 1) {
-    irace.internal.error("nbElites is lower or equal to zero.") 
-  }
-  # Remove duplicated. Duplicated configurations may be generated, however, it
-  # is too slow to check at generation time. Nevertheless, we can check now
-  # since we typically have very few elites.
-  ## FIXME: Use a variant of similarConfigurations.
-  configurations <- configurations[order(configurations$.ID.), , drop = FALSE]
-  before <- nrow(configurations)
-  configurations <- configurations[!duplicated(removeConfigurationsMetaData(configurations)),
-                                 , drop = FALSE]
-  after <- nrow(configurations)
-  if (after < before && scenario$debugLevel >= 1) {
-    irace.note("Dropped ", before - after, " duplicated elites\n")
-  }
-
-  nbElites <- min(after, nbElites)
-  # Sort by rank.
-  elites <- configurations[order(configurations$.RANK.), , drop = FALSE]
-  elites <- elites[1:nbElites, , drop = FALSE]
-  elites[, ".WEIGHT."] <- ((nbElites - (1:nbElites) + 1)
-                           / (nbElites * (nbElites + 1) / 2))
-  elites
-}
-
-#' removeConfigurationsMetaData
-#'
-#' Remove the columns with "metadata" of a matrix containing some
-#' configuration configurations. These "metadata" are used internaly
-#' by \pkg{irace}. This function can be used e.g. before printing
-#' the configurations, to output only the values for the parameters
-#' of the configuration without data possibly useless to the user.
-#'   
-#' @template arg_configurations
-#' 
-#' @return The same matrix without the "metadata".
-#'    
-#' @seealso 
-#'   [configurations.print.command()] to print the configurations as command lines.
-#'   [configurations.print()] to print the configurations as a data frame.
-#' 
-#' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
-#' @export
-## Keep only parameters values
-removeConfigurationsMetaData <- function(configurations)
-{
-  # Meta-data colnames begin with "."
-  configurations[, grep("^\\.", colnames(configurations), invert = TRUE),
-                     drop = FALSE]
-}
-
-#' Print configurations as a data frame
-#' 
-#' @template arg_configurations
-#' @param metadata A Boolean specifying whether to print the metadata or
-#' not. The metadata are data for the configurations (additionally to the
-#' value of each parameter) used by \pkg{irace}.
-#' 
-#' @return None.
-#'
-#' @seealso
-#'  [configurations.print.command()] to print the configurations as command-line strings.
-#' 
-#' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
-#' @export
-configurations.print <- function(configurations, metadata = FALSE)
-{
-  rownames(configurations) <- configurations$.ID.
-  if (!metadata) {
-    configurations <- removeConfigurationsMetaData(configurations)
-  } 
-  print(as.data.frame(configurations, stringsAsFactors = FALSE), digits = 15)
-}
-
-#' Print configurations as command-line strings.
-#' 
-#' Prints configurations after converting them into a representation for the
-#' command-line.
-#' 
-#' @template arg_configurations
-#' @template arg_parameters
-#' 
-#' @return None.
-#'
-#' @seealso
-#'  [configurations.print()] to print the configurations as a data frame.
-#' 
-#' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
-#' @export
-configurations.print.command <- function(configurations, parameters)
-{
-  if (nrow(configurations) <= 0) return(invisible())
-  ids <- as.numeric(configurations$.ID.)
-  configurations <- removeConfigurationsMetaData(configurations)
-  # Re-sort the columns
-  configurations <- configurations[, parameters$names, drop = FALSE]
-  # A better way to do this? We cannot use apply() because that coerces
-  # to a character matrix thus messing up numerical values.
-  len <- nchar(max(ids))
-  for (i in seq_len (nrow(configurations))) {
-    cat(sprintf("%-*d %s\n", len, ids[i],
-                buildCommandLine(configurations[i, , drop=FALSE], parameters$switches)))
-  }
-}
-
 
 # FIXME: This may not work when working interactively. For example,
 # one cannot change the number of slaves.  A more robust function
@@ -505,7 +291,7 @@ configurations.print.command <- function(configurations, parameters)
 mpiInit <- function(nslaves, debugLevel = 0)
 {
   # Load the Rmpi package if it is not already loaded.
-  if (! ("Rmpi" %in% loadedNamespaces())) {
+  if ("Rmpi" %not_in% loadedNamespaces()) {
     if (! suppressPackageStartupMessages
         (requireNamespace("Rmpi", quietly = TRUE)))
       irace.error("The 'Rmpi' package is required for using MPI")
@@ -540,6 +326,7 @@ mpiInit <- function(nslaves, debugLevel = 0)
 }
 
 ## FIXME: Move this to the manual page.
+## FIXME: Export this function.
 # Computes:
 # * Kendall's W (also known as Kendall's coefficient of concordance)
 #   If 1, all configurations have ranked in the same order in all instances.
@@ -550,7 +337,7 @@ mpiInit <- function(nslaves, debugLevel = 0)
 #   ranks of all pairs of raters. If there are no repeated data values, a
 #   perfect Spearman correlation of +1 or −1 occurs when each of the variables
 #   is a perfect monotone function of the other.
-
+#
 # data: matrix with the data, instances in rows (judges), configurations in
 # columns.
 concordance <- function(data)
@@ -559,24 +346,23 @@ concordance <- function(data)
 
   n <- nrow(data) #judges
   k <- ncol(data) #objects
-  if (n <= 1 || k <= 1)
+  if (n <= 1L || k <= 1L)
     return(list(kendall.w = NA, spearman.rho = NA))
 
   # Get rankings by rows (per instance)
-  r <- t(apply(data, 1L, rank))
-  R <- colSums(r)
-  TIES <- tapply(r, row(r), table)
+  r <- rowRanks(data, ties.method = "average")
+  R <- colSums2(r)
+  TIES <- c(table(r,row(r)))
   # If everything is tied, then W=1, perfect homogeneity.
-  if (all(unlist(TIES) == ncol(data))) {
+  if (all(TIES == k)) {
     W <- 1
   } else {
     # FIXME: This formula seems slightly different from the one in
     # friedman.test. Why?
-    T <- sum(unlist(lapply(TIES, function (u) {u^3 - u})))
+    TIES <- sum(TIES^3 - TIES)
     W <- ((12 * sum((R - n * (k + 1) / 2)^2)) /
-          ((n^2 * (k^3 - k)) - (n * T)))
+            ((n^2 * (k^3 - k)) - (n * TIES)))
   }
-  
   # Spearman's rho
   rho <- (n * W - 1) / (n - 1)
 
@@ -584,7 +370,7 @@ concordance <- function(data)
   #STATISTIC <- n * (k - 1) * W
   #PARAMETER <- k - 1
   #pvalue <- pchisq(PARAMETER, df = PARAMETER, lower.tail = FALSE)
-  return(list(kendall.w = W, spearman.rho = rho))
+  list(kendall.w = W, spearman.rho = rho)
 } 
 
 ## FIXME: Move this to the manual page.
@@ -594,12 +380,13 @@ concordance <- function(data)
 #             in columns.
 # Returns: variance value [0,1], where 0 is a homogeneous set of instances and 
 #          1 is a heterogeneous set.
+# FIXME: How to handle missing values?
 dataVariance <- function(data)
 {
   irace.assert (is.matrix(data) && is.numeric(data))
   # LESLIE: should we rank data??
-  # MANUEL: Why?
-  if (nrow(data) <= 1 || ncol(data) <= 1) return(NA)
+  # MANUEL: We should add the option.
+  if (nrow(data) <= 1L || ncol(data) <= 1L) return(NA)
   
   # Normalize
   #datamin <- apply(data,1,min,na.rm=TRUE)
@@ -607,22 +394,19 @@ dataVariance <- function(data)
   #normdata <- (data - datamin) / (datamax-datamin) 
   
   #standardize
-  meandata <- rowMeans(data)
-  stddata  <- apply(data, 1L, sd)
+  meandata <- rowMeans2(data)
+  stddata  <- rowSds(data)
   # If stddata == 0, then data is constant and it doesn't matter as long as it
   # is non-zero.
   stddata[stddata == 0] <- 1
   zscoredata <- (data - meandata) / stddata 
   
-  # We could log-tranform if needed
-
+  # FIXME: We could log-tranform if needed
   # Variance of configurations
-  qvar <- mean(apply(zscoredata, 2L, var))
- 
-  return(qvar) 
+  mean(colVars(zscoredata))
 }
 
-runcommand <- function(command, args, id, debugLevel)
+runcommand <- function(command, args, id, debugLevel, timeout = 0)
 {
   if (debugLevel >= 2L) {
     irace.note (command, " ", args, "\n")
@@ -630,7 +414,7 @@ runcommand <- function(command, args, id, debugLevel)
   }
   err <- NULL
   output <- withCallingHandlers(
-    tryCatch(system2(command, args, stdout = TRUE, stderr = TRUE),
+    tryCatch(system2(command, args, stdout = TRUE, stderr = TRUE, timeout = timeout),
              error = function(e) {
                err <<- c(err, paste(conditionMessage(e), collapse="\n"))
                NULL
@@ -666,12 +450,12 @@ runcommand <- function(command, args, id, debugLevel)
 resample <- function(x, ...) x[sample.int(length(x), ...)]
 
 # Rounds up the number x to the specified number of decimal places 'digits'.
-ceiling.digits <- function(x, digits)
+ceiling_digits <- function(x, digits)
 {
    multiple <- 10^-digits
    div <- x / multiple
    int_div <- trunc(div)
-   return (int_div * multiple + ceiling(div - int_div) * multiple)
+   int_div * multiple + ceiling(div - int_div) * multiple
 }
 
 # ceil.decimal <- function(x, d) { 
@@ -688,19 +472,24 @@ ceiling.digits <- function(x, digits)
 # }
 
 is.file.extension <- function(filename, ext)
-  substring(filename, nchar(filename) + 1 - nchar(ext)) == ext
+  substring(filename, nchar(filename) + 1L - nchar(ext)) == ext
 
-# Same as !(x %in% table)
-"%!in%" <- function(x, table) match(x, table, nomatch = 0L) == 0L
+is.sub.path <- function(x, dir, n = nchar(dir)) substr(x, 1L, n) == dir
+
+# Same as !(x %in% table). Package data.table has %notin%.
+"%not_in%" <- function(x, table) is.na(match(x, table))
 
 irace_save_logfile <- function(iraceResults, scenario)
 {
+  # FIXME: Raul Santa Maria proposed to only save if sufficient times (>= 1
+  # minute) has passed since the last save. We would need an option to force
+  # saving the last one.
   if (is.null.or.empty(scenario$logFile)) return(invisible())
-  cwd <- setwd(scenario$execDir)
-  # FIXME: Use saveRDS
-  # FIXME: Bump to version=3 when we bump the minimum R version to >=3.6
-  save(iraceResults, file = scenario$logFile, version = 2)
-  setwd(cwd)
+  # Files produced by `saveRDS` (or `serialize` to a file connection) are not
+  # suitable as an interchange format between machines, for example to download
+  # from a website. The files produced by `save` have a header identifying the
+  # file type and so are better protected against erroneous use.
+  save(iraceResults, file = scenario$logFile, version = 3L)
 }
 
 valid_iracelog <- function(x)
@@ -715,22 +504,91 @@ valid_iracelog <- function(x)
 #' @param name Optional argument that allows overriding the default name of the object in the file.
 #' 
 #' @return (`list()`)
+#' @examples
+#' irace_results <- read_logfile(system.file("exdata/irace-acotsp.Rdata", package="irace",
+#'                                           mustWork=TRUE))
+#' str(irace_results)
 #' @concept analysis
 #' @export
 read_logfile <- function(filename, name = "iraceResults")
 {
+  if (is_na_or_empty(filename))
+    irace.error("read_logfile: 'filename' is NULL or NA.")
   # If filename is already the iraceResults object, just return it.
   if (valid_iracelog(filename)) return(filename)
 
-  if (file.access(filename, mode=4) != 0)
-    stop("read_logfile: Cannot read file '", filename, "'")
+  if (file.access(filename, mode = 4) != 0)
+    irace.error("read_logfile: Cannot read file '", filename, "'.")
   
   load(filename)
   iraceResults <- get0(name, inherits=FALSE)
   if (!valid_iracelog(iraceResults))
-    stop("The file '", filename, "' does not contain the '", name, "' object.")
+    irace.error("read_logfile: The file '", filename, "' does not contain the '", name, "' object.")
   
   iraceResults
 }
 
+get_log_clean_version <- function(iraceResults)
+{
+  log_version <- iraceResults$irace_version
+  if (is.null(log_version))
+    log_version <- iraceResults$irace.version
+  if (is.null(log_version))
+    return(package_version("0"))
+  if (length(gregexpr("\\.", log_version)[[1L]]) > 3L
+    || grepl("[a-z]", log_version))
+    log_version <- sub("\\.[^.]*$", "", log_version)
+  package_version(log_version)
+}
+
+#' Check if the results object generated by irace has data about the testing phase.
+#'
+#' @param iraceResults `list()`|`character(1)`\cr Object created by \pkg{irace} and typically saved in the log file `irace.Rdata`. If a character string is given, then it is interpreted as the path to the log file from which the `iraceResults` object will be loaded.
+#'
+#' @return `logical(1)`
+#' @examples
+#' irace_results <- read_logfile(system.file("exdata/irace-acotsp.Rdata", package="irace",
+#'                                           mustWork=TRUE))
+#' print(has_testing_data(irace_results))
+#' @export
+has_testing_data <- function(iraceResults)
+{
+  ins <- iraceResults$scenario$testInstances
+  exp <- iraceResults$testing$experiments
+  !(length(ins) == 0L ||
+    (length(ins) == 1L && (is.na(ins) || nchar(ins) == 0L)) ||
+    length(exp) == 0L || !(is.matrix(exp) || is.data.frame(exp)))
+}
+
 do_nothing <- function(...) invisible()
+
+.irace_tolerance <- sqrt(.Machine$double.eps)
+
+seq_nrow <- function(x) seq_len(nrow(x))
+
+clamp <- function(x, lower, upper) pmax.int(lower, pmin.int(x, upper))
+
+truncate_rows <- function(x, n)
+{
+  nx <- nrow(x)
+  if (nx <= n) return(x)
+  x[-seq.int(n + 1L, nx), ]
+}
+
+
+vlast <- function(x)
+{
+  stopifnot(is.null(dim(x)))
+  lx <- length(x)
+  if (!lx)
+    x
+  else
+    x[[lx]]
+}
+
+# 2147483647 is the maximum value for a 32-bit signed integer.
+# We use replace = TRUE, because replace = FALSE allocates memory for each possible number.
+# Do not use .Machine$integer.max unless it is smaller, to minimize differences
+# between machines.
+runif_integer <- function(size)
+  sample.int(min(2147483647L, .Machine$integer.max), size = size, replace = TRUE)

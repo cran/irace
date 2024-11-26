@@ -51,7 +51,7 @@ htcondor.job.finished <- function(jobid)
 ## Launch a job with qsub and return its jobID. This function does not
 ## call qsub directly, but instead targetRunner should be a script that
 ## invokes qsub and returns a jobID.
-target.runner.qsub <- function(experiment, scenario)
+target_runner_qsub <- function(experiment, scenario)
 {
   debugLevel   <- scenario$debugLevel
   res <- run_target_runner(experiment, scenario)
@@ -75,11 +75,10 @@ target.runner.qsub <- function(experiment, scenario)
       jobID <- NULL
     }
   }
-  list(jobID = jobID, error = err.msg, outputRaw = outputRaw,
-       call = paste(cmd, args))
+  list(jobID = jobID, error = err.msg, outputRaw = outputRaw, call = paste(cmd, args))
 }
 
-cluster.lapply <- function(X, scenario, poll.time = 2)
+cluster_lapply <- function(X, scenario, poll.time = 2)
 {
   debugLevel <- scenario$debugLevel
 
@@ -96,7 +95,7 @@ cluster.lapply <- function(X, scenario, poll.time = 2)
   # limits.
   ## FIXME: It would be better to submit up to the limit, then one by one as jobs finish.
   chunksize <- scenario$parallel
-  if (chunksize < 0) {
+  if (chunksize < 0L) {
     chunksize <- length(X)
   }
   chunks <- split(X, ceiling(seq_along(X) / chunksize))
@@ -104,11 +103,11 @@ cluster.lapply <- function(X, scenario, poll.time = 2)
     if (debugLevel >= 1) {
       irace.note ("Sending ", length(chunk), " / ", length(X), " jobs\n")
     }
-    output <- lapply(chunk, exec.target.runner, scenario = scenario, target.runner = target.runner.qsub)
+    output <- lapply(chunk, exec_target_runner, scenario = scenario, target_runner = target_runner_qsub)
     jobIDs <- sapply(output, "[[", "jobID")
   
     ## Wait for cluster jobs to finish.
-    if (length(jobIDs) > 0 && debugLevel >= 1) {
+    if (length(jobIDs) > 0L && debugLevel >= 1L) {
       irace.note("Waiting for jobs ('.' == ", poll.time, " s) ")
     }
     for (jobID in jobIDs) {
