@@ -71,8 +71,7 @@ target_error <- function(err_msg, output, scenario, target_runner_call,
   }
   if (is.null(output$outputRaw)) {
     # Message for a function call.
-    # FIXME: Ideally, we should print the list as R would print it.
-    output$outputRaw <- toString(output)
+    output$outputRaw <- deparse1(output)
     advice_txt <- paste0(
       "This is not a bug in irace, but means that something failed in ",
       "a call to the targetRunner or targetEvaluator functions provided by the user.",
@@ -112,7 +111,7 @@ check_output_target_evaluator <- function (output, scenario, target_runner_call 
       }
     }
     if (is.null(output$time)) {
-      output$time <- NA
+      output$time <- NA_real_
     } else {
       if (is_na_nowarn(output$time)) {
         err_msg <- "The time returned by targetEvaluator is not numeric!"
@@ -155,8 +154,6 @@ check_output_target_evaluator <- function (output, scenario, target_runner_call 
 #'      \item{`bound`}{(only when `capping` is enabled) Time bound for the execution;}
 #'      \item{`configuration`}{1-row data frame with a column per parameter
 #'        name;}
-#'      \item{`switches`}{Vector of parameter switches (labels) in the order
-#'        of parameters used in `configuration`.}
 #'    }
 #' @param num_configurations Number of  configurations alive in the race.
 #' @param all_conf_id Vector of configuration IDs of the alive configurations.
@@ -250,7 +247,7 @@ check_output_target_runner <- function(output, scenario, bound = NULL)
     }
 
     if (is.null(output$time)) {
-      output$time <- NA
+      output$time <- NA_real_
     } else {
       if (is.na(output$time)) {
         err_msg <- paste0("The time returned by targetRunner is not numeric!")
@@ -402,9 +399,10 @@ run_target_runner <- function(experiment, scenario)
   seed             <- experiment$seed
   configuration    <- experiment$configuration
   instance         <- experiment$instance
-  switches         <- experiment$switches
   bound            <- experiment$bound
 
+  switches <- scenario$parameters$switches[names(configuration)]
+  
   targetRunner <- scenario[["targetRunner"]]
   debugLevel <- scenario$debugLevel
   
@@ -444,8 +442,6 @@ run_target_runner <- function(experiment, scenario)
 #'      \item{`bound`}{(only when `capping` is enabled) Time bound for the execution;}
 #'      \item{`configuration`}{1-row data frame with a column per parameter
 #'        name;}
-#'      \item{`switches`}{Vector of parameter switches (labels) in the order
-#'        of parameters used in `configuration`.}
 #'    }
 #' @inheritParams defaultScenario
 #' 
@@ -606,7 +602,7 @@ execute_evaluator <- function(target_evaluator, experiments, scenario, target_ou
 {
   ## FIXME: We do not need the configurations_id argument:
   irace.assert(isTRUE(all.equal(configurations_id,
-    sapply(experiments, getElement, "id_configuration"))))
+    unique(sapply(experiments, getElement, "id_configuration")))))
   nconfs <- length(configurations_id)
   # Evaluate configurations sequentially.
   for (k in seq_along(experiments)) {

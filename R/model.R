@@ -35,8 +35,8 @@ initialiseModel <- function (parameters, configurations)
     type <- param[["type"]]
     if (type == "c") {
       nbValues <- length(param[["domain"]])
-      value <- rep(1. / nbValues, nbValues)
-      param <- rep(list(value), nbConfigurations)
+      value <- rep_len(1. / nbValues, nbValues)
+      param <- rep_len(list(value), nbConfigurations)
     } else {
       if (type == "r" || type == "i") {
         sd <- init_sd_numeric(param)
@@ -46,7 +46,7 @@ initialiseModel <- function (parameters, configurations)
         sd <- (length(domain) - 1L) * 0.5
         values <- match(configurations[[currentParameter]], domain)
       } else {
-        irace.internal.error("Unknown parameter type '", type, "'")
+        irace_internal_error("Unknown parameter type '", type, "'")
       }
       # Assign current parameter value to model.
       param <- mapply(c, sd, values, SIMPLIFY=FALSE, USE.NAMES=FALSE)

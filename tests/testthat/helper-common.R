@@ -1,5 +1,5 @@
 # This file is loaded automatically by testthat.
-generate.set.seed <- function()
+generate_set_seed <- function()
 {
   seed <- sample(2^30, 1)
   cat("Seed: ", seed, "\n")
@@ -26,7 +26,6 @@ system_os_is_windows <- function() .Platform$OS.type == "windows"
 
 ## Functions ##########################################################
 f_ackley <- function (x,y, nsize = 0.01) {
-  
   # Transformation of parameter values 
   # from [0,1] to [vmin,vmax]
   vmin <- -5
@@ -49,7 +48,7 @@ f_ackley <- function (x,y, nsize = 0.01) {
 }
 
 f_goldestein_price <- function (x,y, nsize = 0.01) {
-  # Trasfomation of parameter values 
+  # Transformation of parameter values 
   # from [0,1] to [vmin,vmax]
   vmin <- -2
   vmax <- 2
@@ -126,4 +125,33 @@ target_runner_capping_xy <- function(experiment, scenario)
   
   # Simulate execution bound
   list(cost = value, time=min(value + 0.1, bound), call = toString(experiment))
+}
+
+irace_capping_xy <- function(...)
+{
+  args <- list(...)
+  parameters_table <- '
+   x "" r (0, 1.00)
+   y "" r (0, 1.00)
+   reject "" c (0,1)'
+  
+  parameters <- readParameters(text = parameters_table)
+  logFile <- withr::local_tempfile(fileext=".Rdata")
+  scenario <- list(instances = c("ackley", "goldestein", "matyas", "himmelblau"),
+                   targetRunner = target_runner_capping_xy,
+                   capping = TRUE,
+                   boundMax = 80,
+                   testType = "t-test",
+                   logFile = logFile,
+                   parallel = if (system_os_is_windows()) 1L else test_irace_detectCores(),
+                   parameters = parameters)
+  scenario <- modifyList(scenario, args)
+  scenario <- checkScenario (scenario)
+
+  irace:::checkTargetFiles(scenario = scenario)
+  
+  confs <- irace(scenario = scenario)
+  best_conf <- getFinalElites(scenario$logFile, n = 1L, drop.metadata = TRUE)
+  expect_identical(removeConfigurationsMetaData(confs[1L, , drop = FALSE]),
+                   best_conf)
 }

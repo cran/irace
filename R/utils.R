@@ -22,7 +22,7 @@ irace.error <- function(...)
 ## R> debugger(iracedump)
 ##
 ## See help(dump.frames) for more details.
-irace.dump.frames <- function()
+irace_dump_frames <- function()
 {
   execDir <- getOption(".irace.execdir")
   if (!is.null(execDir)) cwd <- setwd(execDir)
@@ -34,15 +34,16 @@ irace.dump.frames <- function()
 }
 
 # Print an internal fatal error message that signals a bug in irace.
-irace.internal.error <- function(...)
+irace_internal_error <- function(...)
 {
   .irace.bug.report <-
     paste0(.irace_msg_prefix, "An unexpected condition occurred. ",
            "Please report this bug to the authors of the irace package <https://github.com/MLopez-Ibanez/irace/issues>")
 
-  op <- options(warning.length = 8170)
-  if (!base::interactive()) options(error = irace.dump.frames)
-  on.exit(options(op))
+  op <- list(warning.length = 8170L)
+  if (!base::interactive())
+    op <- c(op, list(error = irace_dump_frames))
+  withr::local_options(op)
   # 6 to not show anything below irace.assert()
   bt <- capture.output(traceback(5))
   warnings()
@@ -63,7 +64,7 @@ irace.assert <- function(exp, eval_after = NULL)
     msg_after <- eval.parent(capture.output(eval_after))
     msg <- paste0(msg, "\n", paste0(msg_after, collapse="\n"))
   }
-  irace.internal.error(msg)
+  irace_internal_error(msg)
   invisible()
 }
 
@@ -225,7 +226,7 @@ test.type.order.str <- function(test.type)
          t.none =, # Fall-throught
          t.holm =, # Fall-throught
          t.bonferroni = "mean value",
-         irace.internal.error ("test.type.order.str() Invalid value '",
+         irace_internal_error ("test.type.order.str() Invalid value '",
                                test.type, "' of test.type"))
 
 
@@ -347,7 +348,7 @@ concordance <- function(data)
   n <- nrow(data) #judges
   k <- ncol(data) #objects
   if (n <= 1L || k <= 1L)
-    return(list(kendall.w = NA, spearman.rho = NA))
+    return(list(kendall.w = NA_real_, spearman.rho = NA_real_))
 
   # Get rankings by rows (per instance)
   r <- rowRanks(data, ties.method = "average")
@@ -386,7 +387,7 @@ dataVariance <- function(data)
   irace.assert (is.matrix(data) && is.numeric(data))
   # LESLIE: should we rank data??
   # MANUEL: We should add the option.
-  if (nrow(data) <= 1L || ncol(data) <= 1L) return(NA)
+  if (nrow(data) <= 1L || ncol(data) <= 1L) return(NA_real_)
   
   # Normalize
   #datamin <- apply(data,1,min,na.rm=TRUE)
@@ -524,7 +525,10 @@ read_logfile <- function(filename, name = "iraceResults")
   iraceResults <- get0(name, inherits=FALSE)
   if (!valid_iracelog(iraceResults))
     irace.error("read_logfile: The file '", filename, "' does not contain the '", name, "' object.")
-  
+
+  # data.table recommends doing this after loading a data.table from a file.
+  setDT(iraceResults$state$experiment_log)
+  setDT(iraceResults$state$instances_log)
   iraceResults
 }
 

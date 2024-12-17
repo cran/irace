@@ -598,9 +598,9 @@ target algorithm; the default value is the current directory.
 \item[\parameter{maxExperiments}] (\code{--max-experiments}): the maximum number of executions
 of the target algorithm that \irace will perform.
 \item[\parameter{maxTime}] (\code{--max-time}): maximum total execution time in seconds for the executions of \code{targetRunner}. In this case, \code{targetRunner} must return two values: cost and time. Note that you must provide either \parameter{maxTime} or \parameter{maxExperiments}.
-\item[\parameter{trainInstancesDir}] (\code{--train-instances-dir}): set if to \path{./Instances} if you put the training instances in that folder as instructed above.
+\item[\parameter{trainInstancesDir}] (\code{--train-instances-dir}): set to \path{./Instances} if you put the training instances in that folder as instructed above.
   \end{description}
-For setting the tuning budget see \autoref{sec:budget}. For more information on \irace options and their default values, see \autoref{sec:irace options}.
+For setting the tuning budget, see \autoref{sec:budget}. For more information on \irace options and their default values, see \autoref{sec:irace options}.
 
 \item Modify the \code{target-runner} script to run your algorithm. This script
   must execute your algorithm with the parameters and instance specified by
@@ -710,7 +710,7 @@ cd ./tuning/
 # with --scenario.
 $IRACE_HOME/bin/irace
 \end{lstlisting}
-For this example we assume that the needed scenario files have been set
+For this example, we assume that the needed scenario files have been set
 properly in the \code{scenario.txt} file using the options described in
 \autoref{sec:irace options}. Most \irace options can be specified
 in the command line or directly in the \code{scenario.txt} file.
@@ -795,7 +795,7 @@ $IRACE_HOME/bin/irace
 \end{lstlisting}
 %@
 
-\item Or you can also execute \irace from the \aR console using:
+Or you can also execute \irace from the \aR console using:
 
 <<runexample2,prompt=FALSE,eval=FALSE>>=
 library("irace")
@@ -1204,8 +1204,6 @@ list. The structure of the \code{experiment} list is as follows:
    \code{instance} & string giving the instance to be used for this evaluation;\\
    \code{bound} &  optional execution time bound;\\
    \code{configuration}    & 1-row data frame with a column per parameter name;\\
-   \code{switches}         & vector of parameter switches (labels) in the order of parameters used in \code{configuration}.\\
-
   \end{tabularx}
 \end{center}
 
@@ -1214,6 +1212,9 @@ The following is an example of an experiment list for the \ACOTSP scenario:
 <<experimentlist,eval=TRUE,size='normalsize', prompt=TRUE,  comment="">>=
 print(experiment)
 @
+
+If you need the \code{switches} of each parameter (or any other information
+about the parameters), you can obtain it from \code{scenario$parameters}.
 
 You can find an example that calls MATLAB from \aR using this approach here: \url{https://github.com/MLopez-Ibanez/irace/blob/master/inst/examples/matlab/scenario.txt}.
 
@@ -1614,7 +1615,7 @@ See the examples in
    @
    %
    However, the user is free to set up the calls in any way, perhaps
-   implementing its own replacement for \code{target_runner} and/or
+   implementing their own replacement for \code{target_runner} and/or
    \code{exec_target_runner}. The user may load and call other \aR packages, such as \pkg{batchtools} (\url{https://mllg.github.io/batchtools/}).
 
    The only requirement is that the \parameter{targetRunnerParallel} function
@@ -2777,7 +2778,7 @@ percentage of the \irace configuration budget. This budget is not considered in
 the total configuration budget that is, these evaluations are extra
 computation.
 
-The execution of the postselection race add an element (\code{psrace.log}) to
+The execution of the postselection race adds an element (\code{psrace_log}) to
 the \code{iraceResults} list saved in the \irace log file. The postselection log
 consists of a list with the following elements:
 \begin{description}

@@ -1,5 +1,36 @@
 **If you are viewing this file on CRAN, please check [latest news on GitHub](https://github.com/MLopez-Ibanez/irace/blob/master/NEWS.md) where the formatting is also better.**
 
+# irace 4.1
+
+## Major breaking changes
+
+ * Recovery (`--recover-file`) is currently broken (issue #76).
+  
+ * The `experiment` list passed to the `targetRunner` R function (see
+  `target_runner_default()`) does not contain an element `switches`.
+  This element can be obtained from `scenario$parameters$switches`.
+  
+ 
+## New features and improvements
+
+ * Conditions that are always true because they depend on fixed parameters are
+   replaced by a `TRUE` value to speed up their evaluation. This speed-up is only
+   measurable with very large and complicated parameter space.
+ 
+ * The options `src` and `target` of `ablation()` (or `--src` and `--target` of
+   the command-line `ablation` tool) now accept a character string that points
+   to a file containing a configuration that will be read with
+   `readConfigurationsFile()`.  This allows performing ablation between
+   configurations not explored before.
+   
+## Fixes
+
+ * Fixed some typos in the user guide. (@sbomsdorf)
+ 
+ * Fixed several bugs in post-selection including `Error in if (any(left >= 0L)) { : missing value where TRUE/FALSE needed`.
+ 
+ * Fix bug in `ablation()` not calling `stop_parallel()`.
+ 
 # irace 4.0
 
 ## Major breaking changes
@@ -39,7 +70,7 @@
    The correct location can be verified by looking at the line `"installed at:"`
    printed in the output.
    
- * Adaptive capping is now enabled by default if `maxTime > 0` and `maxBound > 0`.
+ * Adaptive capping is now enabled by default if `maxTime > 0` and `boundMax > 0`.
    It can be disabled with `--capping 0` in the command-line options or `capping=0` in the scenario options. See [Pérez-Cáceres et al. (2017)](https://iridia-ulb.github.io/references/#PerLopHooStu2017:lion) for details.
                                      (Leslie Pérez Cáceres, Manuel López-Ibáñez)
 

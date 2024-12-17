@@ -7,17 +7,18 @@ cap_irace <- function(...)
    y "" r (0, 1.00)'
   
   parameters <- readParameters(text = parameters_table)
+  logFile <- withr::local_tempfile(fileext=".Rdata")
 
   scenario <- list(instances = c("ackley", "goldestein", "matyas", "himmelblau"),
                    targetRunner = target_runner_capping_xy,
                    capping = TRUE,
                    blockSize = 4,
                    boundMax = 80,
+                   logFile = logFile,
                    testType = "t-test",
                    parameters = parameters)
   scenario <- modifyList(scenario, args)
   scenario <- checkScenario (scenario)
-
   confs <- irace(scenario = scenario)
   best.conf <- getFinalElites(scenario$logFile, n = 1L, drop.metadata = TRUE)
   expect_identical(removeConfigurationsMetaData(confs[1L, , drop = FALSE]),
@@ -67,20 +68,20 @@ test_that("blockSize error", {
 })
 
 test_that("blockSize cap_irace maxExperiments = 1000", {
-  generate.set.seed()
+  generate_set_seed()
   expect_warning(check_blocksize(cap_irace(maxExperiments = 1000, debugLevel = 3)),
                  "Assuming 'mu = firstTest * blockSize' because 'mu' cannot be smaller",
                  fixed = TRUE)
 })
 
 test_that("blockSize maxTime=1000", {
-  generate.set.seed()
+  generate_set_seed()
   check_blocksize(time_irace(maxTime = 1000))
 })
 
 test_that("blockSize maxTime=1000 large newInstances", {
   skip_on_cran()
-  generate.set.seed()
+  generate_set_seed()
   check_blocksize(time_irace(maxTime = 1000, instances = letters[1:9],
                              elitistNewInstances = 6, elitistLimit = 2))
 })

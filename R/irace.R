@@ -49,7 +49,7 @@ recoverFromFile <- function(filename)
 # FIXME: This function is too slow and it shows up in profiles.
 numeric.configurations.equal <- function(x, configurations, parameters, threshold, param.names)
 {
-  d <- rep(0.0, nrow(configurations))
+  d <- numeric(nrow(configurations))
   isSimilar <- matrix(TRUE, nrow = nrow(configurations), ncol = length(param.names))
   selected <- seq_nrow(configurations)
   for (i in seq_along(param.names)) {
@@ -348,10 +348,10 @@ generateInstances <- function(race_state, scenario, n, update = FALSE)
     blockSize <- scenario$blockSize
     n_blocks <- length(instances) / blockSize
     # Sample instances index in groups (ntimes)
-    selected_blocks <- unlist(lapply(rep(n_blocks, ntimes), sample.int, replace = FALSE))
+    selected_blocks <- unlist(lapply(rep.int(n_blocks, ntimes), sample.int, replace = FALSE))
     sindex <- c(outer(seq_len(blockSize), (selected_blocks - 1L) * blockSize, "+"))
   } else {
-    sindex <- rep(seq_along(instances), ntimes)
+    sindex <- rep.int(seq_along(instances), ntimes)
   }
   # Sample seeds.
   race_state$instances_log <- rbind(race_state$instances_log,
@@ -362,11 +362,11 @@ generateInstances <- function(race_state, scenario, n, update = FALSE)
 do_experiments <- function(race_state, configurations, ninstances, scenario, iteration)
 {
   instances <- seq_len(ninstances)
-  # FIXME: modify race_wrapper to take instances as an argument. 
-  output <- lapply(instances, race_wrapper, race_state = race_state,
-    configurations = configurations, 
+  output <- race_wrapper(race_state = race_state,
+    configurations = configurations,
+    instance_idx = instances, 
     bounds = rep(scenario$boundMax, nrow(configurations)),
-    which_alive = seq_nrow(configurations), which_exe = seq_nrow(configurations),
+    which_exps = seq_nrow(configurations),
     scenario = scenario)
   
   Results <- race_state$update_experiment_log(output, instances = instances,
@@ -612,16 +612,16 @@ irace <- function(scenario)
 irace_common <- function(scenario, simple, output.width = 9999L)
 {
   if (!simple) {
-    op <- options(width = output.width) # Do not wrap the output.
-    on.exit(options(op), add = TRUE)
+    withr::local_options(width = output.width) # Do not wrap the output.
   }
   scenario <- checkScenario(scenario)
   debugLevel <- scenario$debugLevel
 
-  if (debugLevel >= 1) {
-    op.debug <- options(warning.length = 8170)
-    if (!base::interactive()) options(error = irace.dump.frames)
-    on.exit(options(op.debug), add = TRUE)
+  if (debugLevel >= 1L) {
+    op <- list(warning.length = 8170L)
+    if (!base::interactive())
+      op <- c(op, list(error = irace_dump_frames))
+    withr::local_options(op)
     printScenario (scenario)
   }
   
@@ -669,8 +669,8 @@ irace_run <- function(scenario)
     iraceResults$state <- race_state
     irace_save_logfile(iraceResults, scenario)
     # FIXME: Handle scenario$maxTime > 0
-    if (scenario$postselection && scenario$maxTime == 0 && floor(remainingBudget / scenario$blockSize) > 1L)
-      psRace(iraceResults, max_experiments = remainingBudget, iteration_elites=TRUE)
+    if (scenario$postselection && scenario$maxTime == 0 && floor(remainingBudget / max(scenario$blockSize, scenario$eachTest)) > 1L)
+      psRace(iraceResults, max_experiments = remainingBudget, iteration_elites = TRUE)
     else
       race_state$elite_configurations
   }
@@ -929,9 +929,8 @@ irace_run <- function(scenario)
       if (scenario$nbIterations == 0L) {
         nbIterations <- indexIteration
       } else {
-        if (debugLevel >= 1L) {
+        if (debugLevel >= 1L)
           catInfo("Limit of iterations reached", verbose = FALSE)
-        }
         return(irace_finish(iraceResults, scenario, reason = "Limit of iterations reached"))
       }
     }
