@@ -10,7 +10,7 @@ check_domain_dependencies <- function (params, depends, types)
     vars <- depends[[p]]
     flag <- vars %in% allnames
     if (!all(flag)) {
-      irace.error ("Domain (", paste0(domain, collapse=", "),
+      irace_error ("Domain (", paste0(domain, collapse=", "),
                    ") of parameter '", p, "' is not valid: '",
                    paste0(vars[!flag], collapse=", "),
                    "' cannot be found in the scenario parameters: ",
@@ -18,7 +18,7 @@ check_domain_dependencies <- function (params, depends, types)
     }
     flag <- types[vars] %in% c("i", "r")
     if (!all(flag)) {
-      irace.error ("Domain of parameter '", p, "' depends on non-numerical", 
+      irace_error ("Domain of parameter '", p, "' depends on non-numerical",
         " parameters: ", paste0(vars[!flag], collapse=", "), " .")
     }
 
@@ -26,7 +26,7 @@ check_domain_dependencies <- function (params, depends, types)
     fx <- setdiff(all.names(domain, unique=TRUE), all.vars(domain, unique=TRUE))
     flag <- fx %in% allowed_fx
     if (!all(flag)) {
-      irace.error ("Domain of parameter '", p, "' uses function(s) ", 
+      irace_error ("Domain of parameter '", p, "' uses function(s) ",
                    "not yet supported by irace: ",
                    paste0(fx[!flag], collapse=", "), " .")
     }
@@ -40,7 +40,7 @@ check_forbidden_params <- function(x, pnames, filename = NULL)
   if (any(unique(unlist(lapply(x, all.names))) %in% c("&&", "||"))) {
     for (ex in x) {
       if (any(all.names(ex) %in% c("&&", "||")))
-        irace.error("Please use '&' and '|' instead of '&&' and '|' in: ", deparse(ex), " .\n")
+        irace_error("Please use '&' and '|' instead of '&&' and '|' in: ", deparse(ex), " .\n")
     }
   }
   if (all(all.vars(x) %in% pnames)) return(invisible())
@@ -49,11 +49,11 @@ check_forbidden_params <- function(x, pnames, filename = NULL)
     if (length(v)) {
       v <- paste0(v, collapse=", ")
       if (is.null(filename)) {
-        irace.error("Forbidden expression '", deparse(ex), "' contains unknown parameter(s): ", v)
+        irace_error("Forbidden expression '", deparse(ex), "' contains unknown parameter(s): ", v)
       } else if (is.na(filename)) {
-        irace.error("Expression '", deparse(ex), "' after [forbidden] contains unknown parameter(s): ", v)
+        irace_error("Expression '", deparse(ex), "' after [forbidden] contains unknown parameter(s): ", v)
       } else {
-        irace.error("Expression '", deparse(ex), "' after [forbidden] in '", filename, "' contains unknown parameter(s): ", v)
+        irace_error("Expression '", deparse(ex), "' after [forbidden] in '", filename, "' contains unknown parameter(s): ", v)
       }
     }
   }
@@ -81,17 +81,17 @@ param_level <- function(paramName, varsTree, rootParam = paramName)
   for (child in vars) {
     # The following line detects cycles
     if (child == rootParam)
-      irace.error("Cycle detected in subordinate parameters! ",
+      irace_error("Cycle detected in subordinate parameters! ",
                   "Check definition of conditions and/or dependent domains.\n",
                   "One parameter of this cycle is '", rootParam, "'")
-      
+
     # The following line detects a missing definition
     if (child %not_in% names(varsTree))
-      irace.error("A parameter definition is missing! ",
+      irace_error("A parameter definition is missing! ",
                   "Check definition of parameters.\n",
                   "Parameter '", paramName,
                   "' depends on '", child, "' which is not defined.")
-        
+
     level <- param_level(child, varsTree, rootParam)
     if (level > maxChildLevel)
       maxChildLevel <- level
@@ -115,13 +115,13 @@ transform_domain <- function(transf, domain, type)
     # Reject log if domain contains zero or negative values
     if (any(domain <= 0))
       stop("Domain (", lower, ", ", upper, ") of parameter of type 'log' contains non-positive values")
-    
+
     trLower <- log(lower)
     # +1 to adjust before floor()
     trUpper <- if (type == "i") log(upper + 1) else log(upper)
-    
-    irace.assert(is.finite(trLower))
-    irace.assert(is.finite(trUpper))
+
+    irace_assert(is.finite(trLower))
+    irace_assert(is.finite(trUpper))
     attr(transf, "lower") <- trLower
     attr(transf, "upper") <- trUpper
     return(transf)
@@ -175,7 +175,7 @@ Parameter <- function(name, type, domain, label, condition, transf,
   if (!isTRUE(condition)) {
     condition <- param_parse_condition(condition)
   }
-  
+
   if (type %in% c("i", "r")) {
     exp_domain <- parse_exp_domain(domain)
     domain <- sapply(exp_domain, USE.NAMES=FALSE, function(x) if (is.numeric(x)) x else NA)
@@ -184,7 +184,7 @@ Parameter <- function(name, type, domain, label, condition, transf,
       digits <- as.integer(digits)
       if (digits < 15L &&
           (!valid_real_bound(domain[1L], digits)
-            || !valid_real_bound(domain[2L], digits))) { 
+            || !valid_real_bound(domain[2L], digits))) {
         for (i in seq.int(digits+1L, 15L)) {
           if (valid_real_bound(domain[1L], i) && valid_real_bound(domain[2L], i))
             break
@@ -198,14 +198,14 @@ Parameter <- function(name, type, domain, label, condition, transf,
     } else { # type == "i"
       if (any(!is.wholenumber(domain[!is.na(domain)])))
         named_stop("invalid_domain", "for parameter '", name, "' of type 'integer', values must be integers")
-      if (anyNA(domain)) 
+      if (anyNA(domain))
         domain <- as.expression(sapply(exp_domain, USE.NAMES=FALSE, function(x) if (is.numeric(x)) as.integer(x) else x))
       else
         domain <- as.integer(domain)
     }
     if (!is.expression(domain) && domain[1L] >= domain[2L])
       named_stop("invalid_range", "lower bound must be smaller than upper bound in numeric range")
-    
+
   } else { # type %in% c("c", "o")
     if (anyDuplicated(domain)) {
       dups <- duplicated(domain)
@@ -218,19 +218,16 @@ Parameter <- function(name, type, domain, label, condition, transf,
           paste0(domain, collapse = ', '))
     }
   }
-  
+
   if (transf != "")
     transf <- transform_domain(transf, domain, type)
 
   isFixed <- (type == "c" || type == "o") && (length(domain) == 1L)
+  param <- list(name = name, type = type, domain = domain, label = label, is_dependent = is.expression(domain),
+    isFixed = isFixed, transform = transf, condition = condition)
+  if (type == "r")
+    param$digits <- digits
 
-  if (type == "r") {
-    param <- list(name = name, type = type, domain = domain, label = label, is_dependent = is.expression(domain),
-      isFixed = isFixed, transform = transf, condition = condition, digits = digits)
-  } else {
-    param <- list(name = name, type = type, domain = domain, label = label, is_dependent = is.expression(domain),
-      isFixed = isFixed, transform = transf, condition = condition)
-  }
   class(param) <- c(cls, "Parameter", class(param))
   param
 }
@@ -242,7 +239,7 @@ Parameter <- function(name, type, domain, label, condition, transf,
 #'  - `param_ord()` creates an ordinal parameter.
 #'  - `param_real()` creates a real-valued parameter.
 #'  - `param_int()` creates an integer parameter.
-#' 
+#'
 #' @param ... one or more parameters created by `param_int()`, `param_real()`, `param_ord()`, or `param_cat()`.
 #' @param forbidden `expression()|character(1)`\cr String or list of expressions that define forbidden parameter configurations.
 #' @inheritParams readParameters
@@ -307,7 +304,7 @@ ParameterSpace <- R6::R6Class("ParameterSpace", cloneable = TRUE, lock_class = T
     self$nbParameters <- length(.params)
     self$nbFixed <- sum(self$isFixed)
     self$nbVariable <- sum(!self$isFixed)
-    
+
     # Obtain the variables in each condition
     self$depends <- lapply(self$domains, all.vars)
     # Check that domain dependencies are OK.
@@ -346,7 +343,7 @@ ParameterSpace <- R6::R6Class("ParameterSpace", cloneable = TRUE, lock_class = T
         self$conditions[[p]] <- eval(self$conditions[[p]], envir = self$domains[deps], enclos = NULL)
       }
     }
-    
+
     # Print the hierarchy vector:
     if (verbose >= 1L) {
       cat ("# --- Parameters Hierarchy ---\n")
@@ -363,7 +360,7 @@ ParameterSpace <- R6::R6Class("ParameterSpace", cloneable = TRUE, lock_class = T
 
   forbid_configurations = function(x) {
     # FIXME: This copies the whole list. Avoid the copy and just append.
-    self$forbidden <- c(self$forbidden, 
+    self$forbidden <- c(self$forbidden,
       buildForbiddenExp(configurations = x[, self$names, drop=FALSE]))
   },
   as_character = function() {
@@ -389,7 +386,8 @@ ParameterSpace <- R6::R6Class("ParameterSpace", cloneable = TRUE, lock_class = T
       condition <- p[["condition"]]
       condition <- if (isTRUE(condition)) "" else paste0(" | ", condition)
       transf <- p[["transform"]]
-      if (!is.null(transf) && transf != "") type <- paste0(type, ",", transf)
+      if (!is.null(transf) && transf != "")
+        type <- paste0(type, ",", transf)
       label <- paste0('"', p[["label"]], '"')
       output <- paste0(output, sprintf('%*s %*s %s %-15s%s\n', -names_len, p[["name"]], -label_len, label, type, domain, condition))
       if (type == "r")
@@ -417,12 +415,12 @@ ParameterSpace <- R6::R6Class("ParameterSpace", cloneable = TRUE, lock_class = T
 #' @rdname parameters
 #' @export
 param_cat <- function(name = name, values, label = "", condition = TRUE)
-  Parameter(name = name, type = "c", domain = values, label = label, condition = condition, transf = "")
+  Parameter(name = name, type = "c", domain = as.character(values), label = label, condition = condition, transf = "")
 
 #' @rdname parameters
 #' @export
 param_ord <- function(name, values, label = "", condition = TRUE)
-  Parameter(name = name, type = "o", domain = values, label = label, condition = condition, transf = "")
+  Parameter(name = name, type = "o", domain = as.character(values), label = label, condition = condition, transf = "")
 
 #' @param lower,upper  Lower and upper limits of the valid domain.
 #' @param transf `character(1)`\cr If `"log"`, then the parameter is sampled in a logarithmic scale.
@@ -440,7 +438,7 @@ param_int <- function(name, lower, upper, label = "", condition = TRUE, transf =
 
 transform_from_log <- function(x, transf, lower, upper)
 {
-  trLower <- attr(transf, "lower") 
+  trLower <- attr(transf, "lower")
   trUpper <- attr(transf, "upper")
   x <- exp(trLower + (trUpper - trLower) * x)
   clamp(x, lower, upper)
@@ -448,7 +446,7 @@ transform_from_log <- function(x, transf, lower, upper)
 
 transform_to_log <- function(x, transf)
 {
-  trLower <- attr(transf, "lower") 
+  trLower <- attr(transf, "lower")
   trUpper <- attr(transf, "upper")
   (log(x) - trLower)/(trUpper - trLower)
 }
@@ -491,7 +489,7 @@ transform_to_log <- function(x, transf)
 # table(floor(rtnorm(nsamples, mean=1.5, sd=1, lower=1,upper=4)))/nsamples
 # table(floor(rtnorm(nsamples, mean=3.5, sd=1, lower=1,upper=4)))/nsamples
 #
-# The above reasoning also works for log-transformed domains, because 
+# The above reasoning also works for log-transformed domains, because
 # floor() happens in the original domain, not in the log-transformed one,
 # except for the case of log-transformed negative domains, where we have to
 # translate by -0.5.
@@ -501,7 +499,7 @@ integer_round <- function(x, lower, upper)
   x <- floor(x)
   # The probability of this happening is very small, but it happens.
   x <- pmin.int(upper, x)
-  irace.assert(all(x >= lower))
+  irace_assert(all(x >= lower))
   as.integer(x)
 }
 
@@ -565,7 +563,7 @@ param_quantile.ParamOrd <- param_quantile.ParamCat
 sample_model.ParamInt <- function(param, n, model, domain = param[["domain"]])
 {
   # Dependent domains could be not available because of inactivity of parameters
-  # on which they are depedent. In this case, the dependent parameter becomes 
+  # on which they are depedent. In this case, the dependent parameter becomes
   # not active and we return NA.
   if (anyNA(domain))
     return(NA_integer_)
@@ -589,7 +587,7 @@ sample_model.ParamInt <- function(param, n, model, domain = param[["domain"]])
 sample_unif.ParamInt <- function(param, n, domain = param[["domain"]])
 {
   # Dependent domains could be not available because of inactivity of parameters
-  # on which they are depedent. In this case, the dependent parameter becomes 
+  # on which they are depedent. In this case, the dependent parameter becomes
   # not active and we return NA.
   if (anyNA(domain))
     return(NA_integer_)
@@ -604,6 +602,11 @@ sample_unif.ParamInt <- function(param, n, domain = param[["domain"]])
 #' @exportS3Method
 param_quantile.ParamInt <- function(param, probs, domain = param[["domain"]])
 {
+  # Dependent domains could be not available because of inactivity of parameters
+  # on which they are depedent. In this case, the dependent parameter becomes
+  # not active and we return NA.
+  if (anyNA(domain))
+    return(NA_integer_)
   lower <- domain[1L]
   upper <- domain[2L]
   probs <- as.numeric(probs)
@@ -620,9 +623,10 @@ param_quantile.ParamInt <- function(param, probs, domain = param[["domain"]])
 sample_model.ParamReal <- function(param, n, model, domain = param[["domain"]])
 {
   # Dependent domains could be not available because of inactivity of parameters
-  # on which they are depedent. In this case, the dependent parameter becomes 
+  # on which they are depedent. In this case, the dependent parameter becomes
   # not active and we return NA.
-  if (anyNA(domain)) return(NA)
+  if (anyNA(domain))
+    return(NA_real_)
   lower <- domain[[1L]]
   upper <- domain[[2L]]
   transf <- param[["transform"]]
@@ -632,7 +636,7 @@ sample_model.ParamReal <- function(param, n, model, domain = param[["domain"]])
   else
     x <- sample_numeric_norm(n, mean, sd = model[[1L]], lower, upper, transf)
   x <- round(x, digits = param[["digits"]])
-  irace.assert(all(x >= lower) && all(x <= upper))
+  irace_assert(all(x >= lower) && all(x <= upper))
   x
 }
 
@@ -640,20 +644,26 @@ sample_model.ParamReal <- function(param, n, model, domain = param[["domain"]])
 sample_unif.ParamReal <- function(param, n, domain = param[["domain"]])
 {
   # Dependent domains could be not available because of inactivity of parameters
-  # on which they are depedent. In this case, the dependent parameter becomes 
+  # on which they are depedent. In this case, the dependent parameter becomes
   # not active and we return NA.
-  if (anyNA(domain)) return(NA)
+  if (anyNA(domain))
+    return(NA_real_)
   lower <- domain[[1L]]
   upper <- domain[[2L]]
   x <- sample_numeric_unif(n, lower, upper, transf = param[["transform"]])
   x <- round(x, digits = param[["digits"]])
-  irace.assert(all(x >= lower) && all(x <= upper))
+  irace_assert(all(x >= lower) && all(x <= upper))
   x
 }
 
 #' @exportS3Method
 param_quantile.ParamReal <- function(param, probs, domain = param[["domain"]])
 {
+  # Dependent domains could be not available because of inactivity of parameters
+  # on which they are depedent. In this case, the dependent parameter becomes
+  # not active and we return NA.
+  if (anyNA(domain))
+    return(NA_real_)
   lower <- domain[1L]
   upper <- domain[2L]
   probs <- as.numeric(probs)
@@ -666,14 +676,14 @@ param_quantile.ParamReal <- function(param, probs, domain = param[["domain"]])
 }
 
 #' Print parameter space in the textual format accepted by irace.
-#' 
+#'
 #' @param parameters `ParameterSpace`\cr Data structure containing the parameter
 #'   space definition. The data structure has to similar to the one returned by the
 #'   function [`readParameters`].
 #'
 #'
 #' @return `character()`
-#' 
+#'
 #' @seealso [readParameters()]
 #' @examples
 #' parameters_table <- '
@@ -690,7 +700,7 @@ param_quantile.ParamReal <- function(param, probs, domain = param[["domain"]])
 #'  elitistants  "--elitistants " i     (1, ants)            | algorithm == "eas"
 #'  nnls         "--nnls "        i     (5, 50)              | localsearch %in% c(1,2,3)
 #'  dlb          "--dlb "         c     (0, 1)               | localsearch %in% c(1,2,3)
-#'  
+#'
 #'  [forbidden]
 #'  (alpha == 0.0) & (beta == 0.0)
 #' '
@@ -703,7 +713,7 @@ printParameters <- function(parameters)
 #' @export
 print.ParameterSpace <- function(x, digits = 15L, ...)
 {
-  str(x$.params, digits.d = digits)
+  utils::str(x$.params, digits.d = digits)
   cat("Forbidden:\n")
   print(x$forbidden, digits = 15L)
 }

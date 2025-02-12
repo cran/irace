@@ -25,8 +25,8 @@ testConfigurations <- function(configurations, scenario)
   
   testInstances <- scenario[["testInstances"]]
   instances_id <- names(testInstances)
-  if (length(testInstances) == 0L) irace.error("No test instances given")
-  if (is.null(instances_id)) irace.error("testInstances must have names")
+  if (length(testInstances) == 0L) irace_error("No test instances given")
+  if (is.null(instances_id)) irace_error("testInstances must have names")
   
   # 2147483647 is the maximum value for a 32-bit signed integer.
   # We use replace = TRUE, because replace = FALSE allocates memory for each possible number.
@@ -46,25 +46,27 @@ testConfigurations <- function(configurations, scenario)
     bounds = rep(scenario$boundMax, nrow(configurations)))
   race_state <- RaceState$new(scenario)
   if (scenario$debugLevel >= 3L) {
-    irace.note ("Memory used before execute_experiments() in testConfigurations():\n")
+    irace_note ("Memory used before execute_experiments() in testConfigurations():\n")
     race_state$print_mem_used()
   }
   race_state$start_parallel(scenario)
   on.exit(race_state$stop_parallel())
+  # We cannot let targetRunner or targetEvaluator modify our random seed, so we save it.
+  withr::local_preserve_seed()
   target_output <- execute_experiments(race_state, experiments, scenario)
   # targetEvaluator may be NULL. If so, target_output must contain the right
   # output already.
   if (!is.null(scenario$targetEvaluator))
     target_output <- execute_evaluator(race_state$target_evaluator, experiments,
-      scenario, target_output, configurations[[".ID."]])
+      scenario, target_output)
 
-  # FIXME: It would be much faster to get convert target_output$cost to a
-  # vector, then initialize the matrix with the vector.
+  # FIXME: It would be much faster to convert target_output to a data.table like we do in race_wrapper(),
+  # then dcast() to a matrix like we do elsewhere.
   testResults <- matrix(NA, ncol = nrow(configurations), nrow = length(testInstances),
                         # dimnames = list(rownames, colnames)
                         dimnames = list(instances_id, configurations$.ID.))
 
-  cost <- sapply(target_output, getElement, "cost")
+  cost <- unlist_element(target_output, "cost")
   if (scenario$capping)
     cost <- applyPAR(cost, boundMax = scenario$boundMax, boundPar = scenario$boundPar)
   # FIXME: Vectorize this loop
@@ -73,7 +75,7 @@ testConfigurations <- function(configurations, scenario)
                 colnames(testResults) == experiments[[i]]$id_configuration] <- cost[i]
   }
   if (scenario$debugLevel >= 3L) {
-    irace.note ("Memory used at the end of testConfigurations():\n")
+    irace_note ("Memory used at the end of testConfigurations():\n")
     race_state$print_mem_used()
   }
 

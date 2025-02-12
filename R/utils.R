@@ -1,6 +1,6 @@
 # Print a user-level warning message, when the calling context
 # cannot help the user to understand why the program failed.
-irace.warning <- function(...)
+irace_warning <- function(...)
 {
   if (getOption(".irace.quiet", default=FALSE)) return()
   warning(paste0(.irace_msg_prefix, ..., collapse=""),
@@ -9,7 +9,7 @@ irace.warning <- function(...)
 
 # Print a user-level fatal error message, when the calling context
 # cannot help the user to understand why the program failed.
-irace.error <- function(...)
+irace_error <- function(...)
 {
   # The default is only 1000, which is too small. 8170 is the maximum
   # value allowed up to R 3.0.2
@@ -44,8 +44,8 @@ irace_internal_error <- function(...)
   if (!base::interactive())
     op <- c(op, list(error = irace_dump_frames))
   withr::local_options(op)
-  # 6 to not show anything below irace.assert()
-  bt <- capture.output(traceback(5))
+  # 6 to not show anything below irace_assert()
+  bt <- utils::capture.output(traceback(5))
   warnings()
   stop (.irace_msg_prefix, paste0(..., collapse = "\n"), "\n",
         paste0(bt, collapse= "\n"), "\n",
@@ -53,7 +53,7 @@ irace_internal_error <- function(...)
   invisible()
 }
 
-irace.assert <- function(exp, eval_after = NULL)
+irace_assert <- function(exp, eval_after = NULL)
 {
   # FIXME: It would be great if we could save into a file the state of
   # the function that called this one.
@@ -61,14 +61,14 @@ irace.assert <- function(exp, eval_after = NULL)
   mc <- sys.call()[[2L]]
   msg <- paste0("'", deparse(mc), "' is not TRUE")
   if (!is.null(eval_after)) {
-    msg_after <- eval.parent(capture.output(eval_after))
+    msg_after <- eval.parent(utils::capture.output(eval_after))
     msg <- paste0(msg, "\n", paste0(msg_after, collapse="\n"))
   }
   irace_internal_error(msg)
   invisible()
 }
 
-irace.note <- function(...)
+irace_note <- function(...)
 {
   # FIXME: If this was a function within an irace object, we could replace it
   # when using quiet.
@@ -86,50 +86,50 @@ file.check <- function (file, executable = FALSE, readable = executable,
   READ <- 4
 
   if (!is.character(file) || is.null.or.empty(file)) {
-    irace.error (text, " ", shQuote(file), " is not a vaild filename")
+    irace_error (text, " ", shQuote(file), " is not a vaild filename")
   }
   file <- path_rel2abs(file)
   ## The above should remove the trailing separator if present for windows OS
   ## compatibility, except when we have just C:/, where the trailing separator
   ## must remain.
-  
+
   if (!file.exists(file)) {
     if (writeable) {
       if (tryCatch({ suppressWarnings(file.create(file) && file.remove(file)) },
                    error=function(e) FALSE))
         return(TRUE)
-      irace.error("cannot create ", text, " ", shQuote(file))
+      irace_error("cannot create ", text, " ", shQuote(file))
       return (FALSE)
     }
-    irace.error (text, " '", file, "' does not exist")
+    irace_error (text, " '", file, "' does not exist")
     return(FALSE)
   }
 
   if (writeable && (file.access(file, mode = WRITE) != 0)) {
-    irace.error(text, " '", file, "' cannot be written into")
+    irace_error(text, " '", file, "' cannot be written into")
     return(FALSE)
   }
-  
+
   if (readable && (file.access(file, mode = READ) != 0)) {
-    irace.error(text, " '", file, "' is not readable")
+    irace_error(text, " '", file, "' is not readable")
     return (FALSE)
   }
   if (executable && file.access(file, mode = EXEC) != 0) {
-    irace.error(text, " '", file, "' is not executable")
+    irace_error(text, " '", file, "' is not executable")
     return (FALSE)
   }
 
   if (isdir) {
     if (!file.info(file)$isdir) {
-      irace.error(text, " '", file, "' is not a directory")
+      irace_error(text, " '", file, "' is not a directory")
       return (FALSE)
     }
     if (notempty && length(list.files (file, recursive=TRUE)) == 0) {
-      irace.error(text, " '", file, "' does not contain any file")
+      irace_error(text, " '", file, "' does not contain any file")
       return (FALSE)
     }
   } else if (file.info(file)$isdir) {
-    irace.error(text, " '", file, "' is a directory, not a file")
+    irace_error(text, " '", file, "' is a directory, not a file")
     return (FALSE)
   }
   return (TRUE)
@@ -241,34 +241,41 @@ trim <- function(str) trim_trailing(trim_leading(str))
 
 ## This function takes two matrices x and y and merges them such that the
 ## resulting matrix z has:
-# rownames(z) <- setunion(rownames(x), rownames(y)) and 
+# rownames(z) <- setunion(rownames(x), rownames(y)) and
 # rownames(z) <- setunion(rownames(x), rownames(y)) and
 # z[rownames(x), colnames(x)] <- x and z[rownames(y), colnames(y)] <- y, and
 # z[i, j] <- NA for all i,j not in x nor y.
 merge_matrix <- function(x, y)
 {
-  new.cols <- setdiff(colnames(y), colnames(x))
-  new.rows <- setdiff(rownames(y), rownames(x))
+  rownames_x <- rownames(x)
+  colnames_x <- colnames(x)
+  rownames_y <- rownames(y)
+  colnames_y <- colnames(y)
 
-  if (is.null(rownames(x)) || is.null(colnames(x)))
+  if (is.null(rownames_x) || is.null(colnames_x))
     return(y)
 
-  if (is.null(rownames(y)) || is.null(colnames(y)))
+  if (is.null(rownames_y) || is.null(colnames_y))
     return(x)
 
-  # Add columns
-  x <- cbind(x,
-             matrix(NA, ncol = length(new.cols), nrow = nrow(x),
-                    dimnames = list(rownames(x), new.cols)))
-  # Add rows
-  x <- rbind(x,
-             matrix(NA, ncol = ncol(x), nrow = length(new.rows),
-                    dimnames = list(new.rows, colnames(x))))
-  # Update
-  x[rownames(y), colnames(y)] <- y
+  row_union <- union(rownames_x, rownames_y)
+  col_union <- union(colnames_x, colnames_y)
+
+  z <- matrix(NA_real_, nrow = length(row_union), ncol = length(col_union),
+              dimnames = list(row_union, col_union))
+
+  # Map row and column names to indices for efficient assignment.
+  row_idx_x <- chmatch(rownames_x, row_union)
+  col_idx_x <- chmatch(colnames_x, col_union)
+  row_idx_y <- chmatch(rownames_y, row_union)
+  col_idx_y <- chmatch(colnames_y, col_union)
+
+  z[row_idx_x, col_idx_x] <- x
+  z[row_idx_y, col_idx_y] <- y
+
   # There must be a non-NA entry for each instance.
-  irace.assert(all(rowAnys(!is.na(x))))
-  return(x)
+  irace_assert(all(rowAnyNotNAs(z)))
+  return(z)
 }
 
 # FIXME: This may not work when working interactively. For example,
@@ -282,7 +289,7 @@ merge_matrix <- function(x, y)
 ## print(loadedNamespaces())
 ## try(print(as.list(get(".__NAMESPACE__.", envir = asNamespace("irace", base.OK = FALSE),
 ##                       inherits = FALSE))$path))
-## try(print(path.package("irace")))     
+## try(print(path.package("irace")))
 #
 # That is, neither R_LIBS, .libPaths or whether library was called with lib.loc
 # will affect the slaves. It also happens before we can set those variables on
@@ -293,15 +300,14 @@ mpiInit <- function(nslaves, debugLevel = 0)
 {
   # Load the Rmpi package if it is not already loaded.
   if ("Rmpi" %not_in% loadedNamespaces()) {
-    if (! suppressPackageStartupMessages
-        (requireNamespace("Rmpi", quietly = TRUE)))
-      irace.error("The 'Rmpi' package is required for using MPI")
-    
+    if (!suppressPackageStartupMessages(requireNamespace("Rmpi", quietly = TRUE)))
+      irace_error("The 'Rmpi' package is required for using MPI")
+
     # When R exits, finalize MPI.
     reg.finalizer(environment(Rmpi::mpi.exit), function(e) {
       # Rmpi already prints a message, so we don't need this.
       # cat("# Finalize MPI...\n")
-      if (Rmpi::mpi.comm.size(1) > 0)
+      if (Rmpi::mpi.comm.size(1) > 0L)
         # FIXME: dellog == TRUE tries to delete log files, but it does
         # not take into account that we may have changed directory and
         # it does not fail gracefully but produces an annoying:
@@ -311,8 +317,8 @@ mpiInit <- function(nslaves, debugLevel = 0)
       # what mpi.finalize does, minus the annoying message: "Exiting Rmpi. Rmpi
       # cannot be used unless relaunching R", which we do not care about
       # because this finalizer should only be called when exiting R.
-      capture.output(Rmpi::mpi.finalize(),
-                     file = if (.Platform$OS.type == 'windows') 'NUL' else '/dev/null')
+      utils::capture.output(Rmpi::mpi.finalize(),
+        file = if (.Platform$OS.type == 'windows') 'NUL' else '/dev/null')
     }, onexit = TRUE)
 
     # Create slaves
@@ -343,7 +349,7 @@ mpiInit <- function(nslaves, debugLevel = 0)
 # columns.
 concordance <- function(data)
 {
-  irace.assert (is.matrix(data) && is.numeric(data))
+  irace_assert (is.matrix(data) && is.numeric(data))
 
   n <- nrow(data) #judges
   k <- ncol(data) #objects
@@ -351,8 +357,7 @@ concordance <- function(data)
     return(list(kendall.w = NA_real_, spearman.rho = NA_real_))
 
   # Get rankings by rows (per instance)
-  r <- rowRanks(data, ties.method = "average")
-  R <- colSums2(r)
+  r <- rowRanks(data, ties.method = "average", useNames=FALSE)
   TIES <- c(table(r,row(r)))
   # If everything is tied, then W=1, perfect homogeneity.
   if (all(TIES == k)) {
@@ -360,48 +365,49 @@ concordance <- function(data)
   } else {
     # FIXME: This formula seems slightly different from the one in
     # friedman.test. Why?
-    TIES <- sum(TIES^3 - TIES)
-    W <- ((12 * sum((R - n * (k + 1) / 2)^2)) /
-            ((n^2 * (k^3 - k)) - (n * TIES)))
+    TIES <- sum(TIES^3L - TIES)
+    R <- colSums2(r, useNames=FALSE)
+    W <- ((12 * sum((R - n * (k + 1) / 2)^2L)) /
+            ((n^2L * (k^3L - k)) - (n * TIES)))
   }
   # Spearman's rho
-  rho <- (n * W - 1) / (n - 1)
+  rho <- (n * W - 1) / (n - 1L)
 
   ## Same as in friedman test
   #STATISTIC <- n * (k - 1) * W
   #PARAMETER <- k - 1
   #pvalue <- pchisq(PARAMETER, df = PARAMETER, lower.tail = FALSE)
   list(kendall.w = W, spearman.rho = rho)
-} 
+}
 
 ## FIXME: Move this to the manual page.
 ## FIXME: Reference! Explain a bit what is computed!
-# Calculates Performance similarity of instances  
+# Calculates Performance similarity of instances
 #       data: matrix with the data, instances in rows (judges), configurations
 #             in columns.
-# Returns: variance value [0,1], where 0 is a homogeneous set of instances and 
+# Returns: variance value [0,1], where 0 is a homogeneous set of instances and
 #          1 is a heterogeneous set.
 # FIXME: How to handle missing values?
 dataVariance <- function(data)
 {
-  irace.assert (is.matrix(data) && is.numeric(data))
+  irace_assert (is.matrix(data) && is.numeric(data))
   # LESLIE: should we rank data??
   # MANUEL: We should add the option.
   if (nrow(data) <= 1L || ncol(data) <= 1L) return(NA_real_)
-  
+
   # Normalize
   #datamin <- apply(data,1,min,na.rm=TRUE)
   #datamax <- apply(data,1,max,na.rm=TRUE)
-  #normdata <- (data - datamin) / (datamax-datamin) 
-  
+  #normdata <- (data - datamin) / (datamax-datamin)
+
   #standardize
-  meandata <- rowMeans2(data)
-  stddata  <- rowSds(data)
+  meandata <- rowMeans2(data, useNames=FALSE)
+  stddata  <- rowSds(data, useNames=FALSE)
   # If stddata == 0, then data is constant and it doesn't matter as long as it
   # is non-zero.
   stddata[stddata == 0] <- 1
-  zscoredata <- (data - meandata) / stddata 
-  
+  zscoredata <- (data - meandata) / stddata
+
   # FIXME: We could log-tranform if needed
   # Variance of configurations
   mean(colVars(zscoredata))
@@ -410,7 +416,7 @@ dataVariance <- function(data)
 runcommand <- function(command, args, id, debugLevel, timeout = 0)
 {
   if (debugLevel >= 2L) {
-    irace.note (command, " ", args, "\n")
+    irace_note (command, " ", args, "\n")
     elapsed <- proc.time()["elapsed"]
   }
   err <- NULL
@@ -434,11 +440,11 @@ runcommand <- function(command, args, id, debugLevel, timeout = 0)
     if (!is.null(attr(output, "errmsg")))
       err <- paste(sep = "\n", err, attr(output, "errmsg"))
     if (debugLevel >= 2L)
-      irace.note ("ERROR (", id, "): ", err, "\n")
+      irace_note ("ERROR (", id, "): ", err, "\n")
     return(list(output = output, error = err))
   }
   if (debugLevel >= 2L) {
-    irace.note ("DONE (", id, ") Elapsed wall-clock seconds: ",
+    irace_note ("DONE (", id, ") Elapsed wall-clock seconds: ",
                 formatC(proc.time()["elapsed"] - elapsed,
                         format = "f", digits = 2), "\n")
   }
@@ -447,7 +453,7 @@ runcommand <- function(command, args, id, debugLevel, timeout = 0)
   list(output = output, error = NULL)
 }
 
-# Safe sampling of vector: 
+# Safe sampling of vector:
 resample <- function(x, ...) x[sample.int(length(x), ...)]
 
 # Rounds up the number x to the specified number of decimal places 'digits'.
@@ -459,7 +465,7 @@ ceiling_digits <- function(x, digits)
    int_div * multiple + ceiling(div - int_div) * multiple
 }
 
-# ceil.decimal <- function(x, d) { 
+# ceil.decimal <- function(x, d) {
   # # get the significant digits in the integer part.
   # ssd <- x * 10^(d)
   # # get the non significant digits
@@ -480,17 +486,27 @@ is.sub.path <- function(x, dir, n = nchar(dir)) substr(x, 1L, n) == dir
 # Same as !(x %in% table). Package data.table has %notin%.
 "%not_in%" <- function(x, table) is.na(match(x, table))
 
-irace_save_logfile <- function(iraceResults, scenario)
+#' Save the log generated by \pkg{{irace}} to a file (by default `irace.Rdata`).
+#'
+#' This function may be useful if you are manually editing the log data generated by a run of \pkg{irace}.
+#'
+#' @param iraceResults `list()`\cr Object created by \pkg{irace} and typically saved in the log file `irace.Rdata`.
+#'
+#' @param logfile `character(1)`\cr Filename to save `iraceResults`. Usually, this is given by `scenario$logFile`. If `NULL` or `""`, no data is saved.
+#'
+#' @seealso [read_logfile()]
+#' @concept analysis
+save_irace_logfile <- function(iraceResults, logfile)
 {
-  # FIXME: Raul Santa Maria proposed to only save if sufficient times (>= 1
+  # FIXME: Raul Santa Maria proposed to only save if sufficient time (>= 1
   # minute) has passed since the last save. We would need an option to force
   # saving the last one.
-  if (is.null.or.empty(scenario$logFile)) return(invisible())
+  if (is.null.or.empty(logfile)) return(invisible())
   # Files produced by `saveRDS` (or `serialize` to a file connection) are not
   # suitable as an interchange format between machines, for example to download
   # from a website. The files produced by `save` have a header identifying the
   # file type and so are better protected against erroneous use.
-  save(iraceResults, file = scenario$logFile, version = 3L)
+  save(iraceResults, file = logfile, version = 3L)
 }
 
 valid_iracelog <- function(x)
@@ -503,7 +519,7 @@ valid_iracelog <- function(x)
 #' @param filename Filename that contains the log file saved by irace. Example: `irace.Rdata`.
 #'
 #' @param name Optional argument that allows overriding the default name of the object in the file.
-#' 
+#'
 #' @return (`list()`)
 #' @examples
 #' irace_results <- read_logfile(system.file("exdata/irace-acotsp.Rdata", package="irace",
@@ -514,17 +530,18 @@ valid_iracelog <- function(x)
 read_logfile <- function(filename, name = "iraceResults")
 {
   if (is_na_or_empty(filename))
-    irace.error("read_logfile: 'filename' is NULL or NA.")
+    irace_error("read_logfile: 'filename' is NULL or NA.")
   # If filename is already the iraceResults object, just return it.
-  if (valid_iracelog(filename)) return(filename)
+  if (valid_iracelog(filename))
+    return(filename)
 
   if (file.access(filename, mode = 4) != 0)
-    irace.error("read_logfile: Cannot read file '", filename, "'.")
-  
+    irace_error("read_logfile: Cannot read file '", filename, "'.")
+
   load(filename)
   iraceResults <- get0(name, inherits=FALSE)
   if (!valid_iracelog(iraceResults))
-    irace.error("read_logfile: The file '", filename, "' does not contain the '", name, "' object.")
+    irace_error("read_logfile: The file '", filename, "' does not contain the '", name, "' object.")
 
   # data.table recommends doing this after loading a data.table from a file.
   setDT(iraceResults$state$experiment_log)
@@ -538,7 +555,9 @@ get_log_clean_version <- function(iraceResults)
   if (is.null(log_version))
     log_version <- iraceResults$irace.version
   if (is.null(log_version))
-    return(package_version("0"))
+    return(package_version("0.0.0"))
+  if (log_version == "unknown") # This may happen during development.
+    return(package_version("1000.0.0"))
   if (length(gregexpr("\\.", log_version)[[1L]]) > 3L
     || grepl("[a-z]", log_version))
     log_version <- sub("\\.[^.]*$", "", log_version)
@@ -559,14 +578,12 @@ has_testing_data <- function(iraceResults)
 {
   ins <- iraceResults$scenario$testInstances
   exp <- iraceResults$testing$experiments
-  !(length(ins) == 0L ||
-    (length(ins) == 1L && (is.na(ins) || nchar(ins) == 0L)) ||
-    length(exp) == 0L || !(is.matrix(exp) || is.data.frame(exp)))
+  !(length(ins) == 0L
+    || (length(ins) == 1L && (is.na(ins) || ins == ""))
+    || length(exp) == 0L || !(is.matrix(exp) || is.data.frame(exp)))
 }
 
 do_nothing <- function(...) invisible()
-
-.irace_tolerance <- sqrt(.Machine$double.eps)
 
 seq_nrow <- function(x) seq_len(nrow(x))
 
@@ -596,3 +613,13 @@ vlast <- function(x)
 # between machines.
 runif_integer <- function(size)
   sample.int(min(2147483647L, .Machine$integer.max), size = size, replace = TRUE)
+
+unlist_element <- function(x, element)
+  unlist(lapply(x, "[[", element, exact=TRUE), recursive=FALSE, use.names=FALSE)
+
+# Extensions of matrixStats
+rowAnyNotNAs <- function(x, rows = NULL, cols = NULL, ..., useNames = FALSE)
+  !rowAlls(x, rows = rows, cols = cols, value = NA, ..., useNames = useNames)
+
+colAnyNotNAs <- function(x, rows = NULL, cols = NULL, ..., useNames = FALSE)
+  !colAlls(x, rows = rows, cols = cols, value = NA, ..., useNames = useNames)

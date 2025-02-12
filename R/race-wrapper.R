@@ -5,13 +5,13 @@
 #'   parameters. It builds a string with the switches and the values that can
 #'   be used as a command line to call the program to be tuned, thus generating
 #'   one candidate configuration.
-#'   
-#' 
+#'
+#'
 #' @param values A vector containing the value of each parameter for the
 #' candidate configuration.
 #' @param switches A vector containing the switches of each paramter (in an
 #'  order that corresponds to the values vector).
-#' 
+#'
 #' @return A string concatenating each element of `switches` and
 #'   `values` for all parameters with a space between each pair of
 #'   parameters (but none between the switches and the corresponding values).
@@ -28,12 +28,12 @@
 #' parameters <- iraceResults$scenario$parameters
 #' apply(allConfigurations[1:10, unlist(parameters$names)], 1, buildCommandLine,
 #'       unlist(parameters$switches))
-#' 
+#'
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
 #' @export
 buildCommandLine <- function(values, switches)
 {
-  irace.assert(length(values) == length(switches))
+  irace_assert(length(values) == length(switches))
   values <- as.list(values)
   sel <- !is.na(values)
   switches <- switches[sel]
@@ -45,17 +45,16 @@ buildCommandLine <- function(values, switches)
 # numeric vector.
 parse_output <- function(outputRaw, verbose)
 {
-  if (verbose) { cat (outputRaw, sep = "\n") }
-  
+  if (verbose) cat(outputRaw, sep = "\n")
   # Initialize output as raw. If it is empty stays like this.
   output <- outputRaw
   # strsplit crashes if outputRaw == character(0)
-  if (length(outputRaw) > 0) {
+  if (length(outputRaw)) {
     outputRaw <- paste0(outputRaw, collapse = "\n")
-    output <- strsplit(trim(outputRaw), "[[:space:]]+")[[1]]
+    output <- strsplit(trim(outputRaw), "[[:space:]]+")[[1L]]
   }
   # suppressWarnings to avoid messages about NAs introduced by coercion
-  suppressWarnings (as.numeric (output))
+  suppressWarnings(as.numeric(output))
 }
 
 target_error <- function(err_msg, output, scenario, target_runner_call,
@@ -84,12 +83,13 @@ target_error <- function(err_msg, output, scenario, target_runner_call,
       " Try to run the command(s) above from the execution directory '",
       scenario$execDir, "' to investigate the issue. See also Appendix B (targetRunner troubleshooting checklist) of the User Guide (https://cran.r-project.org/package=irace/vignettes/irace-package.pdf).")
   }
-  irace.error(err_msg, "\n", .irace_msg_prefix,
+  irace_error(err_msg, "\n", .irace_msg_prefix,
               "The output was:\n", paste(output$outputRaw, collapse = "\n"),
               "\n", .irace_msg_prefix, advice_txt)
 }
 
-check_output_target_evaluator <- function (output, scenario, target_runner_call = NULL, bound = NULL)
+check_output_target_evaluator <- function (output, scenario, target_runner_time,
+                                           target_runner_call, bound)
 {
   if (!is.list(output)) {
     output <- list()
@@ -105,15 +105,23 @@ check_output_target_evaluator <- function (output, scenario, target_runner_call 
     } else if (is_na_nowarn(output$cost)) {
       err_msg <- "The output of targetEvaluator is not numeric!"
     }
-    if (scenario$batchmode != 0 && scenario$maxTime > 0) {
-      if (is.null (output$time)) {
-        err_msg <- "When batchmode != 0 and maxTime > 0, the output of targetEvaluator must be two numbers 'cost time'!"
+    if (scenario$maxTime > 0 || scenario$capping) {
+      if (scenario$batchmode != 0) {
+        if (is.null (output$time))
+          err_msg <- "When batchmode != 0 and maxTime > 0, the output of targetEvaluator must be two numbers 'cost time'!"
+        # With scenario$capping == TRUE, we may have pre-executed targetRunner
+        # (which_elite_exe) that already have recorded the time, so when we
+        # reach this point, we may not have 'time'.
+      } else if (!scenario$capping && is.null(target_runner_time) && is.null(output$time)) {
+        err_msg <- "Either targetRunner or targetEvaluator must return 'time' !"
       }
     }
     if (is.null(output$time)) {
-      output$time <- NA_real_
+      output$time <- target_runner_time
     } else {
-      if (is_na_nowarn(output$time)) {
+      if (!is.null(target_runner_time)) {
+        err_msg <- "Both targetRunner and targetEvaluator cannot return 'time' !"
+      } else if (is_na_nowarn(output$time)) {
         err_msg <- "The time returned by targetEvaluator is not numeric!"
       } else if (is.infinite(output$time)) {
         err_msg <- "The time returned by targetEvaluator is not finite!"
@@ -129,10 +137,12 @@ check_output_target_evaluator <- function (output, scenario, target_runner_call 
     }
   }
 
-  if (!is.null(err_msg)) {
+  if (is.null(err_msg)) {
+    output$error <- NULL
+  } else {
     target_error (err_msg, output, scenario,
-                  target_runner_call = target_runner_call,
-                  target_evaluator_call = output$call)
+      target_runner_call = target_runner_call,
+      target_evaluator_call = output$call)
   }
   output
 }
@@ -143,7 +153,7 @@ check_output_target_evaluator <- function (output, scenario, target_runner_call 
 #'  invoked if `targetEvaluator` is a string (by default
 #'  `targetEvaluator` is `NULL` and this function is not invoked). You can use it as
 #'  an advanced example of how to create your own `targetEvaluator` function.
-#'   
+#'
 #' @param experiment A list describing the experiment. It contains at least:
 #'    \describe{
 #'     \item{`id_configuration`}{An alphanumeric string that uniquely identifies a configuration;}
@@ -162,22 +172,22 @@ check_output_target_evaluator <- function (output, scenario, target_runner_call 
 #'    corresponds to this call to `targetEvaluator`. This is used for
 #'    providing extra information to the user, for example, in case
 #'    `targetEvaluator` fails.
-#' 
+#'
 #' @return The function `targetEvaluator` must return a list with one element
 #'  `"cost"`, the numerical value corresponding to the cost measure of the
 #'  given configuration on the given instance.
-#'    
+#'
 #'  The return list may also contain the following optional elements that are used
 #'  by \pkg{irace} for reporting errors in `targetEvaluator`:
 #'  \describe{
 #'    \item{`error`}{is a string used to report an error;}
 #'    \item{`outputRaw`}{is a string used to report the raw output of calls to
 #'      an external program or function;}
-#'    \item{`call`}{is a string used to report how `targetRunner` called 
+#'    \item{`call`}{is a string used to report how `targetRunner` called
 #'      an external program or function.}
 #'  }
 #'
-#' 
+#'
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
 #' @export
 target_evaluator_default <- function(experiment, num_configurations, all_conf_id,
@@ -191,7 +201,7 @@ target_evaluator_default <- function(experiment, num_configurations, all_conf_id
   debugLevel <- scenario$debugLevel
   targetEvaluator <- scenario$targetEvaluator
   if (as.logical(file.access(targetEvaluator, mode = 1))) {
-    irace.error ("targetEvaluator", shQuote(targetEvaluator),
+    irace_error ("targetEvaluator", shQuote(targetEvaluator),
                  "cannot be found or is not executable!\n")
   }
   all_conf_id <- paste0(all_conf_id, collapse = " ")
@@ -220,15 +230,15 @@ target_evaluator_default <- function(experiment, num_configurations, all_conf_id
     call = paste(targetEvaluator, args, collapse=" "))
 }
 
-#' Check the output of the target runner and repair it if possible. If the 
+#' Check the output of the target runner and repair it if possible. If the
 #' output is incorrect, this function will throw an error.
-#' 
+#'
 #' @param output The output from target runner.
 #' @inheritParams defaultScenario
 #' @param bound Optional time bound that the target runner should have respected.
-#' 
+#'
 #' @return The output with its contents repaired.
-#' 
+#'
 #' @export
 check_output_target_runner <- function(output, scenario, bound = NULL)
 {
@@ -237,30 +247,28 @@ check_output_target_runner <- function(output, scenario, bound = NULL)
     target_error ("The output of targetRunner must be a list", output, scenario, target_runner_call = NULL)
     return(output)
   }
-  
+
   err_msg <- output$error
   if (is.null(err_msg)) {
-    if (!is.null (output$cost)) {
-      if (is_na_or_empty(output$cost)) {
-        err_msg <- "The cost returned by targetRunner is not numeric!"
-      }
+    if (is.null(output$cost)) {
+      output$cost <- NULL # make sure to delete it.
+    } else if (is_na_or_empty(output$cost)) {
+      err_msg <- "The cost returned by targetRunner is not numeric!"
     }
 
     if (is.null(output$time)) {
-      output$time <- NA_real_
+      output$time <- NULL # make sure to delete it.
+    } else if (is.na(output$time)) {
+      err_msg <- paste0("The time returned by targetRunner is not numeric!")
+    } else if (is.infinite(output$time)) {
+      err_msg <- paste0("The time returned by targetRunner is not finite!")
+    } else if (output$time <= 0) {
+      err_msg <- paste0("The value of time (", output$time, ") returned by targetRunner must be strictly positive!")
     } else {
-      if (is.na(output$time)) {
-        err_msg <- paste0("The time returned by targetRunner is not numeric!")
-      } else if (is.infinite(output$time)) {
-        err_msg <- paste0("The time returned by targetRunner is not finite!")
-      } else if (output$time <= 0) {
-        err_msg <- paste0("The value of time (", output$time, ") returned by targetRunner must be strictly positive!")
-      } else {
-        # Fix time.
-        output$time <- max(output$time, scenario$minMeasurableTime)
-        if (!is.null(bound) && !is.na(bound) && bound > 0 && bound + scenario$minMeasurableTime < output$time) {
-          err_msg <- paste0("The time returned by targetRunner (", output$time, ") does not respect the given bound of ", bound, "!")
-        }
+      # Fix time.
+      output$time <- max(output$time, scenario$minMeasurableTime)
+      if (!is.null(bound) && !is.na(bound) && bound > 0 && bound + scenario$minMeasurableTime < output$time) {
+        err_msg <- paste0("The time returned by targetRunner (", output$time, ") does not respect the given bound of ", bound, "!")
       }
     }
     if (is.null(err_msg)) {
@@ -269,23 +277,25 @@ check_output_target_runner <- function(output, scenario, bound = NULL)
         # unless using batchmode, in that case targetRunner returns neither the
         # time nor the cost.
         if (scenario$batchmode != 0) {
-          if (!is.na(output$time) || !is.null(output$cost)) {
+          if (!is.null(output$time) || !is.null(output$cost)) {
             err_msg <- "When batchmode != 0, the output of targetRunner must not contain a cost nor a time!"
           }
-        } else if (scenario$maxTime > 0 && is.na(output$time)) {
+        } else if (scenario$maxTime > 0 && is.null(output$time)) {
           err_msg <- "The output of targetRunner must be one number 'time'!"
         } else if (!is.null(output$cost)) {
           err_msg <- "The output of targetRunner must be empty or just one number 'time'!"
         }
-      } else if (scenario$maxTime > 0 && (is.null(output$cost) || is.na(output$time))) {
+      } else if (scenario$maxTime > 0 && (is.null(output$cost) || is.null(output$time))) {
         err_msg <- "The output of targetRunner must be two numbers 'cost time'!"
       } else if (scenario$maxExperiments > 0 && is.null(output$cost)) {
         err_msg <- "The output of targetRunner must be one number 'cost'!"
-      } 
+      }
     }
   }
 
-  if (!is.null(err_msg)) {
+  if (is.null(err_msg)) {
+    output$error <- NULL
+  } else {
     target_error (err_msg, output, scenario, target_runner_call = output$call)
   }
   output
@@ -300,13 +310,13 @@ exec_target_runner <- function(experiment, scenario, target_runner)
     x <- target_runner(experiment, scenario)
     check_output_target_runner(x, scenario, bound = experiment$bound)
   }
-  
+
   retries <- scenario$targetRunnerRetries
   while (retries > 0L) {
     output <- try (doit(experiment, scenario))
     if (!inherits(output, "try-error") && is.null(output$error))
       return (output)
-    irace.note("Retrying (", retries, " left).\n")
+    irace_note("Retrying (", retries, " left).\n")
     retries <- retries - 1L
   }
   doit(experiment, scenario)
@@ -343,7 +353,7 @@ parse.aclib.output <- function(outputRaw)
   } else {
     error <- paste0("Not valid AClib output status (", status, ")")
   }
-  return(list(status = status, cost = cost, time = runtime, error = error))
+  list(status = status, cost = cost, time = runtime, error = error)
 }
 
 target_runner_aclib <- function(experiment, scenario)
@@ -353,13 +363,13 @@ target_runner_aclib <- function(experiment, scenario)
   cmd <- res$cmd
   output <- res$output
   args <- res$args
-  
+
   err_msg <- output$error
   if (is.null(err_msg)) {
     return(c(parse.aclib.output(output$output),
              list(outputRaw = output$output, call = paste(cmd, args))))
   }
-  
+
   list(cost = NULL, time = NULL, error = err_msg,
        outputRaw = output$output, call = paste(cmd, args))
 }
@@ -370,7 +380,7 @@ check_target_cmdline <- function(target_cmdline, launcher, capping)
   if (capping) required <- c(required, "bound")
   for (x in required) {
     if (!grepl(paste0("{", x, "}"), target_cmdline, fixed=TRUE))
-      irace.error("targetCmdline '", target_cmdline, "' must contain '{", x, "}'")
+      irace_error("targetCmdline '", target_cmdline, "' must contain '{", x, "}'")
   }
 }
 
@@ -391,7 +401,7 @@ expand_target_cmdline <- function(target_cmdline, experiment, targetRunner, targ
   }
   target_cmdline
 }
-  
+
 run_target_runner <- function(experiment, scenario)
 {
   configuration_id <- experiment$id_configuration
@@ -402,14 +412,14 @@ run_target_runner <- function(experiment, scenario)
   bound            <- experiment$bound
 
   switches <- scenario$parameters$switches[names(configuration)]
-  
+
   targetRunner <- scenario[["targetRunner"]]
   debugLevel <- scenario$debugLevel
-  
+
   if (scenario$aclib) {
     # FIXME: Use targetCmdline for this
     has_value <- !is.na(configuration)
-    # <executable> [<arg>] [<arg>] ... [--cutoff <cutoff time>] [--instance <instance name>] 
+    # <executable> [<arg>] [<arg>] ... [--cutoff <cutoff time>] [--instance <instance name>]
     # [--seed <seed>] --config [-param_name_1 value_1] [-param_name_2 value_2] ...
     args <- paste("--instance", instance, "--seed", seed, "--config",
                   paste0("-", switches[has_value], " ", configuration[has_value],
@@ -423,7 +433,7 @@ run_target_runner <- function(experiment, scenario)
   targetRunnerLauncher <- scenario$targetRunnerLauncher
   if (!is.null.or.empty(targetRunnerLauncher))
     targetRunner <- targetRunnerLauncher
-  
+
   output <- runcommand(targetRunner, args, configuration_id, debugLevel, timeout = scenario$targetRunnerTimeout)
   list(cmd=targetRunner, output=output, args=args)
 }
@@ -431,7 +441,7 @@ run_target_runner <- function(experiment, scenario)
 #' Default `targetRunner` function.
 #'
 #' Use it as an advanced example of how to create your own `targetRunner` function.
-#' 
+#'
 #' @param experiment A list describing the experiment. It contains at least:
 #'    \describe{
 #'     \item{`id_configuration`}{An alphanumeric string that uniquely identifies a configuration;}
@@ -444,13 +454,13 @@ run_target_runner <- function(experiment, scenario)
 #'        name;}
 #'    }
 #' @inheritParams defaultScenario
-#' 
+#'
 #' @return If `targetEvaluator` is `NULL`, then the `targetRunner`
 #'  function must return a list with at least one element `"cost"`,
 #'  the numerical value corresponding to the evaluation of the given
 #'  configuration on the given instance.
-#'    
-#'  If the scenario option `maxTime` is non-zero or if `capping` is enabled 
+#'
+#'  If the scenario option `maxTime` is non-zero or if `capping` is enabled
 #'  then the list must contain at least another element `"time"` that reports the
 #'  execution time for this call to `targetRunner`.
 #'  The return list may also contain the following optional elements that are used
@@ -459,11 +469,11 @@ run_target_runner <- function(experiment, scenario)
 #'    \item{`error`}{is a string used to report an error;}
 #'    \item{`outputRaw`}{is a string used to report the raw output of calls to
 #'      an external program or function;}
-#'    \item{`call`}{is a string used to report how `targetRunner` called 
+#'    \item{`call`}{is a string used to report how `targetRunner` called
 #'      an external program or function.}
 #'  }
 #'
-#' 
+#'
 #' @author Manuel López-Ibáñez and Jérémie Dubois-Lacoste
 #' @export
 target_runner_default <- function(experiment, scenario)
@@ -472,17 +482,17 @@ target_runner_default <- function(experiment, scenario)
   cmd <- res$cmd
   output <- res$output
   args <- res$args
-  
+
   debugLevel <- scenario$debugLevel
   cost <- time <- NULL
   err_msg <- output$error
   if (is.null(err_msg)) {
     v_output <- parse_output(output$output, verbose = (debugLevel >= 2L))
     if (length(v_output) == 1L) {
-      if (!is.null(scenario$targetEvaluator)) {
-        time <- v_output[1L]
-      } else {
+      if (is.null(scenario$targetEvaluator)) {
         cost <- v_output[1L]
+      } else {
+        time <- v_output[1L]
       }
     } else if (length(v_output) == 2L) {
       cost <- v_output[1L]
@@ -503,21 +513,21 @@ execute_experiments <- function(race_state, experiments, scenario)
   target_runner <- race_state$target_runner
   execDir <- scenario$execDir
   if (!fs::dir_exists(execDir))
-    irace.error ("Execution directory '", execDir, "' is not found or not a directory\n")
+    irace_error ("Execution directory '", execDir, "' is not found or not a directory\n")
   withr::local_dir(execDir)
-   
+
   if (!is.null(scenario$targetRunnerParallel)) {
     # FIXME: We should remove the exec_target_runner parameter from
     # targetRunnerParallel and do lapply(target_output,
-    # check_output_target_runner, scenario=scenario) after it to make sure the output is valid.    
+    # check_output_target_runner, scenario=scenario) after it to make sure the output is valid.
     # User-defined parallelization
     target_output <-
       scenario$targetRunnerParallel(experiments, exec_target_runner,
                                     scenario = scenario,
                                     target_runner = target_runner)
     if (length(target_output) != length(experiments)) {
-      irace.error("Stopping because the output of targetRunnerParallel is missing elements. The output was:\n",
-        paste0(capture.output(str(target_output)), collapse="\n"))
+      irace_error("Stopping because the output of targetRunnerParallel is missing elements. The output was:\n",
+        paste0(utils::capture.output(utils::str(target_output)), collapse="\n"))
     }
   } else if (scenario$batchmode != 0L) {
     target_output <- cluster_lapply(experiments, scenario = scenario)
@@ -547,11 +557,11 @@ execute_experiments <- function(race_state, experiments, scenario)
         # each configuration and repetitions may occur.
         cat(unique(unlist(target_output[sapply(
           target_output, inherits, "try-error")])), file = stderr(), sep = "")
-        irace.error("A slave process terminated with a fatal error")
+        irace_error("A slave process terminated with a fatal error")
       }
     } else {
       if (.Platform$OS.type == 'windows') {
-        irace.assert(!is.null(race_state$cluster))
+        irace_assert(!is.null(race_state$cluster))
         if (scenario$loadBalancing) {
           target_output <-
             parallel::parLapplyLB(race_state$cluster, experiments, exec_target_runner,
@@ -585,7 +595,7 @@ execute_experiments <- function(race_state, experiments, scenario)
           cat(unique(unlist(
             target_output[sapply(
               target_output, inherits, "try-error")])), file = stderr())
-          irace.error("A child process triggered a fatal error")
+          irace_error("A child process triggered a fatal error")
         }
       }
     }
@@ -598,11 +608,9 @@ execute_experiments <- function(race_state, experiments, scenario)
   target_output
 }
 
-execute_evaluator <- function(target_evaluator, experiments, scenario, target_output, configurations_id)
+execute_evaluator <- function(target_evaluator, experiments, scenario, target_output)
 {
-  ## FIXME: We do not need the configurations_id argument:
-  irace.assert(isTRUE(all.equal(configurations_id,
-    unique(sapply(experiments, getElement, "id_configuration")))))
+  configurations_id <- unique(unlist_element(experiments, "id_configuration"))
   nconfs <- length(configurations_id)
   # Evaluate configurations sequentially.
   for (k in seq_along(experiments)) {
@@ -611,12 +619,13 @@ execute_evaluator <- function(target_evaluator, experiments, scenario, target_ou
     output <- target_evaluator(experiment = experiment, num_configurations = nconfs,
       all_conf_id = configurations_id, scenario = scenario,
       target_runner_call = target_runner_call)
-    output <- check_output_target_evaluator(output, scenario, target_runner_call = target_runner_call, bound = experiment$bound)
+    output <- check_output_target_evaluator(output, scenario, target_runner_time = target_output[[k]]$time,
+      target_runner_call = target_runner_call, bound = experiment$bound)
     target_output[[k]]$cost <- output$cost
+    # targetEvaluator may return time, for example for batchmode != 0.
+    target_output[[k]]$time <- output$time
     if (is.null(target_output[[k]]$call))
       target_output[[k]]$call <- output$call
-    if (is.null(target_output[[k]]$time) || !is.null.or.na(output$time))
-      target_output[[k]]$time <- output$time
   }
   target_output
 }

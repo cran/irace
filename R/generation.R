@@ -27,6 +27,15 @@ repairConfigurations <- function(x, parameters, repair)
   x
 }
 
+is_within_dependent_bound <- function(param, configuration, value)
+{
+  domain <- unlist(lapply(param[["domain"]], eval, configuration))
+  # Value gets truncated (defined from robotics initial requirements)
+  if (param[["type"]] == "i")
+    domain <- as.integer(domain)
+  domain[[1L]] <= value && value <= domain[[2L]]
+}
+
 ## Calculates the parameter bounds when parameters domain is dependent
 getDependentBound <- function(param, configuration)
 {
@@ -36,11 +45,11 @@ getDependentBound <- function(param, configuration)
     # If it depends on a parameter that is disabled, then this is disabled.
     if (anyNA(configuration[deps])) return(NA)
     domain <- sapply(domain, eval, configuration)
-    irace.assert(all(is.finite(domain)))
+    irace_assert(all(is.finite(domain)))
     # Value gets truncated (defined from robotics initial requirements)
     if (param[["type"]] == "i") domain <- as.integer(domain)
     if (domain[[1L]] > domain[[2L]]) {
-      irace.error ("Invalid domain (", paste0(domain, collapse=", "),
+      irace_error ("Invalid domain (", paste0(domain, collapse=", "),
                    ") generated for parameter '", param[["name"]],
                    "' that depends on parameters (", paste0(deps, collapse=", "),
                    "). This is NOT a bug in irace. Check the definition of these parameters.")
@@ -58,16 +67,18 @@ get_dependent_domain <- function(param, configuration)
   deps <- all.vars(domain)
   # FIXME: This function should not be called if the parent is disabled.
   # If it depends on a parameter that is disabled, then this is disabled.
-  if (anyNA(configuration[deps])) return(NA)
+  if (anyNA(configuration[deps]))
+    return(NA)
 
-  irace.assert(is.expression(domain))
+  irace_assert(is.expression(domain))
   domain <- sapply(domain, eval, configuration, USE.NAMES=FALSE)
-  irace.assert(all(is.finite(domain)))
+  irace_assert(all(is.finite(domain)))
   # Value gets truncated (defined from robotics initial requirements)
-  if (param[["type"]] == "i") domain <- as.integer(domain)
+  if (param[["type"]] == "i")
+    domain <- as.integer(domain)
   if (domain[[1L]] > domain[[2L]]) {
     # FIXME: Add test for this error.
-    irace.error ("Invalid domain (", paste0(domain, collapse=", "),
+    irace_error ("Invalid domain (", paste0(domain, collapse=", "),
                  ") generated for parameter '", param[["name"]],
                  "' that depends on parameters (", paste0(deps, collapse=", "),
                  "). This is NOT a bug in irace. Check the definition of these parameters.")
@@ -87,12 +98,11 @@ generate_sobol <- function(parameters, n, repair = NULL)
   # FIXME: How to do this faster using data.table?
   for (x in nodep_names)
     set(confs, j = x, value = param_quantile(parameters$get(x), confs[[x]]))
-  
+
   for (x in parameters$names_fixed)
     set(confs, j = x, value = parameters$domains[[x]])
-  
+
   setcolorder(confs, parameters$names)
-  
   max_level <- max(hierarchy)
   if (max_level > 1L) {
     .NEWVALUE <- .DOMAIN <- NULL # To silence CRAN warnings.
@@ -101,29 +111,24 @@ generate_sobol <- function(parameters, n, repair = NULL)
       dep_names <- names(hierarchy)[hierarchy == k+1L]
       for (p in dep_names) {
         param <- parameters$get(p)
-        idx_satisfied <- which_satisfied(confs, param[["condition"]])
         if (param$isFixed) {
-          # If somehow this fixed parameter was not satisfied sometimes, just set its value to NA.
-          confs[!idx_satisfied, (p):= NA ]
-        } else if (length(idx_satisfied)) {
+          if (!isTRUE(param[["condition"]]))
+            # If somehow this fixed parameter was not satisfied sometimes, just set its value to NA.
+            set(confs, which(!eval(param[["condition"]], confs)), j = p, value = NA_character_)
+          next
+        }
+        idx_satisfied <- which_satisfied(confs, param[["condition"]])
+        if (length(idx_satisfied)) {
           if (param[["is_dependent"]]) {
             confs[idx_satisfied, let(.DOMAIN = list(get_dependent_domain(param, .SD))), by=.I, .SDcols=prev_names]
             confs[idx_satisfied, .NEWVALUE := param_quantile(param, .SD, domain = unlist(.DOMAIN)), by=.I, .SDcols=p]
-            confs[, (p):=.NEWVALUE]
-            confs[, let(.NEWVALUE=NULL, .DOMAIN=NULL)]
+            set(confs, j = ".DOMAIN", value = NULL)
           } else {
             confs[idx_satisfied, .NEWVALUE := param_quantile(param, unlist(.SD)), .SDcols=p]
-            confs[, (p):=.NEWVALUE]
-            confs[, let(.NEWVALUE=NULL)]
           }
+          set(confs, j = c(p, ".NEWVALUE"), value = list(confs[[".NEWVALUE"]], NULL))
         } else {
-          na_value <- switch(param[["type"]],
-            i = NA_integer_,
-            r = NA_real_,
-            c = NA_character_,
-            o = NA_character_,
-            irace_internal_error("Unknown type '", param[["type"]], "'"))
-          set(confs, j = p, value = na_value)
+          set(confs, j = p, value = .param_na_value_type[[ param[["type"]] ]])
         }
       }
     }
@@ -136,7 +141,7 @@ sampleSobol <- function(parameters, n, repair = NULL)
 {
   newConfigurations <- generate_sobol(parameters, n, repair)
   newConfigurations <- unique(newConfigurations)
-  forbidden <- parameters$forbidden  
+  forbidden <- parameters$forbidden
   newConfigurations <- filter_forbidden(newConfigurations, forbidden)
   have <- nrow(newConfigurations)
   if (have < n) {
@@ -145,7 +150,7 @@ sampleSobol <- function(parameters, n, repair = NULL)
     newConfigurations <- unique(newConfigurations)
     newConfigurations <- filter_forbidden(newConfigurations, forbidden)
     if (nrow(newConfigurations) == 0L) {
-      irace.error("irace tried to sample a configuration not forbidden without success, perhaps your constraints are too strict?")
+      irace_error("irace tried to sample a configuration not forbidden without success, perhaps your constraints are too strict?")
     }
     newConfigurations <- truncate_rows(newConfigurations, n)
   }
@@ -190,7 +195,7 @@ generate_uniform <- function(parameters, nbConfigurations, repair = NULL)
 sampleUniform <- function(parameters, nbConfigurations, repair = NULL)
 {
   newConfigurations <- generate_uniform(parameters, nbConfigurations, repair)
-  forbidden <- parameters$forbidden  
+  forbidden <- parameters$forbidden
   if (!is.null(forbidden)) {
     retries <- 100L
     repeat {
@@ -202,7 +207,7 @@ sampleUniform <- function(parameters, nbConfigurations, repair = NULL)
         generate_uniform(parameters, needed, repair = repair)))
       retries <- retries - 1L
       if (retries == 0L) {
-        irace.error("irace tried 100 times to sample uniformly a configuration not forbidden without success, perhaps your constraints are too strict?")
+        irace_error("irace tried 100 times to sample uniformly a configuration not forbidden without success, perhaps your constraints are too strict?")
       }
     }
   }
@@ -215,11 +220,11 @@ sample_from_model <- function(parameters, eliteConfigurations, model,
 {
   # FIXME: We only need .WEIGHT. from eliteConfigurations.
   ids_elites <- names(model[[1L]])
-  irace.assert(identical(as.integer(ids_elites), as.integer(eliteConfigurations[[".ID."]])), {
-    print(str(ids_elites))
-    print(str(eliteConfigurations[[".ID."]]))
+  irace_assert(identical(as.integer(ids_elites), as.integer(eliteConfigurations[[".ID."]])), {
+    print(utils::str(ids_elites))
+    print(utils::str(eliteConfigurations[[".ID."]]))
   })
-  
+
   newConfigurations  <- configurations_alloc(parameters$names, nrow = nbNewConfigurations, parameters)
   idx_elites <- sample.int(n = length(ids_elites), size = nbNewConfigurations,
                            prob = eliteConfigurations[[".WEIGHT."]], replace = TRUE)
@@ -256,7 +261,7 @@ sample_from_model <- function(parameters, eliteConfigurations, model,
       c(pname) := list(sample_model(param, .N, this_model[[ .BY[[1L]] ]])),
       by = .PARENT.]
   }
-  newConfigurations[, .PARENT. := as.integer(.PARENT.)]
+  set(newConfigurations, j = ".PARENT.", value = as.integer(newConfigurations[[".PARENT."]]))
   repairConfigurations(newConfigurations, parameters, repair)
   newConfigurations
 }
@@ -265,7 +270,7 @@ sampleModel <- function(parameters, eliteConfigurations, model,
                         nbNewConfigurations, repair = NULL)
 {
   if (nbNewConfigurations <= 0)
-    irace.error ("The number of configurations to generate appears to be negative or zero.")
+    irace_error ("The number of configurations to generate appears to be negative or zero.")
   newConfigurations <- sample_from_model(parameters, eliteConfigurations,
                                          model, nbNewConfigurations, repair)
   forbidden <- parameters$forbidden
@@ -280,17 +285,9 @@ sampleModel <- function(parameters, eliteConfigurations, model,
       newConfigurations <- rbindlist(list(newConfigurations, tmp))
       retries <- retries - 1L
       if (retries == 0L) {
-        irace.error("irace tried 100 times to sample from the model a configuration not forbidden without success, perhaps your constraints are too strict?")
+        irace_error("irace tried 100 times to sample from the model a configuration not forbidden without success, perhaps your constraints are too strict?")
       }
     }
   }
   newConfigurations
 }
-
-
-
-
-
-
-
-

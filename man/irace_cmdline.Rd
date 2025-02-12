@@ -10,11 +10,11 @@ irace_cmdline(argv = commandArgs(trailingOnly = TRUE))
 irace.cmdline(argv = commandArgs(trailingOnly = TRUE))
 }
 \arguments{
-\item{argv}{(\code{character()}) \cr The arguments
+\item{argv}{\code{character()}\cr The arguments
 provided on the R command line as a character vector, e.g.,
 \code{c("--scenario", "scenario.txt", "-p", "parameters.txt")}.
 Using the  default value (not providing the parameter) is the
-easiest way to call \code{irace_cmdline}.}
+easiest way to call \code{\link[=irace_cmdline]{irace_cmdline()}}.}
 }
 \value{
 (\code{invisible(data.frame)})
@@ -89,9 +89,9 @@ command line used to invoke R.
 The function reads the parameters given on the command line
 used to invoke R, finds the name of the scenario file,
 initializes the scenario from the file (with the function
-\code{\link{readScenario}}) and possibly from parameters passed in
+\code{\link[=readScenario]{readScenario()}}) and possibly from parameters passed in
 the command line. It finally starts \pkg{irace} by calling
-\code{\link{irace_main}}.
+\code{\link[=irace_main]{irace_main()}}.
 
 List of command-line options:
 
@@ -147,13 +147,15 @@ List of command-line options:
    --first-test          Number of instances evaluated before the first
                          elimination test. It must be a multiple of `eachTest`.
                          Default: 5.
-   --block-size          Number of training instances, that make up a `block'
+   --block-size          Number of training instances, that make up a 'block'
                          in `trainInstancesFile`. Elimination of configurations
                          will only be performed after evaluating a complete
                          block and never in the middle of a block. Each block
                          typically contains one instance from each instance
                          class (type or family) and the block size is the
-                         number of classes. Default: 1.
+                         number of classes. The value of `blockSize` will
+                         multiply `firstTest`, `eachTest` and
+                         `elitistNewInstances`. Default: 1.
    --each-test           Number of instances evaluated between elimination
                          tests. Default: 1.
    --target-runner       Executable called for each configuration that executes
@@ -244,6 +246,9 @@ List of command-line options:
                          designed for minimizing the computation time of
                          configurations. Capping is enabled by default if
                          `elitist` is active, `maxTime > 0` and `boundMax > 0`.
+   --capping-after-first-test  If set to 1, elimination due to capping only
+                         happens after `firstTest` instances are seen. Default:
+                         0.
    --capping-type        Measure used to obtain the execution bound from the
                          performance of the elite configurations: median, mean,
                          worst, best. Default: median.

@@ -28,11 +28,11 @@
 #'
 #' @concept running
 #' @export
-multi_irace <- function(scenarios, parameters, n = 1L, parallel = 1, split_output = parallel > 1, global_seed = NULL)
+multi_irace <- function(scenarios, parameters, n = 1L, parallel = 1L, split_output = parallel > 1L, global_seed = NULL)
 {
   # Parallel execution is not available on Windows.
-  if (.Platform$OS.type == 'windows') {
-    irace.assert(parallel == 1L)
+  if (.Platform$OS.type == 'windows' && parallel > 1L) {
+    irace_error("multi_irace() does not yet support parallel > 1 on Windows")
   }
 
   # Allow either the same number of scenarios and parameters, or a single scenario or parameter space definition.
@@ -42,7 +42,7 @@ multi_irace <- function(scenarios, parameters, n = 1L, parallel = 1, split_outpu
     } else if (length(parameters) == 1L) {
       parameters <- rep(parameters, each = length(scenarios))
     } else {
-      irace.error("Invalid arguments: ",
+      irace_error("Invalid arguments: ",
                   "Cannot execute 'irace' with", length(scenarios),
                   "scenarios and", length(parameters), "parameters.",
                   "Either supply the same number of scenarios and parameters,
@@ -76,7 +76,7 @@ multi_irace <- function(scenarios, parameters, n = 1L, parallel = 1, split_outpu
     scenarios[[i]]$execDir <- execDir
     fs::dir_create(execDir)
 
-    if (nzchar(logFile_old)) {
+    if (logFile_old != "") {
       logFile <- if (is.sub.path(logFile_old, execDir_old)) {
         # 'logFile' is located in the old 'execDir', so move it into the new 'execDir'.
         # 'path/to/execDir/logFile.rdata' -> 'path/to/execDir/run_{i}/logFile.rdata'.
@@ -88,7 +88,7 @@ multi_irace <- function(scenarios, parameters, n = 1L, parallel = 1, split_outpu
         # pathExt <- tools::file_ext(logFile_old)
         # pathWithoutExtWithIndex <- sprintf("%s_%02d", pathWithoutExt, i)
         # paste(pathWithoutExtWithIndex, pathExt, sep = ".")
-        irace.error("Invalid 'logFile' path (", logFile_old, "): ",
+        irace_error("Invalid 'logFile' path (", logFile_old, "): ",
           "The 'logFile' must be located inside the 'execDir' (", execDir_old, ").")
       }
       scenarios[[i]]$logFile <- logFile
@@ -118,7 +118,7 @@ multi_irace <- function(scenarios, parameters, n = 1L, parallel = 1, split_outpu
       # each configuration and repetitions may occur.
       errors <- unique(unlist(runs[sapply(runs, inherits, "try-error")]))
       cat(errors, file = stderr())
-      irace.error("A child process triggered a fatal error")
+      irace_error("A child process triggered a fatal error")
     }
   } else {
     runs <- mapply(irace_run, scenarios, SIMPLIFY = FALSE)

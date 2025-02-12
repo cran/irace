@@ -1,16 +1,22 @@
 withr::with_output_sink("test-blocksize.Rout", {
-cap_irace <- function(...)
+cap_irace <- function(..., targetRunner = force(target_runner_capping_xy))
 {
+  # Silence Error in `save(iraceResults, file = logfile, version = 3L)`: (converted from warning) 'package:irace' may not be available when loading
+  # See https://github.com/r-lib/testthat/issues/2044
+  if (!is.null(attr(environment(targetRunner), "name", exact=TRUE))) {
+    environment(targetRunner) <- globalenv()
+  }
+
   args <- list(...)
   parameters_table <- '
    x "" r (0, 1.00)
    y "" r (0, 1.00)'
-  
+
   parameters <- readParameters(text = parameters_table)
   logFile <- withr::local_tempfile(fileext=".Rdata")
 
   scenario <- list(instances = c("ackley", "goldestein", "matyas", "himmelblau"),
-                   targetRunner = target_runner_capping_xy,
+                   targetRunner = targetRunner,
                    capping = TRUE,
                    blockSize = 4,
                    boundMax = 80,
@@ -20,9 +26,9 @@ cap_irace <- function(...)
   scenario <- modifyList(scenario, args)
   scenario <- checkScenario (scenario)
   confs <- irace(scenario = scenario)
-  best.conf <- getFinalElites(scenario$logFile, n = 1L, drop.metadata = TRUE)
+  best_conf <- getFinalElites(scenario$logFile, n = 1L, drop.metadata = TRUE)
   expect_identical(removeConfigurationsMetaData(confs[1L, , drop = FALSE]),
-                   best.conf)
+                   best_conf)
   invisible(read_logfile(scenario$logFile))
 }
 
@@ -32,7 +38,7 @@ target_runner_time <- function(experiment, scenario)
   tmax <-  configuration[["tmax"]]
   temp <-  configuration[["temp"]]
   time <- max(1, abs(rnorm(1, mean=(tmax+temp)/10)))
-  list(cost = time, time = time, call = toString(experiment))
+  list(cost = time, time = time)
 }
 
 time_irace <- function(...)
@@ -48,11 +54,11 @@ time_irace <- function(...)
                    parameters = parameters)
   scenario <- modifyList(scenario, args)
   scenario <- checkScenario (scenario)
-  
+
   confs <- irace(scenario = scenario)
-  best.conf <- getFinalElites(scenario$logFile, n = 1L, drop.metadata = TRUE)
+  best_conf <- getFinalElites(scenario$logFile, n = 1L, drop.metadata = TRUE)
   expect_identical(removeConfigurationsMetaData(confs[1L, , drop = FALSE]),
-                   best.conf)
+                   best_conf)
   invisible(read_logfile(scenario$logFile))
 }
 
@@ -79,11 +85,11 @@ test_that("blockSize maxTime=1000", {
   check_blocksize(time_irace(maxTime = 1000))
 })
 
-test_that("blockSize maxTime=1000 large newInstances", {
+test_that("blockSize maxTime=1000 elitistNewInstances", {
   skip_on_cran()
   generate_set_seed()
   check_blocksize(time_irace(maxTime = 1000, instances = letters[1:9],
-                             elitistNewInstances = 6, elitistLimit = 2))
+                             elitistNewInstances = 2, elitistLimit = 2))
 })
 
 }) # withr::with_output_sink()
