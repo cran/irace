@@ -3,10 +3,11 @@
 # This script is the command that is executed every run.
 # Check the examples in examples/
 #
-# This script is run in the execution directory (execDir, --exec-dir).
+# This target-runner is run in the execution directory (execDir, --exec-dir).
+#
 #
 # PARAMETERS:
-# $1 is the candidate configuration number
+# $1 is the candidate number
 # $2 is the instance ID
 # $3 is the seed
 # $4 is the instance name
@@ -16,13 +17,11 @@
 # This script should print one numerical value: the cost that must be minimized.
 # Exit with 0 if no error, with 1 in case of error
 ###############################################################################
-## Find our own location.
-# BINDIR=$(dirname "$(readlink -f "$(type -P $0 || echo $0)")")
 
 # EDIT THIS: Path to your executable
-EXE=~/bin/program
-# EDIT THIS: Specify how parameters are given to your executable
-EXE_PARAMS="--time 5 -i $INSTANCE --seed ${SEED} ${CONFIG_PARAMS}"
+EXE=matlab
+# EDIT THIS: Specify how parameters are given to your executable.
+EXE_PARAMS="-nosplash -nodesktop -nodisplay"
 
 error() {
     echo "`TZ=UTC date`: $0: error: $@"
@@ -51,15 +50,14 @@ fi
 STDOUT=c${CONFIG_ID}-${INSTANCE_ID}-${SEED}.stdout
 STDERR=c${CONFIG_ID}-${INSTANCE_ID}-${SEED}.stderr
 
-# # Otherwise, save the output to a file, and parse the result from it.  (If
-# # you wish to ignore segmentation faults you can use '{}' around the
-# # command.)
-# # If the command below fails, but you are not sure why, it may be useful to
-# # print it before executing using 'echo', as in:
-# echo "$EXE ${EXE_PARAMS} 1> ${STDOUT} 2> ${STDERR}"
-$EXE ${EXE_PARAMS} 1> ${STDOUT} 2> ${STDERR}
+## Otherwise, save the output to a file, and parse the result from it.
+## (If you wish to ignore segmentation faults you can use '{}' around
+## the command.)
+## This example assumes that CONFIG_PARAMS contains something like "A=10 B=5"
+$EXE ${EXE_PARAMS} -r "INSTANCE=${INSTANCE_ID};${CONFIG_PARAMS// /;};RUN(INSTANCE,A,B);exit" < RUN.m 1> ${STDOUT} 2> ${STDERR}
 
-# # This may be used to introduce a delay if there are filesystem issues.
+## This may be used to introduce a delay if there are filesystem
+## issues.
 # SLEEPTIME=1
 # while [ ! -s "${STDOUT}" ]; do
 #     sleep $SLEEPTIME
@@ -69,10 +67,7 @@ $EXE ${EXE_PARAMS} 1> ${STDOUT} 2> ${STDERR}
 if [ ! -s "${STDOUT}" ]; then
     error "${STDOUT}: No such file or directory"
 fi
-# This is an example of reading a number from the output.  It assumes that the
-# objective value is the first number in the first column of the last line of
-# the output.
-COST=$(tail -n 1 ${STDOUT} | grep -e '^[[:space:]]*[+-]\?[0-9]' | cut -f1)
+COST=$(cat ${STDOUT} | grep 'Result for irace=' | cut -f2 -d '=')
 echo "$COST"
 # Comment the following line if you wish to preserve temporary files (e.g., for debugging)
 rm -f "${STDOUT}" "${STDERR}"

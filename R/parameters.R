@@ -574,11 +574,12 @@ sample_model.ParamInt <- function(param, n, model, domain = param[["domain"]])
   if (is.na(mean))
     # +1 for correct rounding before floor()
     value <- sample_numeric_unif(n, lower, 1L + upper, transf)
-  else
+  else {
     # + 0.5 because negative domains are log-transformed to positive domains.
     value <- sample_numeric_norm(n, mean + 0.5, sd = model[[1L]], lower = lower,
       # +1 for correct rounding before floor()
       upper = 1L + upper, transf = transf)
+  }
   # We use original upper, not the +1L for 'i'.
   integer_round(value, lower, upper)
 }
@@ -717,23 +718,3 @@ print.ParameterSpace <- function(x, digits = 15L, ...)
   cat("Forbidden:\n")
   print(x$forbidden, digits = 15L)
 }
-
-## digits <- 4L
-## x <- parametersNew(param_cat(name = "algorithm", values = c("as", "mmas", "eas", "ras", "acs"), label = "--"),
-##                    param_ord(name = "localsearch", values = c("0", "1", "2", "3"), label = "--localsearch "),
-##                    param_real(name = "alpha", lower = 0.0, upper=5.0, label = "--alpha ", digits = digits),
-##                    param_real(name = "beta", lower = 0.0, upper = 10.0, label = "--beta ", digits = digits),
-##                    param_real(name = "rho", lower = 0.01, upper = 1.00, label = "--rho ", digits = digits),
-##                    param_int(name = "ants", lower = 5, upper = 100, transf = "log", label = "--ants "),
-##                    param_real(name = "q0", label = "--q0 ", lower=0.0, upper=1.0, condition = expression(algorithm == "acs")),
-##                    param_int(name = "rasrank", label = "--rasranks ", lower=1, upper=quote(min(ants, 10)), condition = 'algorithm == "ras"'),
-##                    param_int(name = "elitistants", label = "--elitistants ", lower=1, upper=expression(ants), condition = 'algorithm == "eas"'),
-##                    param_int(name = "nnls", label = "--nnls ", lower = 5, upper = 50, condition = expression(localsearch %in% c(1,2,3))),
-##                    param_cat(name = "dlb",  label = "--dlb ", values = c(0,1), condition = "localsearch %in% c(1,2,3)"),
-##                    param_cat(name = "fixed1",  label = "--fixed1 ", values = "1"),
-##                    param_cat(name = "fixed2",  label = "--fixed2 ", values = "0"),
-##                    forbidden = "(alpha == 0) & (beta == 0)")
-
-
-## printParameters(x)
-## print(x)

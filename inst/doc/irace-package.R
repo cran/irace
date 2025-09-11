@@ -17,54 +17,54 @@ load(log_ablation_file)
 options(width = 70)
 
 ## ----R_irace_install, prompt=FALSE, eval=FALSE----------------------
-# install.packages("irace")
+#  install.packages("irace")
 
 ## ----R_irace_launch,eval=FALSE, prompt=FALSE------------------------
-# library("irace")
-# q() # To exit R
+#  library("irace")
+#  q() # To exit R
 
 ## ----install_win1,eval=FALSE, prompt=FALSE--------------------------
-# install.packages("<package>", repos = NULL)
+#  install.packages("<package>", repos = NULL)
 
 ## ----install_win2,eval=FALSE, prompt=FALSE--------------------------
-# # Replace <package> with the path to the downloaded file.
-# # Replace <R_LIBS_USER> with the path used for installation.
-# install.packages("<package>", repos = NULL, lib = "<R_LIBS_USER>")
-# # Tell R where to find R_LIBS_USER.
-# # This must be executed for every new session.
-# .libPaths(c("<R_LIBS_USER>", .libPaths()))
+#  # Replace <package> with the path to the downloaded file.
+#  # Replace <R_LIBS_USER> with the path used for installation.
+#  install.packages("<package>", repos = NULL, lib = "<R_LIBS_USER>")
+#  # Tell R where to find R_LIBS_USER.
+#  # This must be executed for every new session.
+#  .libPaths(c("<R_LIBS_USER>", .libPaths()))
 
 ## ----R_irace_test1, prompt=FALSE, eval=FALSE------------------------
-# # Load the package
-# library("irace")
-# # Obtain the installation path
-# system.file(package = "irace")
+#  # Load the package
+#  library("irace")
+#  # Obtain the installation path
+#  system.file(package = "irace")
 
 ## ----windows_irace_help ,eval=FALSE, prompt=FALSE-------------------
-# library("irace")
-# irace_cmdline("--help")
+#  library("irace")
+#  irace_cmdline("--help")
 
 ## ----irace_R_check, eval=FALSE, prompt=FALSE------------------------
-# library("irace")
-# scenario <- readScenario(filename = "scenario.txt",
-#                          scenario = defaultScenario())
-# checkIraceScenario(scenario = scenario)
+#  library("irace")
+#  scenario <- readScenario(filename = "scenario.txt",
+#                           scenario = defaultScenario())
+#  checkIraceScenario(scenario = scenario)
 
 ## ----irace_R_exe, eval=FALSE, prompt=FALSE--------------------------
-# library("irace")
-# # Go to the directory containing the scenario files
-# setwd("./tuning")
-# scenario <- readScenario(filename = "scenario.txt",
-#                          scenario = defaultScenario())
-# irace_main(scenario = scenario)
+#  library("irace")
+#  # Go to the directory containing the scenario files
+#  setwd("./tuning")
+#  scenario <- readScenario(filename = "scenario.txt",
+#                           scenario = defaultScenario())
+#  irace_main(scenario = scenario)
 
 ## ----runexample2,prompt=FALSE,eval=FALSE----------------------------
-# library("irace")
-# setwd("./tuning/")
-# irace_cmdline()
+#  library("irace")
+#  setwd("./tuning/")
+#  irace_cmdline()
 
 ## ----readParameters,prompt=FALSE, eval=FALSE------------------------
-# parameters <- readParameters(file = "parameters.txt")
+#  parameters <- readParameters(file = "parameters.txt")
 
 ## ----parametersetup,eval=TRUE,include=FALSE-------------------------
 # Setup example
@@ -78,69 +78,69 @@ q0              "--q0 "              r          (0.0, 1.0)              | algori
 str(parameters, vec.len = 10)
 
 ## ----targetRunner,prompt=FALSE, eval=FALSE--------------------------
-# targetRunner(experiment, scenario)
+#  targetRunner(experiment, scenario)
 
 ## ----experimentlist,eval=TRUE,size='normalsize', prompt=TRUE,  comment=""----
 print(experiment)
 
 ## ----targetEvaluator, eval=FALSE------------------------------------
-# targetEvaluator(experiment, num_configurations, all_conf_id, scenario,
-#                 target_runner_call)
+#  targetEvaluator(experiment, num_configurations, all_conf_id, scenario,
+#                  target_runner_call)
 
 ## ----instance1, prompt=FALSE, eval=FALSE----------------------------
-# scenario$instances <- c("rosenbrock_20 --function=12 --nvar 20",
-#                         "rosenbrock_40 --function=12 --nvar 30",
-#                         "rastrigin_20 --function=15 --nvar 20",
-#                         "rastrigin_40 --function=15 --nvar 30")
+#  scenario$instances <- c("rosenbrock_20 --function=12 --nvar 20",
+#                          "rosenbrock_40 --function=12 --nvar 30",
+#                          "rastrigin_20 --function=15 --nvar 20",
+#                          "rastrigin_40 --function=15 --nvar 30")
 
 ## ----repairEx,prompt=FALSE, eval=FALSE------------------------------
-# repairConfiguration = function(configuration, parameters)
-# {
-#   isreal <- names(which(parameters$types[colnames(configuration)] == "r"))
-#   # This ignores 'digits'
-#   c_real <- unlist(configuration[isreal])
-#   c_real <- c_real / sum(c_real)
-#   configuration[isreal] <- c_real
-#   return(configuration)
-# }
+#  repairConfiguration = function(configuration, parameters)
+#  {
+#    isreal <- names(which(parameters$types[colnames(configuration)] == "r"))
+#    # This ignores 'digits'
+#    c_real <- unlist(configuration[isreal])
+#    c_real <- c_real / sum(c_real)
+#    configuration[isreal] <- c_real
+#    return(configuration)
+#  }
 
 ## ----repairEx2,prompt=FALSE, eval=FALSE-----------------------------
-# repairConfiguration = function(configuration, parameters)
-# {
-#  columns <- c("p1","p2","p3")
-#  # cat("Before"); print(configuration)
-#  configuration[columns] <- sort(unlist(configuration[columns], use.names=FALSE))
-#  # cat("After"); print(configuration)
-#  return(configuration)
-# }
+#  repairConfiguration = function(configuration, parameters)
+#  {
+#   columns <- c("p1","p2","p3")
+#   # cat("Before"); print(configuration)
+#   configuration[columns] <- sort(unlist(configuration[columns], use.names=FALSE))
+#   # cat("After"); print(configuration)
+#   return(configuration)
+#  }
 
 ## ----targetRunnerParallel,prompt=FALSE, eval=FALSE------------------
-# targetRunnerParallel(experiments, exec_target_runner, scenario, target_runner)
+#  targetRunnerParallel(experiments, exec_target_runner, scenario, target_runner)
 
 ## ----targetRunnerParallel2,prompt=FALSE, eval=FALSE-----------------
-# targetRunnerParallel <- function(experiments, exec_target_runner, scenario,
-#                                  target_runner)
-# {
-#   lapply(experiments, exec_target_runner, scenario = scenario,
-#          target_runner = target_runner)
-# }
+#  targetRunnerParallel <- function(experiments, exec_target_runner, scenario,
+#                                   target_runner)
+#  {
+#    lapply(experiments, exec_target_runner, scenario = scenario,
+#           target_runner = target_runner)
+#  }
 
 ## ----targetRunnerParallel3,prompt=FALSE, eval=TRUE------------------
    print(output)
 
 ## ----testing_r, prompt=FALSE, eval=FALSE----------------------------
-# testing_fromlog(logFile = "./irace.Rdata", testNbElites = 1)
+#  testing_fromlog(logFile = "./irace.Rdata", testNbElites = 1)
 
 ## ----change_recover, prompt=TRUE, eval=FALSE------------------------
-# iraceResults <- read_logfile("./tuning/irace.Rdata")
-# new_path <- "./experiments/tuning/instances/"
-# iraceResults$scenario$instances <-
-#    paste0(new_path, basename(iraceResults$scenario$instances))
-# save(iraceResults, file="./tuning/irace.Rdata")
+#  iraceResults <- read_logfile("./tuning/irace.Rdata")
+#  new_path <- "./experiments/tuning/instances/"
+#  iraceResults$scenario$instances <-
+#     paste0(new_path, basename(iraceResults$scenario$instances))
+#  save(iraceResults, file="./tuning/irace.Rdata")
 
 ## ----load_rdata, prompt=FALSE, eval=FALSE---------------------------
-# logfile <- system.file(package="irace", "exdata", "irace-acotsp.Rdata", mustWork=TRUE)
-# iraceResults <- read_logfile(logfile)
+#  logfile <- system.file(package="irace", "exdata", "irace-acotsp.Rdata", mustWork=TRUE)
+#  iraceResults <- read_logfile(logfile)
 
 ## ----show_version, prompt=TRUE, eval=TRUE, comment=""---------------
 iraceResults$irace_version
@@ -244,8 +244,8 @@ arrows(fes, values - err, fes, values + err, length=0.05, angle=90, code=3)
 text(fes, values, elites, pos = 1)
 
 ## ----ablation, prompt=FALSE, eval=FALSE-----------------------------
-# ablog <- ablation("irace.Rdata", src = 1)
-# plotAblation(ablog)
+#  ablog <- ablation("irace.Rdata", src = 1)
+#  plotAblation(ablog)
 
 ## ----testAb, fig.pos="htb!", fig.align="center", out.width="0.75\\textwidth", fig.cap="Example of plot generated by \\code{plotAblation()}.", prompt=FALSE, eval=TRUE, echo=FALSE----
 logfile <- system.file(package="irace", "exdata", "log-ablation.Rdata", mustWork=TRUE)
@@ -255,24 +255,24 @@ plotAblation(logfile)
 ablation_cmdline("--help")
 
 ## ----postsel, prompt=FALSE, eval=FALSE------------------------------
-# # Execute all elite configurations in the iterations
-# psRace("irace.Rdata", max_experiments = 0.5, iteration_elites=TRUE)
-# # Execute a set of configurations IDs providing budget
-# psRace("irace.Rdata", conf_ids = c(34, 87, 102, 172, 293), max_experiments = 500)
+#  # Execute all elite configurations in the iterations
+#  psRace("irace.Rdata", max_experiments = 0.5, iteration_elites=TRUE)
+#  # Execute a set of configurations IDs providing budget
+#  psRace("irace.Rdata", conf_ids = c(34, 87, 102, 172, 293), max_experiments = 500)
 
 ## ----targetCmdline, prompt=FALSE, eval=FALSE------------------------
-# targetRunner="./real_target_runner.py"
-# targetRunnerLauncher="python"
-# targetCmdLine="-m {targetRunner} {configurationID} {instanceID}\
-#  --seed {seed} -i {instance} --cutoff {bound} {targetRunnerArgs}"
+#  targetRunner="./real_target_runner.py"
+#  targetRunnerLauncher="python"
+#  targetCmdLine="-m {targetRunner} {configurationID} {instanceID}\
+#   --seed {seed} -i {instance} --cutoff {bound} {targetRunnerArgs}"
 
 ## ----faq3, eval=FALSE-----------------------------------------------
-# library(Rmpi)
-# mpi.spawn.Rslaves(nslaves = 10)
-# paths <- mpi.applyLB(1:10, function(x) {
-#   library(irace); return(path.package("irace")) })
-# print(paths)
+#  library(Rmpi)
+#  mpi.spawn.Rslaves(nslaves = 10)
+#  paths <- mpi.applyLB(1:10, function(x) {
+#    library(irace); return(path.package("irace")) })
+#  print(paths)
 
 ## ----R_irace_home2, prompt=FALSE, eval=FALSE------------------------
-# system.file(package = "irace")
+#  system.file(package = "irace")
 
