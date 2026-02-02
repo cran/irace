@@ -72,6 +72,9 @@ race_wrapper_helper <- function(race_state, configurations, instance_idx, bounds
 
   irace_assert(length(is_exe) == length(experiments))
   instance_idx <- rep(instance_idx, each = nrow(configurations))
+  # Move the seed forward. If the user mistakenly relies on the R seed, we
+  # don't want to have the same seed for every instance.
+  runif(1)
   if (race_state$recovery_mode) {
     # With targetEvaluator or if everything is executed, we recover everything.
     if (!is.null(scenario$targetEvaluator) || all(is_exe)) {
@@ -83,9 +86,10 @@ race_wrapper_helper <- function(race_state, configurations, instance_idx, bounds
       target_output <- race_state$recover_output(instance_idx[is_exe], configuration_id)
     }
   } else { # !recovery_mode
-    # We cannot let targetRunner or targetEvaluator modify our random seed, so we save it.
-    withr::local_preserve_seed()
     target_output <- vector("list", length(experiments))
+    # We cannot let targetRunner or targetEvaluator modify our random seed, so
+    # we save it.
+    withr::local_preserve_seed()
     # Execute experiments for which is_exe is TRUE:
     if (any(is_exe))
       target_output[is_exe] <- execute_experiments(race_state, experiments[is_exe], scenario)
@@ -98,8 +102,9 @@ race_wrapper_helper <- function(race_state, configurations, instance_idx, bounds
       experiments <- experiments[is_exe]
       instance_idx <- instance_idx[is_exe]
     }
+    # FIXME: Is there a faster way to keep only cost and time?
+    target_output <- lapply(target_output, function(x) x[names(x) %in% c("cost","time")])
     target_output <- rbindlist(target_output, fill=TRUE, use.names=TRUE)
-    set(target_output, j = setdiff(colnames(target_output), c("cost", "time")), value = NULL)
     if ("time" %notin% colnames(target_output))
       set(target_output, j = "time", value = NA)
     set(target_output, j = "configuration", value = unlist_element(experiments, "id_configuration"))
@@ -132,9 +137,9 @@ experiments_output_to_matrix <- function(output, scenario)
     rownames = "instance")
 }
 
-aux2.friedman <- function(y, I, alive, conf.level = 0.95)
+aux2_friedman <- function(y, I, alive, conf.level = 0.95)
 {
-  dropped.any <- FALSE
+  dropped_any <- FALSE
   n <- nrow(y)
   k <- length(I)
   r <- rowRanks(y, cols = I, ties.method = "average", useNames = FALSE)
@@ -167,22 +172,24 @@ aux2.friedman <- function(y, I, alive, conf.level = 0.95)
       }
     }
     alive[-J] <- FALSE
-    dropped.any <- TRUE
+    dropped_any <- TRUE
   }
   irace_assert(I[which.min(R)] == best)
-  list(ranks = R, alive = alive, dropped.any = dropped.any, p.value = PVAL)
+  list(ranks = R, alive = alive, dropped_any = dropped_any, p.value = PVAL)
 }
 
+# This function performs the Friedman-test if there are more than two alive.
+# Otherwise, it performs a wilcox.test.
 aux_friedman <- function(results, alive, which_alive, conf.level)
 {
   no.alive <- length(which_alive)
   if (no.alive > 2L) {
     # If more then 2 configurations are left, use Friedman
-    return(aux2.friedman(results, which_alive, alive, conf.level = conf.level))
+    return(aux2_friedman(results, which_alive, alive, conf.level = conf.level))
   }
 
   ranks <- NULL
-  dropped.any <- TRUE
+  dropped_any <- TRUE
   PVAL <- 0
   # If only 2 configurations are left, switch to Wilcoxon
   V1 <- results[, which_alive[1L]]
@@ -203,17 +210,17 @@ aux_friedman <- function(results, alive, which_alive, conf.level)
     diffs <- sort(diffs[!lower.tri(diffs)])/2
     PVAL <- wilcox.test(V1, V2, paired = TRUE, exact = if (ZEROES || TIES) FALSE else NULL)$p.value
     irace_assert(!is.nan(PVAL) & !is.na(PVAL))
-    if (PVAL >= 1 - conf.level) dropped.any <- FALSE
+    if (PVAL >= 1 - conf.level) dropped_any <- FALSE
     # We use the pseudo median (see wilcox.test.default)
     ranks <- if (median(diffs) <= 0) c(1L,2L) else c(2L,1L)
   }
-  if (dropped.any)
+  if (dropped_any)
     alive[which_alive[ranks[2L]]] <- FALSE
 
-  list(ranks = ranks, alive = alive, dropped.any = dropped.any, p.value = PVAL)
+  list(ranks = ranks, alive = alive, dropped_any = dropped_any, p.value = PVAL)
 }
 
-aux.one_ttest <- function(results, alive, which_alive, conf.level,
+aux_one_ttest <- function(results, alive, which_alive, conf.level,
                           adjust = c("none","bonferroni","holm"))
 {
   adjust <- match.arg(adjust)
@@ -247,10 +254,10 @@ aux.one_ttest <- function(results, alive, which_alive, conf.level,
   dropped_any <- length(dropj) > 0
   irace_assert(all(alive[dropj]))
   alive[dropj] <- FALSE
-  list(ranks = means, alive = alive, dropped.any = dropped_any, p.value = min(pvals))
+  list(ranks = means, alive = alive, dropped_any = dropped_any, p.value = min(pvals))
 }
 
-aux.ttest <- function(results, alive, which_alive, conf.level,
+aux_ttest <- function(results, alive, which_alive, conf.level,
                       adjust = c("none","bonferroni","holm"))
 {
   adjust <- match.arg(adjust)
@@ -286,7 +293,7 @@ aux.ttest <- function(results, alive, which_alive, conf.level,
   dropped_any <- length(dropj) > 0L
   irace_assert(all(alive[dropj]))
   alive[dropj] <- FALSE
-  list(ranks = means, alive = alive, dropped.any = dropped_any, p.value = min(pvals))
+  list(ranks = means, alive = alive, dropped_any = dropped_any, p.value = min(pvals))
 }
 
 table_hline <- function(widths)
@@ -309,7 +316,8 @@ table_sprintf <- function(text, widths)
      - The test is performed and some configurations are discarded.
      = The test is performed but no configuration is discarded.
      ! The test is performed and configurations could be discarded but elite configurations are preserved.
-     . All alive configurations are elite and nothing is discarded.\n\n"
+     . Alive configurations were already evaluated on this instance and nothing is discarded.
+     : All alive configurations are elite, but some need to be evaluated on this instance.\n\n"
 
 .nocap_header <- paste0(.race_common_header, .nocap_hline,
   table_sprintf(.nocap_colum_names, .nocap_table_fields_width), .nocap_hline)
@@ -329,29 +337,22 @@ elapsed_wctime_str <- function(now, start) {
   format(.POSIXct(elapsed, tz="GMT"), "%H:%M:%S")
 }
 
-race_print_task <- function(res.symb, Results,
-                            instance,
-                            current_task,
-                            which_alive,
-                            id_best,
-                            best,
-                            experiments_used,
-                            start_time,
-                            bound, capping)
+race_print_task_common <- function(res_symb, Results,
+                                   instance,
+                                   current_task,
+                                   which_alive,
+                                   id_best,
+                                   best,
+                                   experiments_used,
+                                   start_time)
 {
-  cat(sprintf("|%s|%11d|", res.symb, instance))
-  if (capping) {
-    if (is.null(bound))
-      cat("      NA|")
-    else
-      cat(sprintf("%8.2f|", bound))
-  }
+  s <- sprintf("|%s|%11d|", res_symb, instance)
   # FIXME: This is the mean of the best, but perhaps it should
   # be the sum of ranks in the case of test == friedman?
   mean_best <- mean(Results[, best])
   time_str <- elapsed_wctime_str(Sys.time(), start_time)
-  cat(sprintf(paste0("%11d|%11d|", .irace.format.perf, "|%11d|%s"),
-              length(which_alive), id_best, mean_best, experiments_used, time_str))
+  s <- c(s, sprintf(paste0("%11d|%11d|", .irace.format.perf, "|%11d|%s"),
+    length(which_alive), id_best, mean_best, experiments_used, time_str))
 
   if (current_task > 1L && length(which_alive) > 1L) {
     res <- Results[, which_alive, drop = FALSE]
@@ -359,10 +360,40 @@ race_print_task <- function(res.symb, Results,
     qvar <- dataVariance(res)
     # FIXME: We would like to use %+#4.2f but this causes problems with
     # https://github.com/oracle/fastr/issues/191
-    cat(sprintf("|%+4.2f|%.2f|%.4f|\n", conc$spearman.rho, conc$kendall.w, qvar))
+    s <- c(s,
+      sprintf("|%+4.2f|%.2f|%.4f|\n", conc$spearman.rho, conc$kendall.w, qvar))
   } else {
-    cat("|   NA|  NA|    NA|\n")
+    s <- c(s, "|   NA|  NA|    NA|\n")
   }
+  s
+}
+
+race_print_task_cap <- function(res_symb, Results,
+                                instance,
+                                current_task,
+                                which_alive,
+                                id_best,
+                                best,
+                                experiments_used,
+                                start_time, bound)
+{
+  s <- race_print_task_common(res_symb, Results, instance, current_task,
+    which_alive, id_best, best, experiments_used, start_time)
+  c(s[1L], if (is.null(bound)) "      NA|" else sprintf("%8.2f|", bound), s[-1L])
+}
+
+race_print_task_nocap <- function(res_symb, Results,
+                                  instance,
+                                  current_task,
+                                  which_alive,
+                                  id_best,
+                                  best,
+                                  experiments_used,
+                                  start_time,
+                                  bound)
+{
+  cat(sep="", race_print_task_common(res_symb, Results, instance, current_task,
+    which_alive, id_best, best, experiments_used, start_time))
 }
 
 race_print_footer <- function(bestconf, mean_best, break_msg, debug_level, capping = FALSE,
@@ -635,7 +666,7 @@ elitist_race <- function(race_state, maxExp,
     print_header <- print_task <- print_footer <- do_nothing
   } else {
     print_header <- if (capping) race_print_header_cap else race_print_header_nocap
-    print_task <- race_print_task
+    print_task <- if (capping) race_print_task_cap else race_print_task_nocap
     print_footer <- race_print_footer
   }
 
@@ -644,11 +675,11 @@ elitist_race <- function(race_state, maxExp,
     friedman = function(results, alive, which_alive, conf.level = scenario$confidence)
       aux_friedman(results, alive, which_alive, conf.level = conf.level),
     t.none = function(results, alive, which_alive, conf.level = scenario$confidence)
-      aux.ttest(results, alive, which_alive, conf.level = conf.level, adjust = "none"),
+      aux_ttest(results, alive, which_alive, conf.level = conf.level, adjust = "none"),
     t.holm = function(results, alive, which_alive, conf.level = scenario$confidence)
-      aux.ttest(results, alive, which_alive, conf.level = conf.level, adjust = "holm"),
+      aux_ttest(results, alive, which_alive, conf.level = conf.level, adjust = "holm"),
     t.bonferroni = function(results, alive, which_alive, conf.level = scenario$confidence)
-      aux.ttest(results, alive, which_alive, conf.level = conf.level, adjust = "bonferroni"))
+      aux_ttest(results, alive, which_alive, conf.level = conf.level, adjust = "bonferroni"))
   do_test <- bytecompile(do_test)
 
   # Create the instance list according to the algorithm selected.
@@ -854,8 +885,8 @@ elitist_race <- function(race_state, maxExp,
                    current_task, which_alive = which_alive,
                    id_best = id_best,
                    best = best, experiments_used, start_time = Sys.time(),
-                   # FIXME: Why do we pass NA as bound? Why not pass the actual bound if any?
-                   bound = NA_real_, capping = capping)
+                   # We pass NA because nothing was evaluated.
+                   bound = NA_real_)
         next
       }
     }
@@ -965,13 +996,13 @@ elitist_race <- function(race_state, maxExp,
             irace_assert(!is.na(best))
           }
           id_best <- configurations[[".ID."]][best]
-          print_task(".", Results[seq_len(current_task), , drop = FALSE],
+          print_task(":", Results[seq_len(current_task), , drop = FALSE],
                      race_instances[current_task],
                      current_task, which_alive = which_alive,
                      id_best = id_best,
                      best = best, experiments_used, start_time = start_time,
-                     # FIXME: Why do we pass NA as bound? Why not pass the actual bound if any?
-                     bound = if (is.null(scenario$boundMax)) NA_real_ else scenario$boundMax, capping)
+                     # FIXME: Why not use the bound for this instance, if any?
+                     bound = if (is.null(scenario$boundMax)) NA_real_ else scenario$boundMax)
           next
         }
       }
@@ -1056,9 +1087,9 @@ elitist_race <- function(race_state, maxExp,
 
     # Variables required to produce output of elimination test.
     cap_done     <- FALSE # if dominance elimination was performed
-    test.done    <- FALSE # if statistical test elimination was performed
+    test_done    <- FALSE # if statistical test elimination was performed
     cap_dropped  <- FALSE # if capping has drop any configuration
-    test.dropped <- FALSE # if any candidates has been eliminated by testing
+    test_dropped <- FALSE # if any candidates has been eliminated by testing
     cap_alive    <- test.alive <- alive
 
     ## Dominance elimination (Capping only).
@@ -1085,8 +1116,8 @@ elitist_race <- function(race_state, maxExp,
       # FIXME: This race_ranks is unused. We should check if it matches the one computed below.
       race_ranks <- test_res$ranks
       test.alive <- test_res$alive
-      test.dropped <- nb_alive > sum(test.alive)
-      test.done   <- TRUE
+      test_dropped <- nb_alive > sum(test.alive)
+      test_done   <- TRUE
     }
 
     # Merge the result of both eliminations.
@@ -1115,11 +1146,11 @@ elitist_race <- function(race_state, maxExp,
     which_alive <- which(alive)
     nb_alive <- length(which_alive)
     # Output the result of the elimination test.
-    res.symb <- if (cap_dropped && !test.dropped && prev_nb_alive != nb_alive) {
+    res_symb <- if (cap_dropped && !test_dropped && prev_nb_alive != nb_alive) {
                   "c" # Removed just by capping.
-                } else if (cap_dropped || test.dropped) {
+                } else if (cap_dropped || test_dropped) {
                   if (prev_nb_alive != nb_alive) "-" else "!"
-                } else if (cap_done || test.done) "=" else "x"
+                } else if (cap_done || test_done) "=" else "x"
 
     # Rank alive configurations: order all configurations (eliminated or not)
     # LESLIE: we have to make the ranking outside: we can have configurations eliminated by capping
@@ -1143,11 +1174,11 @@ elitist_race <- function(race_state, maxExp,
     race_ranks <- race_ranks[which_alive]
     irace_assert(length(race_ranks) == nb_alive)
     id_best <- configurations[[".ID."]][best]
-    print_task(res.symb, Results[seq_len(current_task), , drop = FALSE],
+    print_task(res_symb, Results[seq_len(current_task), , drop = FALSE],
                race_instances[current_task],
                current_task, which_alive = which_alive,
                id_best = id_best, best = best, experiments_used, start_time = start_time,
-               bound = elite_bound, capping)
+               bound = elite_bound)
 
     if (elitist) {
       # Compute number of statistical tests without eliminations.

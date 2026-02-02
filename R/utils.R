@@ -153,7 +153,7 @@ is.null.or.na <- function(x)
   is.null(x) || is_na_nowarn(x)
 
 is.null.or.empty <- function(x)
-  (length(x) == 0L) || (length(x) == 1L && !suppressWarnings(is.na(x)) && is.character(x) && x == "")
+  (length(x) == 0L) || (length(x) == 1L && is.character(x) && !suppressWarnings(is.na(x)) && x == "")
 
 is_null_or_empty_or_na <- function(x)
   (length(x) == 0L) || is_na_nowarn(x) || (length(x) == 1L && !suppressWarnings(is.na(x)) && is.character(x) && x == "")
@@ -546,6 +546,10 @@ read_logfile <- function(filename, name = "iraceResults")
   # data.table recommends doing this after loading a data.table from a file.
   setDT(iraceResults$state$experiment_log)
   setDT(iraceResults$state$instances_log)
+  if (!is.null(iraceResults$state$recovery_info))
+    setDT(iraceResults$state$recovery_info)
+  if (!is.null(iraceResults$state$race_experiment_log))
+    lapply(iraceResults$state$race_experiment_log, setDT)
   iraceResults
 }
 

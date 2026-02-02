@@ -268,7 +268,7 @@ package is available from CRAN:
 \end{center}
 %
 More information about \irace is available at
-\url{https://mlopez-ibanez.github.io/irace}.
+\url{https://mlopez-ibanez.github.io/irace/}.
 
 \subsection{Version}
 The current version of the \irace package is \iraceversion. Previous
@@ -744,7 +744,7 @@ Command-line options override the same options specified in the \code{scenario.t
 The \ACOTSP tuning example can be found in the package installation in the folder \IRACEHOME{/examples/acotsp}.
  %
 Other example scenarios can be found in the same folder. More
-examples of tuning scenarios can be found in the Algorithm Configuration Library (AClib, \url{http://www.aclib.net/}).
+examples of tuning scenarios can be found in the Algorithm Configuration Library (AClib, \url{https://www.aclib.net/}).
 
 In this section, we describe how to execute the \ACOTSP scenario. If you wish to start setting up
 your own scenario, continue to the next section. For this example, we assume
@@ -1231,7 +1231,7 @@ print(experiment)
 If you need the \code{switches} of each parameter (or any other information
 about the parameters), you can obtain it from \code{scenario$parameters}.
 
-You can find an example that calls MATLAB from \aR using this approach here: \url{https://github.com/MLopez-Ibanez/irace/blob/master/inst/examples/matlab/scenario.txt}.
+You can find an example that calls MATLAB from \aR using this approach here: \url{https://github.com/MLopez-Ibanez/irace/blob/master/inst/examples/matlabr/scenario.txt}.
 
 If \parameter{targetEvaluator} is \code{NULL}, then
 the \parameter{targetRunner} function must return a list with at least one
@@ -1631,7 +1631,7 @@ See the examples in
    %
    However, the user is free to set up the calls in any way, perhaps
    implementing their own replacement for \code{target_runner} and/or
-   \code{exec_target_runner}. The user may load and call other \aR packages, such as \pkg{batchtools} (\url{https://mllg.github.io/batchtools/}).
+   \code{exec_target_runner}. The user may load and call other \aR packages, such as \pkg{batchtools} (\url{https://cran.r-project.org/package=batchtools}).
 
    The only requirement is that the \parameter{targetRunnerParallel} function
    must return a list of the same length as \code{experiments}, where each
@@ -2323,10 +2323,12 @@ solution cost, computation time or any other objective that is returned to
 multi-objective, it will typically return not a single cost value, but a set of
 objective vectors (typically, a Pareto front). For tuning such a target
 algorithm with \irace, there are two alternatives. If the algorithm returns a
-single vector of objective values, they can be aggregated into one single number
-by using, for example, a weighted sum. Otherwise, if the target algorithm
-returns a set of objective vectors, a unary quality metric (\eg~the
-hypervolume) may be used to evaluate the quality of the set.\footnote{An implementation is publicly available at \url{http://lopez-ibanez.eu/hypervolume}~\cite{FonPaqLop06:hypervolume}}
+single vector of objective values, they can be aggregated into one single
+number by using, for example, a weighted sum. Otherwise, if the target
+algorithm returns a set of objective vectors, a unary quality metric (\eg~the
+hypervolume) may be used to evaluate the quality of the set.\footnote{Multiple
+  metrics are implemented in C, R and Python in the \texttt{moocore} package
+  (\url{https://github.com/multi-objective/moocore}).}
 
 % The first option is simple, it requires to devise a formula that can aggregate
 % the objectives in a way that balances the importance of all of them. This might
@@ -2360,6 +2362,37 @@ For more information about defining a \parameter{targetEvaluator}, see
 \autoref{sec:evaluator}. Examples of tuning a multi-objective target algorithm
 using the hypervolume can be found in the examples at
 \IRACEHOME{/examples/hypervolume} and \IRACEHOME{/examples/moaco}.
+
+\subsection{Improving anytime behavior}\label{sec:anytime}
+
+In some scenarios, we may be unsure when the end-user may terminate the
+target-algorithm, and we would like to tune the parameters of the algorithm so
+that it finds a solution as good as possible for any given termination
+criterion. That is, we would like to obtain a parameter configurations with
+good \emph{anytime performance}.
+
+Following the approach proposed by \citet{LopStu2013ejor}, \irace can tune an
+algorithm to improve its anytime performance. For that purpose, the algorithm
+must output a (time, solution cost) pair every time that the best-so-far
+solution within a run is improved.  Such pairs form a matrix with two columns
+and as many rows as improvements were made. We can define a \emph{reference
+  point}, where the first component is value slightly higher than the maximum
+runtime of a single run and the second component is a maximum cost value such
+that differences above that maximum are irrelevant for evaluating
+performance. Using this reference point and the matrix as an input, one can
+calculate the hypervolume of the matrix, as described above in
+Section~\ref{sec:multi objective}.  The negative of this hypervolume value
+becomes the cost returned by the \parameter{targetRunner} to \irace.
+
+It is also possible to specify preferences over the trade-off between runtime
+and solution cost by using the weighted hypervolume.  Further details and examples
+can be found in \citet{LopStu2013ejor}.
+
+Although there are other ways to measure anytime performance, most of them are
+equivalent or an approximation of the measure described
+above~\citep{LopVerDreDoe2025}.
+
+
 
 \subsection{Tuning for minimizing computation time}
 \label{sec:capping}
@@ -2844,7 +2877,7 @@ Note that the \irace package directly supports ablation (without surrogate model
 Although ablation analysis without surrogates may be more time-consuming, results of the surrogate version may be less accurate than the non-surrogate one.
 
 The \code{.Rdata} dataset generated by \irace can be used as input for \PyImp.
-The package \code{irace2pyimp}\footnote{\url{https://github.com/ndangtt/irace2pyimp}} is able to convert an \code{irace.Rdata} file into the input format required by \PyImp. The conversion can be  accessed either through the \aR console (function \code{irace2pyimp}), or via command line executable \code{irace2pyimp} (or \code{irace2pyimp.exe} in Windows) provided by the package. You can find the location of the executable by running this command in R: \Sexpr{'system.file(file.path("bin", "irace2pyimp"), package="irace2pyimp", mustWork=TRUE)'} or \Sexpr{'system.file(file.path("bin", "irace2pyimp.exe"), package="irace2pyimp", mustWork=TRUE)'} in Windows.
+The package \code{irace2pyimp}\footnote{\url{https://github.com/ndangtt}} is able to convert an \code{irace.Rdata} file into the input format required by \PyImp. The conversion can be  accessed either through the \aR console (function \code{irace2pyimp}), or via command line executable \code{irace2pyimp} (or \code{irace2pyimp.exe} in Windows) provided by the package. You can find the location of the executable by running this command in R: \Sexpr{'system.file(file.path("bin", "irace2pyimp"), package="irace2pyimp", mustWork=TRUE)'} or \Sexpr{'system.file(file.path("bin", "irace2pyimp.exe"), package="irace2pyimp", mustWork=TRUE)'} in Windows.
 
 To see the usage of the executable, please run: \code{irace2pyimp --help}.
 For more information on the \aR function \code{irace2pyimp}, type in the \aR console: \code{?irace2pyimp}.
@@ -2932,7 +2965,7 @@ Long answer: According to the terminology described by \citet{LopBraPaq2021telo}
 Definitely. There are three main ways to achieve this:
 \begin{enumerate}
 \item Edit the \parameter{targetRunner} script to call \MATLAB in a non-interactive
-    way. See the \MATLAB documentation, or the following links.\footnote{See \href{http://stackoverflow.com/questions/1518072/suppress-start-message-of-matlab}{suppress-start-message-of-matlab (stackoverflow.com)} and \href{http://stackoverflow.com/questions/4611195/how-to-call-matlab-from-command-line-and-print-to-stdout-before-exiting}{how-to-call-matlab-from-command-line-and-print-to-stdout-before-exiting (stackoverflow.com)}} %
+    way. See the \MATLAB documentation, or the following links.\footnote{See \href{https://stackoverflow.com/questions/1518072/suppress-start-message-of-matlab}{suppress-start-message-of-matlab (stackoverflow.com)} and \href{https://stackoverflow.com/questions/4611195/how-to-call-matlab-from-command-line-and-print-to-stdout-before-exiting}{how-to-call-matlab-from-command-line-and-print-to-stdout-before-exiting (stackoverflow.com)}} %
     You would need to pass the parameter received by \parameter{targetRunner} to your \MATLAB script.\footnote{See \href{https://www.mathworks.com/matlabcentral/answers/97204-how-can-i-pass-input-parameters-when-running-matlab-in-batch-mode-in-windows}{how-can-i-pass-input-parameters-when-running-matlab-in-batch-mode-in-windows (mathworks.com)} and \href{https://stackoverflow.com/questions/3335505/how-can-i-pass-command-line-arguments-to-a-standalone-matlab-executable-running}{how-can-i-pass-command-line-arguments-to-a-standalone-matlab-executable-running (mathworks.com)}}
     %
     There is a minimal example in \IRACEHOME{/examples/matlab/}, where you can find an example \path{target-runner} script calling the \path{matlab} executable.
@@ -2954,7 +2987,7 @@ the program (target algorithm), not in \irace.
 %
 To detect such bugs, we recommend that you use, within
 \parameter{targetRunner}, a memory debugger (e.g.,
-\href{http://valgrind.org/}{\code{valgrind}}) to run your program. For example,
+\href{https://valgrind.org/}{\code{valgrind}}) to run your program. For example,
 if your program is executed by \parameter{targetRunner} as:
   %
 \begin{lstlisting}[style=BashInputStyle]
@@ -2993,10 +3026,12 @@ not in \irace. Some ideas for debugging this problem:
 \subsection{My program may be buggy and run into an infinite loop. Is it possible to set a maximum timeout?}\label{faq:timeout}
 
 We are not aware of any way to achieve this using \aR. However, in
-GNU/Linux, it is easy to implement by using the \code{timeout} command\footnote{\url{http://man7.org/linux/man-pages/man1/timeout.1.html}} in
+GNU/Linux, it is easy to implement by using the \code{timeout} command\footnote{\url{https://man7.org/linux/man-pages/man1/timeout.1.html}} in
 \code{targetRunner} when invoking your program.
 
-\subsection{When using the mpi option, \irace is aborted with an error message indicating that a
+\subsection[When using the mpi option, irace stops with an error message indicating that a
+function is not defined. How to fix this?]%
+{When using the \parameter{mpi} option, \irace stops with an error message indicating that a
   function is not defined. How to fix this?}\label{sec:mpi-error}
 
 \pkg{Rmpi} does not work the same way when called from within a package and when called from a script or
@@ -3112,6 +3147,9 @@ This error may arise if you activate the \parameter{parallel} option of \irace a
 
 This is a limitation of  Windows or Rstudio. Running without \parameter{parallel} should work. Unfortunately, we cannot fix this limitation in \irace. If you need to understand how \irace calls \parameter{targetRunner} when running in parallel, you can implement a logging mechanism able to handle parallelism directly inside the \parameter{targetRunner}.
 
+\subsection{Why does the column \texttt{Bound} in the output sometimes shows \texttt{NA}?}
+
+This should only happen when the symbol in the first column is `\texttt{.}', which means that all alive configurations are elite and have already been evaluated on this instance, so nothing is evaluated nor discarded.
 
 %%
 %%
@@ -3128,7 +3166,7 @@ This is a limitation of  Windows or Rstudio. Running without \parameter{parallel
 \section{Resources and contact information} \label{sec:contact}
 
 More information about the package can be found on the \irace webpage:
-\begin{center} \url{https://iridia.ulb.ac.be/supp/IridiaSupp2016-003/index.html} \end{center}
+\begin{center} \url{https://mlopez-ibanez.github.io/irace/} \end{center}
 
 For questions and suggestions please contact the development team through
 the \irace package Google group:

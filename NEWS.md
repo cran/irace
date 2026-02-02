@@ -1,5 +1,30 @@
 **If you are viewing this file on CRAN, please check [latest news on the irace website](https://mlopez-ibanez.github.io/irace/news/index.html) where the formatting is also better.**
 
+# irace 4.4
+
+## Major breaking changes
+
+## New features and improvements
+
+ * The [User Guide](https://mlopez-ibanez.github.io/irace/irace-package.pdf) now contains a section on tuning for anytime performance.
+
+## Fixes
+
+ * `irace` could error when tuning a single parameter and initial
+   configurations are given for this single parameter in an input file.
+   (Reported by Xiaolu Liu)
+
+ * If `targetRunner` returns the expected output in separate lines, `irace`
+   could error with: `Error in set(target_output, j = "configuration", value = unlist_element(experiments, "id_configuration"))`.
+
+ * irace will now call the RNG of R before evaluating a new instance.  This
+   change should make no difference to well-behaved `targetRunners` that use
+   the seed provided by irace to reseed the RNG, as recommended. However,
+   `targetRunners` written in R that fail to follow this recommendation could
+   end up with the same sequence of random numbers in different instances. Now,
+   different instances should get different random numbers.
+
+
 # irace 4.3
 
 ## New features and improvements
@@ -171,7 +196,7 @@
    will reject those uses as errors.
 
  * The internal function `irace.reload.debug()` has been removed.
-   Use `devtools::reload()` instead.
+   Use [`devtools::reload()`](https://devtools.r-lib.org/reference/reload.html) instead.
 
  * The column `"instance"` of the `instancesList` data frame stored in the
    logFile has been renamed to `"instanceID"`.  This data frame should not be
@@ -570,7 +595,7 @@
 
  * New option `aclib=` (`--aclib 1`) enables compatibility with the
    GenericWrapper4AC (https://github.com/automl/GenericWrapper4AC/) used by
-   AClib (http://aclib.net/). This is EXPERIMENTAL. `--aclib 1` also sets
+   AClib (https://aclib.net/). This is EXPERIMENTAL. `--aclib 1` also sets
    digits to 15 for compatibility with AClib defaults.
                                                          (Manuel López-Ibáñez)
 
