@@ -1,7 +1,7 @@
-1fbf2ff0526ba4cc15cfe468ee7ba134 *DESCRIPTION
+4ae326a58287db0b9f164702296c91e3 *DESCRIPTION
 b7738f5a508f22779b74733abc034786 *NAMESPACE
-dcba4bc4d4f95013018f7de16a299a42 *NEWS.md
-53e3ad1374412f5e5b836795bf9a193a *R/aaa.R
+24ed3b75acc6d7fa0bd6c20cce2ab848 *NEWS.md
+5dc73dc82fb47d636a6e1144f45d6578 *R/aaa.R
 006a116a9218bd0228401734ee4e12c3 *R/ablation.R
 5e7738e78b65ea41cfcb43fbf5a08d34 *R/argparser.R
 34fbb61abcb2fc74ec11918f14653035 *R/cluster.R
@@ -9,9 +9,9 @@ dcba4bc4d4f95013018f7de16a299a42 *NEWS.md
 898d058ec054b2b26bec3f0f9e56de73 *R/generation.R
 7c416789f10e17d4e39ec61651b4abed *R/irace-options.R
 1f98f6158b4d713cd233c8bf0752cfb8 *R/irace-package.R
-8f3e4255357b4ffdd68e022a2ab45af3 *R/irace.R
+92ffe900352e1f0a020fc348b4149637 *R/irace.R
 1cf273fe37c5662ad9c6ded6c1690a2b *R/irace_summarise.R
-720de1df587d31c2f26f0dccb3644b85 *R/main.R
+5c5682aff41a37d09e1d738e40a3a9b0 *R/main.R
 d0e49cf3a5f60810630ddb55ee0f135b *R/model.R
 0e5b0a80321f5d9c849378bb5f9a332a *R/multi_irace.R
 0d9c21eb7bd2f6ec40df8fa05636619e *R/parameterAnalysis.R
@@ -29,10 +29,10 @@ df00857874f80f81a879a7f16cafb881 *R/readParameters.R
 e7db059f3f4a16184a579ee1aedb5733 *R/timer.R
 3d9278311be3b74d2efae99f9663e250 *R/tnorm.R
 a263b81f4dc9eba98bcc8a6a70a6c910 *R/utils.R
-4ac4ce68b7e25b080e08d4cb7b540a30 *R/version.R
+20072ec17232d0fcfafcf4eb57558c14 *R/version.R
 2a118b7354fdedff5c74246d8423e5ad *R/zzz.R
 ee2a47bbadebda1cbe770ae88110f22f *README.md
-a63dff46321ea57365817e7b2b4f6bda *build/partial.rdb
+dd17e97ba8f5e7517a6e2b44b378a495 *build/partial.rdb
 66bd0cdd5e2192f491c905e29f040774 *build/vignette.rds
 90f388627b81fe6ba8219fb8d4b06a3c *cleanup
 c62ed27a7d824faa54b9bade601f0086 *inst/CITATION
@@ -42,7 +42,7 @@ bd8592671bd7acc42ea91a49a5fc7304 *inst/bin/parallel-irace-qsub
 3484f8d53fb8b7eb78ba2ad56171a525 *inst/bin/parallel-irace-slurm
 6650dfedb36361c7921aa0701dc53ed9 *inst/doc/irace-package.R
 2aaafb977eddf1028fe12ae49b954264 *inst/doc/irace-package.Rnw
-14dbff58979e0b32a3f4982db704af7c *inst/doc/irace-package.pdf
+e29f2a317cadd5e6b10cd325e0ef98f2 *inst/doc/irace-package.pdf
 8e35c47414882f49495a695c39686c5f *inst/examples/README.md
 067fe2821c16cf8262dece7a4c36144e *inst/examples/Spear/README
 4a9044d0341a321c352ec901cb97a8f0 *inst/examples/Spear/parameters-cat.txt
@@ -116,10 +116,10 @@ e0516ae2bbf6a95946468342474980ca *man/getConfigurationByIteration.Rd
 8962b34f3d99b7400b943a72483b7584 *man/get_instanceID_seed_pairs.Rd
 14a6c3069e36e86aab218d5f3881620f *man/has_testing_data.Rd
 1c89a853ee2bfa26f82518f61e642a12 *man/irace-package.Rd
-8a01d51299214920726f2cca2d8dde83 *man/irace.Rd
-f986356b22a6cf0d6f5e4544486dd115 *man/irace_cmdline.Rd
+041633cedab0c2627a88ae18cf82930c *man/irace.Rd
+4536b1daaed12c019915344a295b881b *man/irace_cmdline.Rd
 c5028f112fcba7a0357272df300bfeef *man/irace_license.Rd
-798efa16aa50ce4056ba58c2338c93b3 *man/irace_main.Rd
+071b54d3a78efe8b5ce636598587762a *man/irace_main.Rd
 c53417b5fbb84a928125a2a63217e2a7 *man/irace_summarise.Rd
 1cb0277b653693a2d927d4799e6c82f3 *man/irace_version.Rd
 b19078bd26ec7ffd9821e44d369afe18 *man/multi_irace.Rd
@@ -179,7 +179,7 @@ c23c303b507d81f3446f93f786838217 *tests/testthat/test-bug-44.R
 cfe3de6faeec01edc29f688baa2e4894 *tests/testthat/test-bug-87.R
 2d02e8483cbc7533aebe54c9409534d5 *tests/testthat/test-bug1col.R
 ffdf4325c439bc2cfc01dc7dfd9902d4 *tests/testthat/test-bug71.R
-de0cd2d1ade2d1cfe4fc38e4ecfe3f35 *tests/testthat/test-capping.R
+b3fdfe87413bc58945a64cddedf16b9b *tests/testthat/test-capping.R
 882d8851c39a2da5e124c8d4b21999dc *tests/testthat/test-dependencies.R
 efd1eef47896bc45b8bd9c5f0a98439b *tests/testthat/test-forbidden.R
 a1da29cd4b5fdad9f96e202a8479e278 *tests/testthat/test-get-functions.R
