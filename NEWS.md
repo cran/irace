@@ -1,10 +1,14 @@
 **If you are viewing this file on CRAN, please check [latest news on the irace website](https://mlopez-ibanez.github.io/irace/news/index.html) where the formatting is also better.**
 
+# irace 4.4.2
+
+ * Fix failing assert with `elitist=FALSE` (issue #90).
+
 # irace 4.4.1
 
  * Minor release to skip failing test on CRAN.
 
-# irace 4.4
+# irace 4.4.0
 
 ## New features and improvements
 
@@ -45,7 +49,7 @@
    different parameter.
 
 
-# irace 4.2
+# irace 4.2.0
 
 ## Major breaking changes
 

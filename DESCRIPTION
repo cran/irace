@@ -7,7 +7,7 @@ Description: Iterated race is an extension of the Iterated F-race method for
              settings given a set of instances of an optimization problem.
              M. López-Ibáñez, J. Dubois-Lacoste, L. Pérez Cáceres, T. Stützle,
              and M. Birattari (2016) <doi:10.1016/j.orp.2016.09.002>.
-Version: 4.4.1
+Version: 4.4.2
 Authors@R: c(person("Manuel", "López-Ibáñez", role = c("aut", "cre"),
                               email = "manuel.lopez-ibanez@manchester.ac.uk",
                               comment = c(ORCID = "0000-0001-9974-1295")),
@@ -33,7 +33,7 @@ RoxygenNote: 7.3.3
 SystemRequirements: GNU make
 Config/testthat/edition: 3
 NeedsCompilation: yes
-Packaged: 2026-03-27 15:20:42 UTC; manu
+Packaged: 2026-04-23 12:49:41 UTC; manu
 Author: Manuel López-Ibáñez [aut, cre] (ORCID:
     <https://orcid.org/0000-0001-9974-1295>),
   Jérémie Dubois-Lacoste [aut],
@@ -45,4 +45,4 @@ Author: Manuel López-Ibáñez [aut, cre] (ORCID:
   Nguyen Dang [ctb]
 Maintainer: Manuel López-Ibáñez <manuel.lopez-ibanez@manchester.ac.uk>
 Repository: CRAN
-Date/Publication: 2026-03-28 06:10:58 UTC
+Date/Publication: 2026-04-23 13:30:02 UTC
