@@ -1,5 +1,17 @@
 **If you are viewing this file on CRAN, please check [latest news on the irace website](https://mlopez-ibanez.github.io/irace/news/index.html) where the formatting is also better.**
 
+# irace 4.4.4
+
+ * The package contains an example of using `irace` to tune algorithms
+   implemented in Julia language.
+
+ * Fix #94: `sample_model.ParamOrd()` now samples uniformly when the model
+   mean is `NA`, avoiding `NA` values for active ordinal parameters.
+   Reported by @Saethox.
+
+ * Fix #97: `psRace()` errors when the post-selection race has nothing left to
+   run. Fixed by @ivchicano.
+
 # irace 4.4.3
 
  * Do not run postselection race unless elitist racing is enabled.

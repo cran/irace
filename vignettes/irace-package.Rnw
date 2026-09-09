@@ -609,7 +609,7 @@ For setting the tuning budget, see \autoref{sec:budget}. For more information on
   time (\code{cost [time]}). When the \parameter{maxTime} option is used, returning \code{time} is mandatory.
   The \code{target-runner} template is written in \proglang{GNU Bash}
   scripting language, which can be executed easily in GNU/Linux and OS X
-  systems. However, you may use any other programming language. We provide examples written in \proglang{Python},  \proglang{MATLAB} and other languages in \IRACEHOME{/examples/}. An example using Julia is available at \url{https://github.com/sbomsdorf/An-example-of-irace-using-Julia-code}. %
+  systems. However, you may use any other programming language. We provide examples written in \proglang{Python}, \proglang{Julia}, \proglang{MATLAB} and other languages in \IRACEHOME{/examples/}.
   Follow these instructions to adjust the given \code{target-runner} template
   to your algorithm:
   \begin{enumerate}
@@ -766,7 +766,7 @@ chmod u+x target-runner
 \end{lstlisting}
 %@
 
-\item Download the training instances from \url{https://iridia.ulb.ac.be/supp/IridiaSupp2016-003/scenarios/acotsp/instances.tar.gz} to the \path{./tuning/} directory and decompress it, which creates create a folder \path{instances}:
+\item Download the training instances from \href{https://permalink.ulb.be/t/rbPtQzntQj/download}{\path{instances.tar.gz}} to the \path{./tuning/} directory and decompress it, which creates create a folder \path{instances}:
 
 %<<instance0,engine='bash',eval=FALSE>>=
 \begin{lstlisting}[style=BashInputStyle]
