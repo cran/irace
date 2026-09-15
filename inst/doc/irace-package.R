@@ -260,6 +260,25 @@ ablation_cmdline("--help")
 # # Execute a set of configurations IDs providing budget
 # psRace("irace.Rdata", conf_ids = c(34, 87, 102, 172, 293), max_experiments = 500)
 
+## ----iterationCallback,prompt=FALSE,eval=FALSE----------------------
+# report_progress <- function(iteration, elites, progress, ...)
+# {
+#   if (progress$maxTime > 0) {
+#     used <- progress$timeUsed
+#     total <- progress$maxTime
+#     budget_type <- "time"
+#   } else {
+#     used <- progress$experimentsUsed
+#     total <- progress$maxExperiments
+#     budget_type <- "experiments"
+#   }
+#   message("Iteration ", iteration, "/", progress$nbIterations,
+#           ": ", used, "/", total, " ", budget_type,
+#           " used; best configuration: ", elites[[".ID."]][1L])
+# }
+# scenario$iterationCallback <- report_progress
+# irace(scenario)
+
 ## ----targetCmdline, prompt=FALSE, eval=FALSE------------------------
 # targetRunner="./real_target_runner.py"
 # targetRunnerLauncher="python"
